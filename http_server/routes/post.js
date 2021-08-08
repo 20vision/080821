@@ -1,0 +1,45 @@
+const router = require("express").Router();
+const checkAuth = require('../middleware/checkAuth')
+const input_validation = require('../middleware/input_validation')
+let pool = require('../config/db');
+
+const colorOptions = [
+    '7dbef5', '097bdc', '2dc3bc', '70908e', '67c166', '189c3b', 'c3c52e', 'd28e2a', 'dcb882', 'af9877', 'd64675', 'bb82c5', 'ac34c1', '9778bf', 'bf1402'
+]
+
+router.post("/create_page", checkAuth.required, input_validation.checkRegexPagename, input_validation.checkUniquePagename, input_validation.vision, async (req, res) => {
+    if(req.user_id){
+        pool.getConnection(function(err, conn) {
+            if (err){
+                res.status(500).send('An error occurred')
+                console.log(err)
+            }else{
+                var page_color = colorOptions[Math.floor(Math.random() * colorOptions.length)]
+                conn.query(
+                    'INSERT INTO Page values (?,?,?,?,?,now());',
+                    [null, page_color, req.body.pagename, req.body.pagename.toLowerCase(), req.body.vision, null],
+                    function(err, results) {
+                        if (err){
+                            res.status(500).send('An error occurred')
+                            console.log(err)
+                        }else{
+                            conn.query(
+                                'INSERT INTO PageUser values (?,?,?,?,now(),now());',
+                                [null, req.user_id, results.insertId, 1, null, null],
+                                function(err, results) {
+                                    if (err) throw err
+                                    res.json({page_icon: page_color})
+                                }
+                            );
+                        }
+                    }
+                );
+            }
+            pool.releaseConnection(conn);
+        })
+    }else{
+        res.status(401).send('Not authenticated')
+    }
+});
+
+module.exports = router;

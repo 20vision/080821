@@ -1,0 +1,22 @@
+const MYSQL = {
+    MYSQL_URI: 'localhost',
+    MYSQL_USER: 'root',
+    MYSQL_PASS: 'password',
+    MYSQL_DATABASE: '20Vision'
+};
+
+const JWT = {
+    JWT_SECRET: '0sm1GBXzMpX1k5E2YrpJyxohD6eoAYMd'
+}
+
+const CLOUDSTORAGE = {
+    PROJECT_ID: 'backend-320420'
+}
+
+const KEYS = {
+    ...MYSQL,
+    ...JWT,
+    ...CLOUDSTORAGE
+};
+
+module.exports = KEYS;
