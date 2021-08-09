@@ -1,22 +1,23 @@
 import React from 'react';
-import { StyleSheet, Button, View, SafeAreaView, Text, Alert } from 'react-native';
+import { StyleSheet, Button, View, Image, Text, Alert } from 'react-native';
+
+const Menu = () => {
+<View style={styles.main}>
+    <Text>
+        HI
+    </Text>
 
 
-const App = () => (
-     <View>
-      <Button
-        color="red"
-        onPress={() => Alert.alert('Simple Button pressed')}
-      />
-    </View>
-);
+</View>
+
+}
 
 const styles = StyleSheet.create({
-    button: {
-      flex: 1,
-      padding: 20,
+    main: {
+        color: 'red',
+        marginRight: '60px',
+        alignItems: 'baseline'
     },
-  });
-  
+});
 
-export default App;
+export default Menu();
