@@ -14,14 +14,9 @@ export default function Layout({ children }) {
         <div class="flex">
             <div>
             {
-                if(){
                     <MenuNav/>
-                }
-                if(){
-                    return <Menu/>
-                }else{
+                    <Menu/>
                     return <div></div>
-                }
             }
             </div>
             <main>{children}</main>
