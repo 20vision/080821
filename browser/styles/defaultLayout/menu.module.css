@@ -1,0 +1,27 @@
+.container{
+    width:350px;
+}
+
+.dropdown{
+    background-color: var(--light_black);
+    border-radius: var(--radius_large);
+    padding: 15px 25px;
+    filter: drop-shadow( 0px 6px 20px rgb(0, 0, 0, 0.15));
+    overflow: hidden;
+}
+
+.navContainer{
+    display:flex;
+    align-items: center;
+}
+
+.header{
+    display: flex;
+    align-items: flex-end;
+    margin-left: 10px;
+}
+
+.brand{
+    margin-left: 10px;
+    color: var(--red)
+}

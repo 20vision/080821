@@ -1,5 +1,64 @@
 @import url('https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200;0,300;0,400;0,600;0,700;0,800;0,900;1,200;1,300;1,400;1,600;1,700;1,800;1,900&display=swap');
 
+:root{
+  /*Colors*/
+  --black: #2E2E2E;
+  --light_black: #3a3a3a;
+  --lighter_black: #444;
+  --white: #FAFAFA;
+  --red: #FF5B77;
+  /*Canvas*/
+  --max_width: 1800px;
+  --radius_large: 25px;
+
+}
+
+html, body, #__next{
+  background-color: var(--black);
+  font-family: 'Nunito', sans-serif!important;
+  font-weight: 400;
+  width:100%;
+  height: 100%;
+  margin:0px;
+  padding:0px;
+}
+
+h1{
+  font-size: 24px;
+  padding:0px;
+  margin:0px;
+  line-height:22px;
+}
+
+h2{
+  font-size:20px;
+  padding:0px;
+  margin:0px;
+  line-height: 20px;
+}
+
+h3{
+  font-size: 16px;
+  padding:0px;
+  margin:0px;
+  line-height:16px;
+}
+
+span{
+  font-size:16px;
+  line-height: 16px;
+}
+
+svg{
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+a{
+  cursor: pointer;
+}
+/*
 html, body{
   background: #2E2E2E;
   background-repeat: no-repeat;
@@ -108,7 +167,6 @@ body{
   border-width: 0 0 0 2px;
 }
 
-/*Color*/
 .bcw{
   background-color:white;
 }
@@ -149,13 +207,10 @@ body{
   border-bottom: 2px solid #FF5B77;
 }
 
-/*Opacity*/
-
 .op{
   opacity: 0.3;
 }
 
-/*Width and height*/
 .fh{
   height: 100%;
   min-height:1px;
@@ -166,7 +221,6 @@ body{
   min-width:1px;
 }
 
-/*Padding*/
 .pxm_{
   padding: 20px 0px;
 }
@@ -263,7 +317,6 @@ body{
   margin-bottom:15px;
 }
 
-/*Text*/
 
 .overflowTextDot{
   overflow:hidden;
@@ -284,7 +337,6 @@ body{
   font-weight:bold;
 }
 
-/*Flex*/
 
 .flexcenter{
   display: flex;
@@ -315,7 +367,6 @@ body{
   flex-grow:1;
 }
 
-/*reverse flex*/
 
 .rflexcenter{
   display:flex;
@@ -336,7 +387,6 @@ body{
   justify-content: center;
 }
 
-/*Borders*/
 
 .rs{
   border-radius: 10px;
@@ -364,7 +414,6 @@ body{
 
 
 
-/*Shadow*/
 .sm{
   filter: drop-shadow( 0px 3px 6px rgb(0, 0, 0,0.10));
 }
@@ -377,7 +426,6 @@ body{
   filter: drop-shadow( 0px 3px 54px rgb(0, 0, 0, 0.20));
 }
 
-/*Actionable*/
 
 .pointer_{
   pointer-events: none;
@@ -413,3 +461,4 @@ body{
   box-shadow: inset 0 0 0 10px;
   color: #ced4da;
 }
+*/

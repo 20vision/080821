@@ -1,0 +1,38 @@
+.container{
+    color: var(--white);
+    display:flex;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+}
+
+.child{
+    width: clamp(1600px, 80%, 1800px);
+    height:80%;
+    display:flex;
+}
+
+.menu{
+    width: 450px;
+    display: flex;
+    justify-content: center;
+}
+
+.previewContainer{
+    flex-grow:1;
+    flex-shrink:1;
+    display:flex;
+    justify-content: center;
+}
+
+.previewChild{
+    width: 600px;
+    display: flex;
+    justify-content: center;
+}
+
+.paperOverview{
+    width: 450px;
+    display: flex;
+    justify-content: center;
+}
