@@ -1,5 +1,11 @@
 .container{
     width:350px;
+    -webkit-touch-callout: none; /* iOS Safari */
+    -webkit-user-select: none; /* Safari */
+     -khtml-user-select: none; /* Konqueror HTML */
+       -moz-user-select: none; /* Old versions of Firefox */
+        -ms-user-select: none; /* Internet Explorer/Edge */
+            user-select: none;
 }
 
 .dropdown{
@@ -8,6 +14,8 @@
     padding: 15px 25px;
     filter: drop-shadow( 0px 6px 20px rgb(0, 0, 0, 0.15));
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
 .navContainer{
@@ -24,4 +32,71 @@
 .brand{
     margin-left: 10px;
     color: var(--red)
+}
+
+.menu{
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.user{
+    flex-grow:1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.selectionContainer{
+    flex-grow:1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.selectionChild{
+    display: flex;
+    align-items: center;
+    padding: 15px 25px;
+    margin: 10px 0px;
+}
+
+.highlight{
+    background-color: var(--white);
+    color: var(--light_black);
+    border-radius: 25px;
+    filter: drop-shadow( 0px 6px 20px rgb(0, 0, 0, 0.15));
+}
+
+.selectionChild h2{
+    margin-left:35px;
+}
+
+.selectionChild .icon{
+    width:24px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.policy{
+    display: flex;
+    align-items: center;
+    margin: 5px 5px;
+    color: var(--grey)
+}
+
+.policy span{
+    flex-grow: 1;
+    text-align: center;
+}
+
+.connectWallet{
+    background-color: var(--red);
+    padding: 15px 25px;
+    border-radius: 15px;
+    margin-bottom:25px;
+    display: flex;
+    justify-content: center;
 }

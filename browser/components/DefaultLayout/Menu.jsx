@@ -1,7 +1,18 @@
 import { useMenuStore } from '../../store/defaultLayoutStore'
-import Chevron from '../../assets/Chevron'
+import { useUserStore } from '../../store/userStore'
+import { useModalStore } from '../../store/modalStore'
+
 import styles from '../../styles/defaultLayout/menu.module.css'
 import { motion } from "framer-motion"
+import { useRouter } from 'next/router'
+import Link from 'next/link'
+
+import Chevron from '../../assets/Chevron'
+import User from '../../assets/User'
+import Portfolio from '../../assets/Portfolio'
+import Discover from '../../assets/Discover'
+import Following from '../../assets/Following'
+import Saved from '../../assets/Saved'
 
 export default function Index() {
     const opened = useMenuStore(state => state.opened)
@@ -17,14 +28,14 @@ export default function Index() {
         <div className={styles.container}>
             <motion.div 
                 className={styles.dropdown}
-                initial={"closed"}
+                initial={opened ? "opened" : "closed"}
                 animate={opened ? "opened" : "closed"}
                 variants={variants}
                 transition={{ type: "spring", bounce: opened?0.25:0.13, duration: 0.8}}
             >
 
                 <MenuNav/>
-                { opened ? <Menu/> : null}
+                <Menu/>
             </motion.div>
         </div>
     )
@@ -49,10 +60,104 @@ function MenuNav() {
 }
 
 function Menu() {
+    const { pathname } = useRouter();
+    const opened = useMenuStore(state => state.opened)
+    const variants = {
+        opened: {
+            opacity: 1
+        },
+        closed: {
+            opacity: 0
+        }
+    }
     return (
-        <div className="menu">
-            Hello
-        </div>
+        <motion.div
+        initial={opened ? "opened" : "closed"}
+        animate={opened ? "opened" : "closed"}
+        variants={variants}
+        transition={{ duration: 0.3}}
+        className={styles.menu}>
+            <div className={styles.user}>
+                <User/>
+            </div>
+
+            <div className={styles.selectionContainer}>
+                <Link href={'/portfolio'}>
+                    <a>
+                        <div className={`${styles.selectionChild} ${(pathname == '/portfolio')?styles.highlight:null}`}>
+                            <div className={styles.icon}>
+                                <Portfolio color={(pathname == '/portfolio')?"#3a3a3a":"#FAFAFA"}/>
+                            </div>
+                            <h2>My Portfolio</h2>
+                        </div>
+                    </a>
+                </Link>
+
+                <Link href={'/'}>
+                    <a>
+                        <div className={`${styles.selectionChild} ${(pathname == '/')?styles.highlight:null}`}>
+                            <div className={styles.icon}>
+                                <Discover color={(pathname == '/')?"#3a3a3a":"#FAFAFA"}/>
+                            </div>
+                            <h2>Discover</h2>
+                        </div>
+                    </a>
+                </Link>
+
+                <Link href={'/following'}>
+                    <a>
+                        <div className={`${styles.selectionChild} ${(pathname == '/following')?styles.highlight:null}`}>
+                            <div className={styles.icon}>
+                                <Following color={(pathname == '/following')?"#3a3a3a":"#FAFAFA"}/>
+                            </div>
+                            <h2>Following</h2>
+                        </div>
+                    </a>
+                </Link>
+
+                <Link href={'/saved'}>
+                    <a>
+                        <div className={`${styles.selectionChild} ${(pathname == '/saved')?styles.highlight:null}`}>
+                            <div className={styles.icon}>
+                                <Saved color={(pathname == '/saved')?"#3a3a3a":"#FAFAFA"}/>
+                            </div>
+                            <h2>Saved</h2>
+                        </div>
+                    </a>
+                </Link>
+            </div>
+
+            <UserConnection/>
+
+            <div className={styles.policy}>
+                <span><a>Privacy</a></span>
+                <span>·</span>
+                <span><a>Terms</a></span>
+                <span>·</span>
+                <span><a>Cookies</a></span>
+                <span>·</span>
+                <span><a>About</a></span>
+            </div>
+        </motion.div>
     )
 }
+
+
+
+function UserConnection() {
+    const profile = useUserStore(state => state.profile)
+    const setModal = useModalStore(state => state.setModal)
+
+    if(!profile.username){
+        return (
+            <a onClick={() => setModal(1)}>
+                <div className={styles.connectWallet}>
+                    <h2>Connect Wallet</h2>
+                </div>
+            </a>
+        )
+    }
+    
+}
+
 
