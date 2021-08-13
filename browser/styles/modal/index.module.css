@@ -1,0 +1,31 @@
+.opacity{
+    position: fixed;
+    z-index: 9;
+    left: 0;
+    top: 0;
+    right:0;
+    bottom:0;
+    overflow: auto;
+    background-color: #2e2e2eb6;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.modalContainer{
+    height: 500px;
+    width:400px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.modalChild{
+    background-color: var(--white);
+    border-radius: 35px;
+    padding:35px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    filter: drop-shadow( 0px 6px 20px rgb(0, 0, 0, 0.15));
+}

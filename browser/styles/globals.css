@@ -5,6 +5,7 @@
   --black: #2E2E2E;
   --light_black: #3a3a3a;
   --lighter_black: #444;
+  --grey: #8A8A8A;
   --white: #FAFAFA;
   --red: #FF5B77;
   /*Canvas*/
@@ -57,7 +58,21 @@ svg{
 
 a{
   cursor: pointer;
+  text-decoration: none;
+  color: inherit;
+  opacity: 0.9;
+  -webkit-transition: opacity .15s ease-in-out;
+  -moz-transition: opacity .15s ease-in-out;
+  -ms-transition: opacity .15s ease-in-out;
+  -o-transition: opacity .15s ease-in-out;
+  transition: opacity .15s ease-in-out;
 }
+
+a:hover{
+  opacity: 1;
+}
+
+
 /*
 html, body{
   background: #2E2E2E;
