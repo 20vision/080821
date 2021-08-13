@@ -1,7 +1,8 @@
 import React from 'react';
 import { StyleSheet, Button, View, Image, Text, Alert } from 'react-native';
 
-const Menu = () => {
+function Menu() {
+    
 <View style={styles.main}>
     <Text>
         HI
@@ -20,4 +21,4 @@ const styles = StyleSheet.create({
     },
 });
 
-export default Menu();
+export default Menu()
