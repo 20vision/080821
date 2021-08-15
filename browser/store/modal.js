@@ -9,7 +9,7 @@ import { devtools } from 'zustand/middleware'
 
 let modalStore = (set) => ({
     modal: 0,
-    setModal: (modalType) => set((state) => ({modal: modalType}))
+    setModal: (modalType) => set({modal: modalType})
 })
 
 modalStore = devtools(modalStore)

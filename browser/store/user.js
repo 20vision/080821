@@ -1,12 +1,15 @@
 import create from 'zustand'
 import { devtools } from 'zustand/middleware'
 
+
+
 let userStore = (set) => ({
     profile: {
         username: null,
-        profilePicture: null
+        profilePicture: null,
+        fetched: false
     },
-    getUser: (profile) => set(state => (state.profile = profile))
+    setUser: (profile) => set({profile: profile})
 })
 
 userStore = devtools(userStore)

@@ -1,8 +1,10 @@
 import styles from '../../styles/modal/index.module.css'
 import onClickOutside from "react-onclickoutside";
-import { useModalStore } from '../../store/modalStore'
-import ConnectWallet from './ConnectWallet';
+import { useModalStore } from '../../store/modal'
 import { motion } from "framer-motion"
+
+import ConnectWallet from './ConnectWallet';
+import User from "./User"
 
 export default function Modal() {
     return (
@@ -30,13 +32,15 @@ const ClickOutside = onClickOutside(() =>{
     let modalComp
     if(modal == 1){
         modalComp = <ConnectWallet/>
+    }else if(modal == 2){
+        modalComp = <User/>
     }
 
     return (
         <div className={styles.modalContainer}>
             <motion.div 
-            initial={{ height: '0%', width: '0%' }}
-            animate={{ height: '100%', width: '100%' }}
+            initial={{ y: 300 }}
+            animate={{ y: 0 }}
             className={styles.modalChild}
             >
 

@@ -1,6 +1,7 @@
-import { useMenuStore } from '../../store/defaultLayoutStore'
-import { useUserStore } from '../../store/userStore'
-import { useModalStore } from '../../store/modalStore'
+import { useMenuStore } from '../../store/defaultLayout'
+import { useModalStore } from '../../store/modal'
+
+import useUserProfile from '../../hooks/User/useUserProfile'
 
 import styles from '../../styles/defaultLayout/menu.module.css'
 import { motion } from "framer-motion"
@@ -13,9 +14,12 @@ import Portfolio from '../../assets/Portfolio'
 import Discover from '../../assets/Discover'
 import Following from '../../assets/Following'
 import Saved from '../../assets/Saved'
+import Loading from '../../assets/Loading/Loading'
+import { useState } from 'react'
 
 export default function Index() {
     const opened = useMenuStore(state => state.opened)
+
     const variants = {
         opened: {
             height: '100%'
@@ -35,7 +39,15 @@ export default function Index() {
             >
 
                 <MenuNav/>
-                <Menu/>
+
+                {
+                    (opened == true)
+                    ?
+                        <Menu opened={opened}/>
+                    : 
+                        null
+                }
+                
             </motion.div>
         </div>
     )
@@ -45,10 +57,10 @@ export default function Index() {
 function MenuNav() {
     const opened = useMenuStore(state => state.opened)
     const toggle = useMenuStore(state => state.toggle)
-
+    
     return (
         <div className={styles.navContainer}>
-            <a onClick={toggle}><Chevron color="#FAFAFA" direction={(opened == true)?null:"180"}/></a>
+            <a onClick={toggle}><Chevron color="#FAFAFA" direction={(opened == true)?"0":"180"}/></a>
             <div className={styles.header}>
                 
                 {opened == true ? <h1>Menu</h1>:<h1>Discover</h1>}
@@ -59,9 +71,11 @@ function MenuNav() {
     )
 }
 
-function Menu() {
+function Menu({opened}) {
     const { pathname } = useRouter();
-    const opened = useMenuStore(state => state.opened)
+    const [profile, isLoading] = useUserProfile()
+    const setModal = useModalStore(state => state.setModal)
+
     const variants = {
         opened: {
             opacity: 1
@@ -70,15 +84,30 @@ function Menu() {
             opacity: 0
         }
     }
-    return (
+    if(isLoading == true){
+        return(
+            <div className={styles.loading}>
+                <Loading/>
+            </div>
+        )
+    }else return (
         <motion.div
         initial={opened ? "opened" : "closed"}
         animate={opened ? "opened" : "closed"}
         variants={variants}
         transition={{ duration: 0.3}}
         className={styles.menu}>
+
             <div className={styles.user}>
-                <User/>
+                <a onClick={() => setModal(2)}>
+                    {profile.profilePicture ? <img src={profile.profilePicture} className="user_icon"/> : <User />}
+                </a>
+                <h3>
+                    {profile.username ? '@'+profile.username : 'Guest'}
+                </h3>
+                <span>
+                    0 Tokens · $0 USD
+                </span>
             </div>
 
             <div className={styles.selectionContainer}>
@@ -127,7 +156,7 @@ function Menu() {
                 </Link>
             </div>
 
-            <UserConnection/>
+            <UserConnection type={(useUserProfile.username == null)?1:2}/>
 
             <div className={styles.policy}>
                 <span><a>Privacy</a></span>
@@ -144,17 +173,28 @@ function Menu() {
 
 
 
-function UserConnection() {
-    const profile = useUserStore(state => state.profile)
+function UserConnection({ type }) {
     const setModal = useModalStore(state => state.setModal)
 
-    if(!profile.username){
+    /*
+        type
+        1 = Show "Connect wallet" as user not authenticated
+        2 = Show "Create Page" or "Select Page" as user is authenticated
+    */
+
+    if(type == 1){
         return (
             <a onClick={() => setModal(1)}>
                 <div className={styles.connectWallet}>
                     <h2>Connect Wallet</h2>
                 </div>
             </a>
+        )
+    }else{
+        return(
+            <div>
+                -Create Page-
+            </div>
         )
     }
     

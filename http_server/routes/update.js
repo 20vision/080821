@@ -1,8 +1,7 @@
 const router = require("express").Router();
-const checkAuth = require('./checkAuth')
 const upload = require('./upload')
 
-router.post("/profile_picture", checkAuth.required, upload.profile_picture, async (req, res) => {
+router.post("/profile_picture", upload.profile_picture, async (req, res) => {
     if(req.user_id){
         try{
             const imageUrl = await uploadFile(req.file)
