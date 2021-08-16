@@ -2,6 +2,7 @@ import { useMenuStore } from '../../store/defaultLayout'
 import { useModalStore } from '../../store/modal'
 
 import useUserProfile from '../../hooks/User/useUserProfile'
+import ProfilePicture from '../User/ProfilePicture/ProfilePicture'
 
 import styles from '../../styles/defaultLayout/menu.module.css'
 import { motion } from "framer-motion"
@@ -9,13 +10,11 @@ import { useRouter } from 'next/router'
 import Link from 'next/link'
 
 import Chevron from '../../assets/Chevron'
-import User from '../../assets/User'
 import Portfolio from '../../assets/Portfolio'
 import Discover from '../../assets/Discover'
 import Following from '../../assets/Following'
 import Saved from '../../assets/Saved'
 import Loading from '../../assets/Loading/Loading'
-import { useState } from 'react'
 
 export default function Index() {
     const opened = useMenuStore(state => state.opened)
@@ -98,9 +97,9 @@ function Menu({opened}) {
         transition={{ duration: 0.3}}
         className={styles.menu}>
 
-            <div className={styles.user}>
+            <div className={`${!profile.username? 'no_click': null} ${styles.user}`}>
                 <a onClick={() => setModal(2)}>
-                    {profile.profilePicture ? <img src={profile.profilePicture} className="user_icon"/> : <User />}
+                    <ProfilePicture loading={isLoading} uri={profile.profilePicture?profile.profilePicture:null}/>
                 </a>
                 <h3>
                     {profile.username ? '@'+profile.username : 'Guest'}
@@ -110,7 +109,7 @@ function Menu({opened}) {
                 </span>
             </div>
 
-            <div className={styles.selectionContainer}>
+            <div className={`${!profile.username? 'no_click': null} ${styles.selectionContainer}`}>
                 <Link href={'/portfolio'}>
                     <a>
                         <div className={`${styles.selectionChild} ${(pathname == '/portfolio')?styles.highlight:null}`}>
@@ -156,7 +155,7 @@ function Menu({opened}) {
                 </Link>
             </div>
 
-            <UserConnection type={(useUserProfile.username == null)?1:2}/>
+            <UserConnection type={(profile.username == null)?1:2}/>
 
             <div className={styles.policy}>
                 <span><a>Privacy</a></span>

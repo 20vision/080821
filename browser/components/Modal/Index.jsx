@@ -13,7 +13,9 @@ export default function Modal() {
         animate={{ opacity: 1}}
         exit={{ opacity: 0}}
         className={styles.opacity}>
+
             <ClickOutside/>
+            
         </motion.div>
     )
 }

@@ -1,9 +1,3 @@
-.container{
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-}
-
 .terms{
     font-size: 14px;
 }
@@ -36,10 +30,6 @@
 .connectWalletButtonInvalid, .connectWalletButtonInvalid:hover{
     opacity: 0.3;
     cursor:auto;
-}
-
-.header{
-    margin-bottom: 25px;
 }
 
 .errorMsg{

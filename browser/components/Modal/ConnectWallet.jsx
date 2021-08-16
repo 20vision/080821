@@ -1,55 +1,58 @@
 import styles from "../../styles/modal/connectWallet.module.css"
+import modalStyle from '../../styles/modal/index.module.css'
 import axios from 'axios'
 import Router from 'next/router'
 import { useState, useEffect } from 'react'
 import Loading from '../../assets/Loading/Loading'
+import useUsernameValidation from "../../hooks/User/useUsernameValidation"
 
 
 export default function ConnectWallet() {
     const [step, setStep] = useState(1)
-    const [username, setUsername] = useState('')
-    const [valid, setValid] = useState(false)
-    const [errorMsg, setErrorMsg] = useState('')
-    const [loading, setLoading] = useState(false)
-    const [timer, setTimer] = useState(null)
-    const regex = /^[a-z0-9_.]*$/
+    const [username, setUsername, valid, errorMsg, loading] = useUsernameValidation()
+    // const [username, setUsername] = useState('')
+    // const [valid, setValid] = useState(false)
+    // const [errorMsg, setErrorMsg] = useState('')
+    // const [loading, setLoading] = useState(false)
+    // const [timer, setTimer] = useState(null)
+    // const regex = /^[a-z0-9_.]*$/
 
 
-    useEffect(() => {
-        setErrorMsg('')
-        clearTimeout(timer)
-        setTimer(null)
-        setValid(false)
-        if(username.length < 1){
-            setLoading(false)
-        }else if(!regex.test(username)){
-            setLoading(false)
-            setErrorMsg('Usernames can only contain letters, numbers, dots and underscores')
-        }else{
-            setLoading(true)
-            setTimer(setTimeout(() => {
-                if(username.length < 4){
-                    setErrorMsg('@'+username+' is not a valid username')
-                    setLoading(false)
-                }else{
-                    axios.post('http://localhost:4000/get/username_unique',{username: username}
-                    ).then(response => {
-                        setValid(true)
-                    })
-                    .catch(error =>{
-                        if(error.response.status == 422){
-                            setErrorMsg('@'+username+' is already taken')
-                        }else{
-                            setErrorMsg('Error: ' + error.response.status+'\n'+error.response.data)
-                        }
-                    })
-                    .then(() =>{
-                        setLoading(false)
-                    })
-                }
-            }, 1000))
-        }
-    }, [username])
+    // useEffect(() => {
+    //     setErrorMsg('')
+    //     clearTimeout(timer)
+    //     setTimer(null)
+    //     setValid(false)
+    //     if(username.length < 1){
+    //         setLoading(false)
+    //     }else if(!regex.test(username)){
+    //         setLoading(false)
+    //         setErrorMsg('Usernames can only contain letters, numbers, dots and underscores')
+    //     }else{
+    //         setLoading(true)
+    //         setTimer(setTimeout(() => {
+    //             if(username.length < 4){
+    //                 setErrorMsg('@'+username+' is not a valid username')
+    //                 setLoading(false)
+    //             }else{
+    //                 axios.post('http://localhost:4000/get/username_unique',{username: username}
+    //                 ).then(response => {
+    //                     setValid(true)
+    //                 })
+    //                 .catch(error =>{
+    //                     if(error.response.status == 422){
+    //                         setErrorMsg('@'+username+' is already taken')
+    //                     }else{
+    //                         setErrorMsg('Error: ' + error.response.status+'\n'+error.response.data)
+    //                     }
+    //                 })
+    //                 .then(() =>{
+    //                     setLoading(false)
+    //                 })
+    //             }
+    //         }, 1000))
+    //     }
+    // }, [username])
     
 
     function Connect(){
@@ -84,7 +87,7 @@ export default function ConnectWallet() {
 
     if(step == 1){
         return(
-            <div className={styles.container}>
+            <div className={modalStyle.container}>
     
                 <div className={styles.yoroi}>
                     <a href="https://yoroi-wallet.com/#/" target="_blank"><img src="./yoroi-logo-blue.inline.svg"/></a>
@@ -105,9 +108,9 @@ export default function ConnectWallet() {
         )
     }else{
         return(
-            <div className={styles.container}>
+            <div className={modalStyle.container}>
                 
-                <div className={styles.header}>
+                <div className={modalStyle.header}>
                     <h1>
                         Create User
                     </h1>
@@ -117,7 +120,9 @@ export default function ConnectWallet() {
                     @<input placeholder="username" value={username} onChange={e => setUsername(e.target.value.toLocaleLowerCase())}/>
                 </div>
 
-                {errorMsg?<span className={styles.errorMsg}>{errorMsg}</span>:null}
+                <div style={{width: '280px'}}>
+                    {errorMsg?<span className={styles.errorMsg}>{errorMsg}</span>:null}
+                </div>
 
                 <a onClick={valid?CreateUser:null} className={`${styles.connectWalletButton} ${valid?null:styles.connectWalletButtonInvalid}`}>
                     <div>
