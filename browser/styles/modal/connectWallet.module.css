@@ -1,0 +1,41 @@
+.terms{
+    font-size: 14px;
+}
+
+.terms span{
+    margin-right: 5px;
+    font-size: 14px;
+}
+
+.highlight{
+    color: var(--red)
+}
+
+.yoroi{
+    width: 250px;
+    margin-bottom: 25px;
+}
+
+.connectWalletButton{
+    background-color: var(--red);
+    color: var(--white);
+    padding: 15px 25px;
+    border-radius: 15px;
+    margin-top:25px;
+    display: flex;
+    justify-content: center;
+    align-self: stretch;
+}
+
+.connectWalletButtonInvalid, .connectWalletButtonInvalid:hover{
+    opacity: 0.3;
+    cursor:auto;
+}
+
+.errorMsg{
+    font-size: 12px;
+    margin-top:15px;
+    color: var(--red);
+    align-self: stretch;
+    max-width:250px;
+}

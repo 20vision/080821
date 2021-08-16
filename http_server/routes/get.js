@@ -30,7 +30,10 @@ router.get("/user_profile", checkAuth.optional, async (req, res) => {
             }
         );
     }else{
-        res.status(200).send()
+        res.json({
+            username: null,
+            profilePicture: null
+        })
     }
     
 })

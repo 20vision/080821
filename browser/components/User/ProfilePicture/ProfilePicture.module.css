@@ -1,0 +1,42 @@
+.img, .svg, .loading{
+    border-radius: 100%;
+}
+
+.medium{
+    width: 45px;
+    height: 45px;
+}
+
+.large{
+    width: 60px;
+    height: 60px;
+}
+
+.medium .svg,.medium .loading,.medium .img{
+    width: 45px;
+    height: 45px;
+}
+
+.large .svg,.large .loading,.large .img{
+    width: 60px;
+    height: 60px;
+}
+
+.loading{
+    background-color: var(--grey);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.svg{
+    background-color: var(--white);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    filter: drop-shadow( 0px 10px 15px rgb(0, 0, 0, 0.3));
+}
+
+.img{
+    filter: drop-shadow( 0px 10px 15px rgb(0, 0, 0, 0.3));
+}

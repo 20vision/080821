@@ -44,15 +44,26 @@
 .user{
     flex-grow:1;
     display: flex;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
+}
+
+.user h3{
+    margin-top: 15px;
+}
+
+.user span{
+    font-size: 12px;
+    margin-top: 10px;
+    color: var(--grey)
 }
 
 .selectionContainer{
     flex-grow:1;
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    justify-content: flex-start;
 }
 
 .selectionChild{
@@ -99,4 +110,11 @@
     margin-bottom:25px;
     display: flex;
     justify-content: center;
+}
+
+.loading{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-grow:1;
 }

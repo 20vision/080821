@@ -9,12 +9,15 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "axios": "^0.21.1",
     "framer-motion": "^4.1.17",
-    "next": "11.0.1",
+    "next": "^11.1.0",
     "react": "17.0.2",
+    "react-avatar-editor": "^12.0.0",
     "react-click-outside": "^3.0.1",
     "react-dom": "17.0.2",
     "react-onclickoutside": "^6.11.2",
+    "react-spinners": "^0.11.0",
     "zustand": "^3.5.7"
   },
   "devDependencies": {

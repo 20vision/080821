@@ -32,8 +32,6 @@ const get = require("./routes/get");
 const post = require("./routes/post");
     app.use('/post', post)
 
-const update = require("./middleware/update");
-    app.use('/update', update)
 
 // Run Server on Port
 app.listen(port, () => {
