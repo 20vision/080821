@@ -3,18 +3,22 @@ import { StyleSheet, Button, View, Image, Text, Alert } from 'react-native';
 import Menu from '../components/Menu'
 
 
-function Default(props) {
+function Default() {
   return (
-    <View styles= {styles.base}>
-      <View style={styles.button}>
-        <Button
-          color= '#2e2e2e'
-          title= 'Discover'
-        />
-      </View>
-      <View style={styles.context}>
+    <View style= {styles.base}>
+      <Button style={styles.button}
+        title= "Discover"
+        color= '#2e2e2e'
+      />
+     
+      <Text style={styles.context}>
+        Hello
+      </Text>
+      <Text style={styles.pages}>
+        Pages
+      </Text>
           
-      </View>
+     
     </View>
     );
   };
@@ -23,20 +27,24 @@ function Default(props) {
 const styles = StyleSheet.create({
     
     base:{
+      
       flexDirection: 'row',
-      alignItems: 'flex-start',
+      alignItems: 'center',
       justifyContent: 'space-around',
+      top: 30,
+           
     },
     
     button: {
-      Top: '20px',
-      Left: '20px',
+      
     },
 
     context: {
-      color: '1BE107',
-      height: '20',
-      width: '20',
+     color: '#fff',
+    },
+
+    pages:{
+      color: '#fff',
     },
   });
 
