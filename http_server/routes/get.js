@@ -15,7 +15,7 @@ router.post("/pagename_unique", input_validation.checkRegexPagename, input_valid
 router.get("/user_profile", checkAuth.optional, async (req, res) => {
     if(req.user_id){
         pool.query(
-            'SELECT u.username, u.profilePicture FROM User u where user_id = ?;',
+            'SELECT u.username, u.profilePicture FROM User u where u.user_id = ?;',
             [req.user_id],
             function(err, results) {
                 if (err){

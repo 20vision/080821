@@ -53,3 +53,28 @@
     justify-content: center;
     align-items: center;
 }
+
+.usernameContainer{
+    margin-top:25px;
+    display: flex;
+    align-items: center;
+}
+
+.usernameContainer input, .usernameContainer span{
+    font-size:20px;
+    padding:0px;
+    margin:0px;
+    line-height: 20px;
+}
+
+.usernameContainer input{
+    width: 150px;
+}
+
+.errorMsg{
+    font-size: 12px;
+    margin-top:15px;
+    color: var(--red);
+    align-self: stretch;
+    max-width:250px;
+}

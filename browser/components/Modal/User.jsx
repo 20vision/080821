@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 
 import useUserProfile from '../../hooks/User/useUserProfile'
 import useUsernameValidation from '../../hooks/User/useUsernameValidation'
+import useImageValidation from '../../hooks/Image/useImageValidation'
 
 import ProfilePicture from '../User/ProfilePicture/ProfilePicture'
 
@@ -14,7 +15,7 @@ import X from '../../assets/X'
 import {BarLoader} from "react-spinners";
 
 import AvatarEditor from 'react-avatar-editor'
-import avatarToUrl from '../../hooks/Image/avatarToUrl'
+import useAvatarToUrl from '../../hooks/Image/useAvatarToUrl'
 
 export default function User() {
     const [selectedRoute, setSelectedRoute] = useState(0)
@@ -37,34 +38,33 @@ export default function User() {
 
 function Profile(){
     const [profile, isLoading, setUser] = useUserProfile()
-    const [username, setUsername, valid, errorMsg, loading] = useUsernameValidation()
+    const [username, setUsername, valid, errorMsg, loading, publishNewUsername] = useUsernameValidation()
+    const [validateImage, imageValidationError, validImage] = useImageValidation()
 
-    const [loadingUrl, url, setImage, err, setErr] = avatarToUrl()
+    const [loadingUrl, url, setImage, err, setErr] = useAvatarToUrl()
 
-    const [selectedFile, setSelectedFile] = useState()
     const [scaleImg, setScaleImg] = useState(1)
 
     const showFileUpload = useRef()
     const croppedImgRef = useRef()
-
 
     useEffect(() => {
         if(url){
             let newProfile = profile
             newProfile.profilePicture = url
             setUser(newProfile)
-            setSelectedFile()
+            validateImage(null)
         }
     }, [url])
 
     return(
         <>
-            {selectedFile != null?
+            {(validImage != null)?
                 <div>
                     <div>
                         <AvatarEditor
                             ref={croppedImgRef}
-                            image={selectedFile}
+                            image={validImage}
                             width={250}
                             height={250}
                             borderRadius={300}
@@ -83,7 +83,7 @@ function Profile(){
                             </div>
                         :
                             <div className="flexy">
-                                <a onClick={() => setSelectedFile()}>
+                                <a onClick={() => validateImage()}>
                                     <X color="#8A8A8A"/>
                                 </a>
                                 <input style={{margin: '0px 25px'}} type="range" value={scaleImg} onChange={(e) => setScaleImg(parseFloat(e.target.value))} step={0.01} min={1} max={5}/>
@@ -106,13 +106,33 @@ function Profile(){
                             </div>
                         </div>
                     </a>
+                    <div>
+                        <div className={`inputLine ${styles.usernameContainer}`}>
+                            <span>@</span><input value={username?username:(profile.username)} onChange={e => setUsername(e.target.value.toLocaleLowerCase())}/>
+                            {((username != profile.username) && (valid) && (!loading))?
+                                <a onClick={() => publishNewUsername()} style={{margin: '0px 0px -5px 5px'}}>
+                                    <Check size={16} color="#FF5B77"/>
+                                </a>
+                            :
+                                null
+                            }
+                        </div>
+                        {loading?
+                        <BarLoader css="display:block;height:2px;" height={2} color="#FF5B77" width={190}/>
+                        :
+                            null
+                        }
+                    </div>
+                    <div style={{width: '180px'}}>
+                        <span className={styles.errorMsg}>{errorMsg} {imageValidationError}</span>
+                    </div>
+                    
                     <input
                         style={{display: 'none'}}
-                        accept="image/jpeg,image/png,image/webp"
+                        accept="image/jpeg,image/png"
                         type="file"
-                        value={selectedFile}
                         multiple={false}
-                        onChange={(e) => setSelectedFile(e.target.files[0])}
+                        onChange={(e) => validateImage(e.target.files[0])}
                         ref={showFileUpload}
                     />
                 </div>

@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { useState, useEffect } from 'react'
 
-const avatarToUrl = () => {
+const useAvatarToUrl = () => {
     const [image, setImage] = useState()
     const [loading, setLoading] = useState(false)
     const [url, setUrl] = useState()
@@ -36,4 +36,4 @@ const avatarToUrl = () => {
     return [loading, url, setImage, err, setErr]
 }
 
-export default avatarToUrl
+export default useAvatarToUrl

@@ -1,6 +1,7 @@
 const { uploadFile, deleteFile } = require("../config/storage");
 const multer = require('multer')
 const sharp = require('sharp')
+var validator = require('validator');
 let pool = require('../config/db');
 const { random_image_id } = require("../config/random");
 
@@ -8,16 +9,23 @@ exports.profile_picture = function(req, res, next) {
     const upload = multer({
         storage: multer.memoryStorage(),
         fileFilter: function (req, file, callback) {
-            var ext = path.extname(file.originalname);
-            if(ext !== '.png' && ext !== '.jpg' && ext !== '.jpeg') {
+            if(!validator.isBase64(file+'')){
                 return callback(new Error('Only images are allowed'))
+            }else{
+                var ext = path.extname(file.originalname);
+                if(ext !== '.png' && ext !== '.jpg' && ext !== '.jpeg') {
+                    return callback(new Error('Only images are allowed'))
+                }
+                callback(null, true)
             }
-            callback(null, true)
+            
         },
         limits: {
-            fieldSize: 10 * 1024 * 1024
+            fieldSize: 5 * 1024 * 1024
         }
     }).single('file')
+
+
 
     upload(req, res, async function (err) {
         if (err) {
@@ -84,7 +92,7 @@ exports.profile_picture = function(req, res, next) {
                                             res.status(500).send('An error occurred')
                                             console.log(err)
                                         }
-                                        if(oldProfilePicture[0]){
+                                        if(oldProfilePicture[0].profilePicture){
                                             try{
                                                 oldProfilePicture = oldProfilePicture[0].profilePicture
                                                 oldProfilePicture = oldProfilePicture.split("/")
@@ -98,6 +106,8 @@ exports.profile_picture = function(req, res, next) {
                                             }catch(error){
                                                 throw error
                                             }
+                                        }else{
+                                            next()
                                         }
                                         
                                     }
