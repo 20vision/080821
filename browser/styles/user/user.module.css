@@ -29,8 +29,27 @@
 .profileEdit{
     background-color: black;
     border-radius: 100%;
+    position: relative;
 }
 
-.profileEdit div{
-    opacity: 0.3;
+.profile{
+    opacity: 0.5;
+}
+
+.errormsg{
+    color: var(--red);
+    font-size: 12px;
+    margin:0px 15px 10px 15px;
+
+}
+
+.cameraContainer{
+    position:absolute;
+    top:0;
+    bottom:0;
+    left:0;
+    right:0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }

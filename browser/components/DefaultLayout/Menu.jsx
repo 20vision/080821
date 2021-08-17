@@ -72,7 +72,7 @@ function MenuNav() {
 
 function Menu({opened}) {
     const { pathname } = useRouter();
-    const [profile, isLoading] = useUserProfile()
+    const [profile, isLoading, setUser] = useUserProfile()
     const setModal = useModalStore(state => state.setModal)
 
     const variants = {

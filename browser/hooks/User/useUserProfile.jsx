@@ -39,7 +39,7 @@ const useUserProfile = () => {
         }
     }, [profile])
 
-    return [profile, isLoading]
+    return [profile, isLoading, setUser]
 
 }
 

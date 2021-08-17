@@ -114,6 +114,11 @@ textarea:focus, input:focus{
   justify-content: center;
 }
 
+.errormsg{
+  font-size:12px;
+  color: var(--red);
+}
+
 input[type=range] {
   -webkit-appearance: none;
   width: 100%;

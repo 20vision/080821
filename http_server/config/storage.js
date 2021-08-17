@@ -8,27 +8,35 @@ const storage = new Storage({
     projectId: keys.PROJECT_ID
 })
 
-const configBucket = storage.bucket('paper_images')
+const uploadFile = (data) => new Promise((res, rej) => {
 
-const uploadFile = (file) => new Promise((res, rej) => {
-    const {originalname, buffer} = file;
-
-    const blob = configBucket.file(originalname.replace(/ /g, '_'));
-
-    const blobStream = blob.createWriteStream({
-        resumable: true
+    const file = storage.bucket(`${data.bucketname}`).file(`${data.timefolder}/${data.randomfolder}/${data.filename}`);
+    file.save(data.buffer, (err) => {
+        if(!err){
+            const publicUrl = `${data.bucketname}/${data.timefolder}/${data.randomfolder}/`;
+            res(publicUrl)
+        }else{
+            rej(err, 'Failed to upload File');
+        }
     })
+});
 
-    blobStream.on('finish', async () => {
-        const publicUrl = `https://storage.cloud.google.com/${configBucket.name}/${blob.name}`;
-        await res(publicUrl);
-    })
-    .on('error', (err) => {
-        console.error(err);
-        rej(err, 'Failed to upload File');
-    }).end(buffer);
+const deleteFile = (data) => new Promise((res, rej) => {
+    async function deleteFile() {
+        await storage.bucket(`${data.bucketname}`).getFiles({ prefix: `${data.timefolder}/${data.randomfolder}`}, function(err, files){
+            for(var i in files){
+                files[i].delete()
+            }
+        })
+        res('deleted')
+    }
+      
+    deleteFile().catch((err)=>{
+        rej(err,'Failed to delete File')
+    });
 });
 
 module.exports = {
-    uploadFile
+    uploadFile,
+    deleteFile
 }

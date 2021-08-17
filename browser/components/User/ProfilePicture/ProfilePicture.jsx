@@ -1,8 +1,9 @@
 import User from '../../../assets/User'
 
-import styles from './ProfilePicture.module.css'
+import styles from '../../../styles/user/ProfilePicture.module.css'
 
 import BounceLoader from "react-spinners/BounceLoader";
+import config from '../../../public/config.json';
 
 /*
     Properties:
@@ -57,7 +58,8 @@ function ProfileImg({uri, type}){
             :
                 styles.medium
             }>
-            <img className={styles.img} src={uri}/>
+            {/* LARGE STARTS AT 200 and medium is 48px. 400 is XL */}
+            <img className={styles.img} src={config.FILE_SERVER_URL+uri+(type=='large'?'200x200':'48x48')+'.webp'}/>
         </div>
         
     )
