@@ -1,4 +1,4 @@
-import styles from '../../styles/user/user.module.css'
+import styles from '../../styles/modal/user.module.css'
 
 import { useState, useRef, useEffect } from 'react'
 
@@ -102,7 +102,7 @@ function Profile(){
                                 <ProfilePicture type={'large'} loading={isLoading} uri={profile.profilePicture?profile.profilePicture:null}/>
                             </div>
                             <div className={styles.cameraContainer}>
-                                <Camera color="#FAFAFA" size={18}/>
+                                <Camera color="#FAFAFA"/>
                             </div>
                         </div>
                     </a>

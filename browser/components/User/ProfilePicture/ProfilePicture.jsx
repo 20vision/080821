@@ -43,7 +43,7 @@ function Loading({type}){
                 styles.medium
             }>
             <div className={styles.loading}>
-                <BounceLoader css={'opacity: 0.2'} speedMultiplier={0.8} size={type=='large'?60:45} color="#FAFAFA"/>
+                <BounceLoader css={'opacity: 0.2'} speedMultiplier={0.8} size={type=='large'?150:45} color="#FAFAFA"/>
             </div>
         </div>
         
@@ -58,7 +58,7 @@ function ProfileImg({uri, type}){
             :
                 styles.medium
             }>
-            {/* LARGE STARTS AT 200 and medium is 48px. 400 is XL */}
+            {/* LARGE STARTS AT 200 -> get downsized to 150 and medium is 48px. 400 is XL */}
             <img className={styles.img} src={config.FILE_SERVER_URL+uri+(type=='large'?'200x200':'48x48')+'.webp'}/>
         </div>
         
@@ -74,7 +74,7 @@ function ProfileSvg({type}){
                 styles.medium
             }>   
             <div className={styles.svg}>
-                <User size={type=='large'?'35':null}/>
+                <User size={type=='large'?'87':null}/>
             </div>
         </div>
     )

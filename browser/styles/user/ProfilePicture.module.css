@@ -8,8 +8,8 @@
 }
 
 .large{
-    width: 60px;
-    height: 60px;
+    width: 150px;
+    height: 150px;
 }
 
 .medium .svg,.medium .loading,.medium .img{
@@ -18,8 +18,8 @@
 }
 
 .large .svg,.large .loading,.large .img{
-    width: 60px;
-    height: 60px;
+    width: 150px;
+    height: 150px;
 }
 
 .loading{
