@@ -118,3 +118,18 @@
     align-items: center;
     flex-grow:1;
 }
+
+.createPageContainer{
+    border: 1px solid var(--grey);
+    border-radius: 15px;
+    padding: 25px;
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+}
+
+.createPageContainer h2{
+    flex-grow: 1;
+    text-align: center;
+    margin-left: -12px;
+}

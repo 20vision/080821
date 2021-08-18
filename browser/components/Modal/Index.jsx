@@ -3,6 +3,7 @@ import onClickOutside from "react-onclickoutside";
 import { useModalStore } from '../../store/modal'
 import { motion } from "framer-motion"
 
+import AddPage from './AddPage';
 import ConnectWallet from './ConnectWallet';
 import User from "./User"
 
@@ -36,6 +37,8 @@ const ClickOutside = onClickOutside(() =>{
         modalComp = <ConnectWallet/>
     }else if(modal == 2){
         modalComp = <User/>
+    }else if(modal == 3){
+        modalComp = <AddPage/>
     }
 
     return (

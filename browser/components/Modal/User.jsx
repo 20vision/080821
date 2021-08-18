@@ -1,4 +1,5 @@
 import styles from '../../styles/modal/user.module.css'
+import indexStyles from '../../styles/modal/index.module.css'
 
 import { useState, useRef, useEffect } from 'react'
 
@@ -21,11 +22,11 @@ export default function User() {
     const [selectedRoute, setSelectedRoute] = useState(0)
     return(
         <div>
-            <div className={styles.header}>
-                <h1 onClick={() => setSelectedRoute(0)} className={selectedRoute == 0?styles.highlight:null}>
+            <div className={indexStyles.header}>
+                <h1 onClick={() => setSelectedRoute(0)} className={selectedRoute == 0?indexStyles.highlight:null}>
                     Profile
                 </h1>
-                <h1 onClick={() => setSelectedRoute(1)} className={selectedRoute == 1?styles.highlight:null}>
+                <h1 onClick={() => setSelectedRoute(1)} className={selectedRoute == 1?indexStyles.highlight:null}>
                     Logout
                 </h1>
             </div>
@@ -132,7 +133,7 @@ function Profile(){
                         accept="image/jpeg,image/png"
                         type="file"
                         multiple={false}
-                        onChange={(e) => validateImage(e.target.files[0])}
+                        onChange={(e) => {validateImage(e.target.files[0]); setErr(null);}}
                         ref={showFileUpload}
                     />
                 </div>

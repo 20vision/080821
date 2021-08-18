@@ -15,6 +15,7 @@ import Discover from '../../assets/Discover'
 import Following from '../../assets/Following'
 import Saved from '../../assets/Saved'
 import Loading from '../../assets/Loading/Loading'
+import Plus from '../../assets/Plus'
 
 export default function Index() {
     const opened = useMenuStore(state => state.opened)
@@ -191,9 +192,14 @@ function UserConnection({ type }) {
         )
     }else{
         return(
-            <div>
-                -Create Page-
-            </div>
+            <a onClick={() => setModal(3)}>
+                <div className={styles.createPageContainer}>
+                        <Plus color="#FAFAFA"/>
+                    <h2>
+                        Add Page
+                    </h2>
+                </div>
+            </a>
         )
     }
     
