@@ -12,6 +12,34 @@ router.post("/pagename_unique", input_validation.checkRegexPagename, input_valid
     res.status(200).send()
 });
 
+router.get("/my_pages/:page", checkAuth.required, async (req, res) => {
+    if(req.user_id){
+        pool.query(
+            'SELECT p.page_icon, p.pagename, p.unique_pagename, p.vision FROM PageUser pu join Page p on pu.page_id = p.page_id where pu.user_id = ? order by pu.last_selected desc limit ?, 6;',
+            [req.user_id, (parseInt(req.params.page)*6)],
+            function(err, results) {
+                if (err){
+                    res.status(500).send('An error occurred')
+                    console.log(err)
+                }else{
+                    let isLimit
+                    if((results) && (results.length == 6)){
+                        isLimit = (parseInt(req.params.page) + 1)
+                    }else{
+                        isLimit = null
+                    }
+                    res.json({
+                        my_pages: results,
+                        nextId: isLimit
+                    })
+                }
+            }
+        );
+    }else{
+        res.status(401).send()
+    }
+});
+
 router.get("/user_profile", checkAuth.optional, async (req, res) => {
     if(req.user_id){
         pool.query(

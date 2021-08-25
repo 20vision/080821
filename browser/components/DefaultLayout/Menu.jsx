@@ -4,11 +4,14 @@ import { useModalStore } from '../../store/modal'
 import useUserProfile from '../../hooks/User/useUserProfile'
 import ProfilePicture from '../User/ProfilePicture/ProfilePicture'
 
+import {useInfiniteQuery} from 'react-query'
 import styles from '../../styles/defaultLayout/menu.module.css'
 import { motion } from "framer-motion"
 import { useRouter } from 'next/router'
 import Link from 'next/link'
+import axios from 'axios'
 
+import PageIcon from '../../assets/PageIcon/PageIcon'
 import Chevron from '../../assets/Chevron'
 import Portfolio from '../../assets/Portfolio'
 import Discover from '../../assets/Discover'
@@ -75,6 +78,25 @@ function Menu({opened}) {
     const { pathname } = useRouter();
     const [profile, isLoading, setUser] = useUserProfile()
     const setModal = useModalStore(state => state.setModal)
+
+    const myPages = useInfiniteQuery(
+        'my_pages',
+        async () => {
+            const res = await axios.get(`http://localhost:4000/get/my_pages/0`,{withCredentials: true})
+            return res.data
+        },
+        {
+            enabled: profile.username?true:false,
+            refetchOnWindowFocus: false,
+            refetchOnmount: false,
+            refetchOnReconnect: false,
+            retry: false,
+            staleTime: 1000 * 60 * 60 * 24,
+            onError: (error) => {
+                console.error(error)
+            },
+        }
+    )
 
     const variants = {
         opened: {
@@ -156,7 +178,21 @@ function Menu({opened}) {
                 </Link>
             </div>
 
-            <UserConnection type={(profile.username == null)?1:2}/>
+            <UserConnection 
+                page={
+                    myPages && myPages.data && myPages.data.pages[0] && myPages.data.pages[0].my_pages[0]?
+                        myPages.data.pages[0].my_pages[0]
+                    :null
+                } 
+                type={
+                    (profile.username == null)?
+                        1
+                    :myPages && myPages.data && myPages.data.pages[0] && myPages.data.pages[0].my_pages[0]?
+                        3
+                    :
+                        2
+                }
+            />
 
             <div className={styles.policy}>
                 <span><a>Privacy</a></span>
@@ -173,7 +209,7 @@ function Menu({opened}) {
 
 
 
-function UserConnection({ type }) {
+function UserConnection({ type, page }) {
     const setModal = useModalStore(state => state.setModal)
 
     /*
@@ -190,7 +226,7 @@ function UserConnection({ type }) {
                 </div>
             </a>
         )
-    }else{
+    }else if(type == 2){
         return(
             <a onClick={() => setModal(3)}>
                 <div className={styles.createPageContainer}>
@@ -200,6 +236,23 @@ function UserConnection({ type }) {
                     </h2>
                 </div>
             </a>
+        )
+    }else{
+        return(
+            <div className={styles.myPageContainer}>
+                <div>
+                    <PageIcon color={'#'+page.page_icon}/>
+                </div>
+                <div className={styles.myPageChild}>
+                    <h3>
+                        {page.pagename}
+                    </h3>
+                    <span>
+                        /{page.unique_pagename}
+                    </span>
+                </div>
+                <a onClick={(e) => {e.preventDefault; setModal(3);}}><Chevron color="#FAFAFA" direction="180"/></a>
+            </div>
         )
     }
     
