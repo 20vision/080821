@@ -3,12 +3,19 @@ const input_validation = require('../middleware/input_validation');
 const checkAuth = require('../middleware/checkAuth')
 let pool = require('../config/db');
 
-// Sending wallet "public key" as user_id and checking if user already in db -> send cookie. If not -> return new
+
+
+// PRIVATE //////////////////////////////////////////////////
+
 router.post("/username_unique", input_validation.checkRegexUsername, input_validation.checkUniqueUsername, async (req, res) => {
     res.status(200).send()
 });
 
 router.post("/pagename_unique", input_validation.checkRegexPagename, input_validation.checkUniquePagename, async (req, res) => {
+    res.status(200).send()
+});
+
+router.get("/mission_title_unique/:pagename/:mission_title", input_validation.checkUniqueMissionTitle, async (req, res) => {
     res.status(200).send()
 });
 
@@ -64,6 +71,28 @@ router.get("/user_profile", checkAuth.optional, async (req, res) => {
         })
     }
     
+})
+
+
+// PUBLIC //////////////////////////////////////////////////
+
+router.get("/page/:page_name", checkAuth.optional, async (req, res) => {
+    pool.query(
+        'SELECT page_icon, pagename, unique_pagename, vision FROM Page where unique_pagename = ?;',
+        [req.params.page_name],
+        function(err, results) {
+            if (err){
+                res.status(500).send('An error occurred')
+                console.log(err)
+            }else if(results.length > 0){
+                res.json({
+                    page: results[0],
+                })
+            }else{
+                res.status(404).send()
+            }
+        }
+    );
 })
 
 module.exports = router;

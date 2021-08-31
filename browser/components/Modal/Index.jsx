@@ -6,6 +6,7 @@ import { motion } from "framer-motion"
 import UserPages from './UserPages';
 import ConnectWallet from './ConnectWallet';
 import User from "./User"
+import CreateMission from './CreateMission';
 
 export default function Modal() {
     return (
@@ -32,15 +33,6 @@ const ClickOutside = onClickOutside(() =>{
 
     ClickOutside.handleClickOutside = () => setModal(0);
 
-    let modalComp
-    if(modal == 1){
-        modalComp = <ConnectWallet/>
-    }else if(modal == 2){
-        modalComp = <User/>
-    }else if(modal == 3){
-        modalComp = <UserPages/>
-    }
-
     return (
         <div className={styles.modalContainer}>
             <motion.div 
@@ -49,7 +41,15 @@ const ClickOutside = onClickOutside(() =>{
             className={styles.modalChild}
             >
 
-                {modalComp}
+                {modal == 1 ?
+                    <ConnectWallet/>
+                :modal == 2 ?
+                    <User/>
+                :modal == 3 ?
+                    <UserPages/>
+                :modal == 4 ?
+                    <CreateMission/>
+                :null}
 
             </motion.div>
         </div>

@@ -1,47 +1,65 @@
 import Index from "../components/Modal/Index"
 import styles from "../styles/pageLayout/index.module.css"
 
+import PageInfo from '../components/PageLayout/PageInfo'
+import onClickOutside from "react-onclickoutside";
 import { useModalStore } from "../store/modal"
+import NavPanel from "../components/NavPanel/Index"
+import Overview from "../components/Paper/Overview"
+import { useRouter } from "next/router";
+import { useState } from "react";
 
-export default function PageLayout( {children} ) {
+export default function PageLayout( {children, page} ) {
     const modal = useModalStore(state => state.modal)
 
     return (
         <>  
-            {(modal > 0) ? <Index/> : null}
-
+            {(modal > 0) ? <div className="ignore_click_outside_page_modal"><Index/></div> : null}
             <div className={styles.container}>
-                <div className={styles.child}>
-                    {/* <div className={styles.menu}>
-                        <Menu/>
-                    </div> */}
-
-                    <div className={styles.pageInfo}>
-                        <PageInfo/>
-                    </div>
-
-                    <div className={styles.previewContainer}>
-                        <main className={styles.previewChild}>
-                            {children}
-                        </main>
-                    </div>
-
-                    {/* <div className={styles.paperOverview}>
-                        -insert paper overview-
-                    </div> */}
-                </div>
+                <Panel children={children} page={page} outsideClickIgnoreClass={'ignore_click_outside_page_modal'}/>
             </div>
         </>
     )
 }
 
-
-
-function PageInfo() {
-    return (
-        <div>
-            hello
-        </div>
-    )
+const clickOutsideConfig = {
+    handleClickOutside: () => Panel.handleClickOutside
 }
 
+var Panel = onClickOutside(({children, page}) => {
+    const router = useRouter()
+    if(router.query.mission){
+        Panel.handleClickOutside = () => {
+            router.push(`/${router.query.page}`)
+        };
+    }else{
+        Panel.handleClickOutside = () => {
+            router.push(`/`)
+        };
+    }
+
+    return(
+        <div className={styles.child}>
+
+            <div className={styles.pageInfo}>
+                <PageInfo page={page}/>
+            </div>
+
+            <div className={styles.previewContainer}>
+                <div className={styles.previewChild}>
+                    <main>
+                        {children}
+                    </main>
+                </div>
+            </div>
+
+            <div className={styles.overviewParent}>
+                <div className={styles.overview}>
+                    <Overview className={styles.overview}/>
+                </div>
+                <NavPanel/>
+            </div>
+
+        </div>
+    )
+}, clickOutsideConfig)

@@ -65,7 +65,44 @@ exports.checkRegexPagename = function(req, res, next) {
 
 exports.vision = function(req, res, next) {
     if((req.body.vision.length < 4) || (req.body.vision.length > 500)){
-        res.status(422).send("Your Vision has to contain at least 4 characters and at most 500")
+        res.status(422).send("Your Vision has to contain at least 4 and at most 500 characters")
+    }else{
+        next();
+    }
+};
+
+exports.checkUniqueMissionTitle = function(req, res, next) {
+    if(req.params.mission_title){
+        req.mission_title = req.params.mission_title
+    }else if(req.body.missionTitle){
+        req.mission_title = req.body.missionTitle
+    }
+    if(req.params.pagename){
+        req.pagename = req.params.pagename
+    }else if(req.body.pagename){
+        req.pagename = req.body.pagename
+    }
+
+    req.mission_title = req.mission_title.replace(' ', '_')
+    pool.query("SELECT if(count(m.mission_id)>0,false,true) as uniqueMission from Mission m join Page p on p.page_id = m.page_id where m.title = ? and p.unique_pagename = ?", 
+    [req.mission_title, req.pagename], 
+    function(err, rows, fields) {
+        try{
+            if(rows[0].uniqueMission == true){
+                next();
+            }else{
+                res.status(422).send("Mission Title already taken")
+            }
+        }catch(err){
+            res.status(500).send()
+            throw err;
+        }
+    });
+};
+
+exports.missionBody = function(req, res, next) {
+    if((req.body.missionBody.length < 4) || (req.body.missionBody.length > 280)){
+        res.status(422).send("Your Mission has to contain at least 4 and at most 280 characters")
     }else{
         next();
     }

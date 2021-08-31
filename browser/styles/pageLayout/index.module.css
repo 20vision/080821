@@ -4,9 +4,11 @@
     justify-content: center;
     align-items: center;
     height: 100%;
+    cursor: pointer;
 }
 
 .child{
+    cursor: auto;
     width: clamp(1600px, 80%, 1800px);
     height:90vh;
     display:flex;
@@ -26,4 +28,29 @@
     filter: drop-shadow(0px 3px 26px rgba(0, 0, 0, 0.4));
     width: 400px;
     margin-right: 50px;
+}
+
+.previewContainer{
+    flex-grow:1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.previewChild{
+    width: 600px;
+    height: 100%;
+}
+
+.overviewParent{
+    margin-left: 50px;
+    position: sticky;
+    margin: 35px;
+    height: auto;
+    display:flex;
+    flex-direction: column;
+}
+
+.overview{
+    flex-grow: 1;
 }

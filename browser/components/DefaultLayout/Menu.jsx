@@ -240,17 +240,19 @@ function UserConnection({ type, page }) {
     }else{
         return(
             <div className={styles.myPageContainer}>
-                <div>
-                    <PageIcon color={'#'+page.page_icon}/>
-                </div>
-                <div className={styles.myPageChild}>
-                    <h3>
-                        {page.pagename}
-                    </h3>
-                    <span>
-                        /{page.unique_pagename}
-                    </span>
-                </div>
+                <Link href={`/${page.unique_pagename}`}><a className={styles.pageLink}>
+                    <div>
+                        <PageIcon color={'#'+page.page_icon}/>
+                    </div>
+                    <div className={styles.myPageChild}>
+                        <h3>
+                            {page.pagename}
+                        </h3>
+                        <span>
+                            /{page.unique_pagename}
+                        </span>
+                    </div>
+                </a></Link>
                 <a onClick={(e) => {e.preventDefault; setModal(3);}}><Chevron color="#FAFAFA" direction="180"/></a>
             </div>
         )

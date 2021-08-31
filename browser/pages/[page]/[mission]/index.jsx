@@ -1,13 +1,16 @@
-import PageLayout from '../../layouts/page'
+import PageLayout from '../../../layouts/page'
 import axios from 'axios'
 import {useInfiniteQuery} from 'react-query'
-import Preview from '../../components/Paper/Preview'
+import { useRouter } from 'next/router'
+import Preview from '../../../components/Paper/Preview'
 
 export default function index({page}) {
+  const router = useRouter()
+
   const papers = useInfiniteQuery(
-    `papers/${page.unique_pagename}`,
+    `papers/${page.unique_pagename}/${router.query.mission}`,
     async () => {
-        const res = await axios.get(`http://localhost:4000/get/papers/${page.unique_pagename}`)
+        const res = await axios.get(`http://localhost:4000/get/papers/${page.unique_pagename}/${router.query.mission}`)
         return res.data
     },
     {
@@ -44,3 +47,4 @@ export async function getServerSideProps(context) {
     }
   }
 }
+

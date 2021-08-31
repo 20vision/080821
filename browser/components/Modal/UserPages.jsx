@@ -102,7 +102,7 @@ function Create(props){
                     <TextareaAutosize 
                         minRows={6}
                         ref={visionRef}
-                        placeholder="Vision - Why do you do what you do ?" 
+                        placeholder="Vision - Why do you do what you do ? Your purpose, cause or belief. " 
                         onChange={e => {setVision(e.target.value); addPageMuation.reset();}}
                     />
                 </div>

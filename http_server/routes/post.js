@@ -42,4 +42,41 @@ router.post("/create_page", checkAuth.required, input_validation.checkRegexPagen
     }
 });
 
+router.post("/mission", checkAuth.required, input_validation.checkUniqueMissionTitle, input_validation.missionBody, async (req, res) => {
+    if(req.user_id){
+        pool.getConnection(function(err, conn) {
+            if (err){
+                res.status(500).send('An error occurred')
+                console.log(err)
+            }else{
+                conn.query(
+                    'SELECT p.page_id from Page p join PageUser pu on pu.page_id = p.page_id and pu.user_id = ? and p.unique_pagename = ?;',
+                    [req.user_id, req.body.pagename],
+                    function(err, results) {
+                        if (err){
+                            res.status(500).send('An error occurred')
+                            console.log(err)
+                        }else if(results.length > 0){
+                            const missionTitle = req.body.missionTitle.replace(' ', '_')
+                            conn.query(
+                                'INSERT INTO Mission values (?,?,?,?,now());',
+                                [null, results[0].page_id, missionTitle, req.body.missionBody, null],
+                                function(err, results) {
+                                    if (err) throw err
+                                    res.status(200).send()
+                                }
+                            );
+                        }else{
+                            res.status(403).send('Permission denied')
+                        }
+                    }
+                );
+            }
+            pool.releaseConnection(conn);
+        })
+    }else{
+        res.status(401).send('Not authenticated')
+    }
+});
+
 module.exports = router;
