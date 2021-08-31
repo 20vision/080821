@@ -4,11 +4,11 @@ import {useInfiniteQuery} from 'react-query'
 import { useRouter } from 'next/router'
 import Preview from '../../../components/Paper/Preview'
 
-export default function index({page}) {
+export default function index({page, missions}) {
   const router = useRouter()
 
   const papers = useInfiniteQuery(
-    `papers/${page.unique_pagename}/${router.query.mission}`,
+    `papers/${page.unique_pagename}`,
     async () => {
         const res = await axios.get(`http://localhost:4000/get/papers/${page.unique_pagename}/${router.query.mission}`)
         return res.data
@@ -26,7 +26,7 @@ export default function index({page}) {
   )
 
   return (
-    <PageLayout page={page}>
+    <PageLayout page={page} missions={missions}>
       <Preview/>
     </PageLayout>
   )
@@ -38,7 +38,8 @@ export async function getServerSideProps(context) {
     const res = await axios.get(`http://localhost:4000/get/page/${context.params.page}`)
     return{
       props: {
-        page: res.data.page
+        page: res.data.page,
+        missions: res.data.missions
       }
     }
   }catch(error){

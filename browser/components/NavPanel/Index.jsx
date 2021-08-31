@@ -8,9 +8,11 @@ import Tool from '../../assets/Tool'
 import UserPlus from '../../assets/UserPlus'
 import useUserProfile from '../../hooks/User/useUserProfile'
 import { useModalStore } from '../../store/modal'
+import { useRouter } from 'next/router'
 
 export default function Index() {
     const [profile, isLoading, setUser] = useUserProfile()
+    const router = useRouter()
 
     return (
         <>
@@ -20,7 +22,13 @@ export default function Index() {
             <div className={styles.container}>
                 <div className={styles.child}>
                     {profile.username?
-                        <PageNavWithRole/>
+                        <>
+                            {router.query.mission?
+                                <MissionNavWithRole/>
+                            :
+                                <PageNavWithRole/>
+                            }
+                        </>
                     :
                         <PageNav/>
                     }
@@ -31,6 +39,31 @@ export default function Index() {
     )
 }
 
+function MissionNavWithRole(){
+    return(
+        <>
+            <a onClick={() => setModal(4)}>
+                <Plus color="#FAFAFA"/>
+                <div>Paper</div>
+            </a>
+
+            <a>
+                <DollarSign color="#FAFAFA"/>
+                <div>Trade</div>
+            </a>
+
+            <a>
+                <MessageCircle color="#FAFAFA"/>
+                <div>Forum</div>
+            </a>
+
+            <a>
+                <Tool color="#FAFAFA"/>
+                <div>Manage</div>
+            </a>
+        </>
+    )
+}
 
 function PageNavWithRole(){
     const setModal = useModalStore(state => state.setModal)

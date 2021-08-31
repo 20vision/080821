@@ -2,21 +2,20 @@ import Index from "../components/Modal/Index"
 import styles from "../styles/pageLayout/index.module.css"
 
 import PageInfo from '../components/PageLayout/PageInfo'
+import Missions from '../components/PageLayout/Missions'
 import onClickOutside from "react-onclickoutside";
 import { useModalStore } from "../store/modal"
 import NavPanel from "../components/NavPanel/Index"
 import Overview from "../components/Paper/Overview"
 import { useRouter } from "next/router";
-import { useState } from "react";
 
-export default function PageLayout( {children, page} ) {
+export default function PageLayout( {children, page, missions} ) {
     const modal = useModalStore(state => state.modal)
-
     return (
         <>  
             {(modal > 0) ? <div className="ignore_click_outside_page_modal"><Index/></div> : null}
             <div className={styles.container}>
-                <Panel children={children} page={page} outsideClickIgnoreClass={'ignore_click_outside_page_modal'}/>
+                <Panel children={children} page={page} missions={missions} outsideClickIgnoreClass={'ignore_click_outside_page_modal'}/>
             </div>
         </>
     )
@@ -26,23 +25,19 @@ const clickOutsideConfig = {
     handleClickOutside: () => Panel.handleClickOutside
 }
 
-var Panel = onClickOutside(({children, page}) => {
+var Panel = onClickOutside(({children, page, missions}) => {
     const router = useRouter()
-    if(router.query.mission){
-        Panel.handleClickOutside = () => {
-            router.push(`/${router.query.page}`)
-        };
-    }else{
-        Panel.handleClickOutside = () => {
-            router.push(`/`)
-        };
-    }
+
+    Panel.handleClickOutside = () => {
+        router.push(`/`)
+    };
 
     return(
         <div className={styles.child}>
 
             <div className={styles.pageInfo}>
                 <PageInfo page={page}/>
+                <Missions missions={missions}/>
             </div>
 
             <div className={styles.previewContainer}>

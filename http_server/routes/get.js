@@ -77,22 +77,42 @@ router.get("/user_profile", checkAuth.optional, async (req, res) => {
 // PUBLIC //////////////////////////////////////////////////
 
 router.get("/page/:page_name", checkAuth.optional, async (req, res) => {
-    pool.query(
-        'SELECT page_icon, pagename, unique_pagename, vision FROM Page where unique_pagename = ?;',
-        [req.params.page_name],
-        function(err, results) {
-            if (err){
-                res.status(500).send('An error occurred')
-                console.log(err)
-            }else if(results.length > 0){
-                res.json({
-                    page: results[0],
-                })
-            }else{
-                res.status(404).send()
-            }
+    pool.getConnection(function(err, conn) {
+        if (err){
+            res.status(500).send('An error occurred')
+            console.log(err)
+        }else{
+            conn.query(
+                'SELECT m.title, m.description, m.created from Mission m join Page p on m.page_id = p.page_id and p.unique_pagename = ?;',
+                [req.params.page_name],
+                function(err, missionResults) {
+                    if (err){
+                        res.status(500).send('An error occurred')
+                        console.log(err)
+                    }else{
+                        conn.query(
+                            'SELECT page_icon, pagename, unique_pagename, vision FROM Page where unique_pagename = ?;',
+                            [req.params.page_name],
+                            function(err, results) {
+                                if (err){
+                                    res.status(500).send('An error occurred')
+                                    console.log(err)
+                                }else if(results.length > 0){
+                                    res.json({
+                                        page: results[0],
+                                        missions: missionResults
+                                    })
+                                }else{
+                                    res.status(404).send()
+                                }
+                            }
+                        );
+                    }
+                }
+            );
         }
-    );
+        pool.releaseConnection(conn);
+    })
 })
 
 module.exports = router;
