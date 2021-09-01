@@ -1,6 +1,6 @@
 const router = require("express").Router();
 const input_validation = require('../middleware/input_validation');
-const checkAuth = require('../middleware/checkAuth')
+const check = require('../middleware/check')
 let pool = require('../config/db');
 
 
@@ -19,7 +19,7 @@ router.get("/mission_title_unique/:pagename/:mission_title", input_validation.ch
     res.status(200).send()
 });
 
-router.get("/my_pages/:page", checkAuth.required, async (req, res) => {
+router.get("/my_pages/:page", check.AuthRequired, async (req, res) => {
     if(req.user_id){
         pool.query(
             'SELECT p.page_icon, p.pagename, p.unique_pagename, p.vision FROM PageUser pu join Page p on pu.page_id = p.page_id where pu.user_id = ? order by pu.last_selected desc limit ?, 6;',
@@ -47,7 +47,7 @@ router.get("/my_pages/:page", checkAuth.required, async (req, res) => {
     }
 });
 
-router.get("/user_profile", checkAuth.optional, async (req, res) => {
+router.get("/user_profile", check.AuthOptional, async (req, res) => {
     if(req.user_id){
         pool.query(
             'SELECT u.username, u.profilePicture FROM User u where u.user_id = ?;',
@@ -76,37 +76,43 @@ router.get("/user_profile", checkAuth.optional, async (req, res) => {
 
 // PUBLIC //////////////////////////////////////////////////
 
-router.get("/page/:page_name", checkAuth.optional, async (req, res) => {
+router.get("/page/:page_name", check.AuthOptional, check.role, async (req, res) => {
     pool.getConnection(function(err, conn) {
         if (err){
             res.status(500).send('An error occurred')
             console.log(err)
         }else{
             conn.query(
-                'SELECT m.title, m.description, m.created from Mission m join Page p on m.page_id = p.page_id and p.unique_pagename = ?;',
+                'SELECT page_icon, pagename, unique_pagename, vision FROM Page where unique_pagename = ?;',
                 [req.params.page_name],
-                function(err, missionResults) {
+                function(err, results) {
                     if (err){
                         res.status(500).send('An error occurred')
                         console.log(err)
-                    }else{
-                        conn.query(
-                            'SELECT page_icon, pagename, unique_pagename, vision FROM Page where unique_pagename = ?;',
-                            [req.params.page_name],
-                            function(err, results) {
-                                if (err){
-                                    res.status(500).send('An error occurred')
-                                    console.log(err)
-                                }else if(results.length > 0){
-                                    res.json({
-                                        page: results[0],
-                                        missions: missionResults
-                                    })
-                                }else{
-                                    res.status(404).send()
+                    }else if(results.length > 0){
+                        if(req.query.missions && (req.query.missions == 'true')){
+                            conn.query(
+                                'SELECT m.title, m.description, m.created from Mission m join Page p on m.page_id = p.page_id and p.unique_pagename = ?;',
+                                [req.params.page_name],
+                                function(err, missionResults) {
+                                    if (err){
+                                        res.status(500).send('An error occurred')
+                                        console.log(err)
+                                    }else{
+                                        res.json({
+                                            page: results[0],
+                                            missions: missionResults
+                                        })
+                                    }
                                 }
-                            }
-                        );
+                            );
+                        }else{
+                            res.json({
+                                page: results[0]
+                            })
+                        }
+                    }else{
+                        res.status(404).send()
                     }
                 }
             );

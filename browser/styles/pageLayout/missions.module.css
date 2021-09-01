@@ -9,6 +9,7 @@
 .missions{
     overflow-y: scroll;
     flex-shrink: 1;
+    flex-grow:1;
     -ms-overflow-style: none;  /* IE and Edge */
     scrollbar-width: none;  /* Firefox */
 }

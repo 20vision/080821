@@ -6,23 +6,23 @@ import Link from 'next/link'
 
 export default function Missions({missions}) {
     const router = useRouter()
-    var missions = missions.sort(a => a.title.replace(' ', '_') == router.query.mission ? -1 : 1)
+    var missions = missions.sort(a => a.title.replace(' ', '_').toLowerCase() == router.query.mission ? -1 : 1)
     return(
         <div className={styles.container}>
             <div className={styles.missions}>
                 {missions.map((mission, index) => {
                     return (
-                        <a><Link 
+                        <a key={index}><Link 
                                 href={
-                                    (router.query.mission && (mission.title.replace(' ', '_') == router.query.mission))?
+                                    (router.query.mission && (mission.title.replace(' ', '_').toLowerCase() == router.query.mission.toLowerCase()))?
                                     `/${router.query.page}`
                                     :
-                                    `/${router.query.page}/${mission.title.replace(' ', '_')}`
+                                    `/${router.query.page}/${mission.title.replace(' ', '_').toLowerCase()}`
                                 }
                             >
-                            <div key={index} className={(router.query.mission && (mission.title.replace(' ', '_') == router.query.mission))?styles.selected:styles.mission}>
+                            <div className={(router.query.mission && (mission.title.replace(' ', '_').toLowerCase() == router.query.mission.toLowerCase()))?styles.selected:styles.mission}>
                                 <h3>
-                                    {mission.title}
+                                    {mission.title.replace('_', ' ')}
                                 </h3>
                                 <div>
                                     {mission.description}

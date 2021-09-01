@@ -1,0 +1,71 @@
+import PageInfoShort from '../components/PageLayout/PageInfoShort'
+import styles from '../styles/paperEditLayout/index.module.css'
+
+export default function paperEdit({children, page}) {
+    return (
+        <main>
+            {children}
+        </main>
+    )
+}
+/*import Index from "../components/Modal/Index"
+import styles from "../styles/pageLayout/index.module.css"
+
+import PageInfo from '../components/PageLayout/PageInfo'
+import Missions from '../components/PageLayout/Missions'
+import onClickOutside from "react-onclickoutside";
+import { useModalStore } from "../store/modal"
+import NavPanel from "../components/NavPanel/Index"
+import Overview from "../components/Paper/Overview"
+import { useRouter } from "next/router";
+
+export default function PageLayout( {children, page, missions} ) {
+    const modal = useModalStore(state => state.modal)
+    return (
+        <>  
+            {(modal > 0) ? <div className="ignore_click_outside_page_modal"><Index/></div> : null}
+            <div className={styles.container}>
+                <Panel children={children} page={page} missions={missions} outsideClickIgnoreClass={'ignore_click_outside_page_modal'}/>
+            </div>
+        </>
+    )
+}
+
+const clickOutsideConfig = {
+    handleClickOutside: () => Panel.handleClickOutside
+}
+
+var Panel = onClickOutside(({children, page, missions}) => {
+    const router = useRouter()
+
+    Panel.handleClickOutside = () => {
+        router.push(`/`)
+    };
+
+    return(
+        <div className={styles.child}>
+
+            <div className={styles.pageInfo}>
+                <PageInfo page={page}/>
+                <Missions missions={missions}/>
+            </div>
+
+            <div className={styles.previewContainer}>
+                <div className={styles.previewChild}>
+                    <main>
+                        {children}
+                    </main>
+                </div>
+            </div>
+
+            <div className={styles.overviewParent}>
+                <div className={styles.overview}>
+                    <Overview className={styles.overview}/>
+                </div>
+                <NavPanel/>
+            </div>
+
+        </div>
+    )
+}, clickOutsideConfig)
+*/

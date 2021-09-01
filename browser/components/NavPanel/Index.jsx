@@ -40,9 +40,11 @@ export default function Index() {
 }
 
 function MissionNavWithRole(){
+    const router = useRouter()
+
     return(
         <>
-            <a onClick={() => setModal(4)}>
+            <a onClick={() => router.push(`/${router.query.page}/${router.query.mission.toLowerCase()}/new/edit`)}>
                 <Plus color="#FAFAFA"/>
                 <div>Paper</div>
             </a>

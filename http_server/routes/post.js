@@ -1,5 +1,5 @@
 const router = require("express").Router();
-const checkAuth = require('../middleware/checkAuth')
+const check = require('../middleware/check')
 const input_validation = require('../middleware/input_validation')
 let pool = require('../config/db');
 
@@ -7,7 +7,7 @@ const colorOptions = [
     '7dbef5', '097bdc', '2dc3bc', '70908e', '67c166', '189c3b', 'c3c52e', 'd28e2a', 'dcb882', 'af9877', 'd64675', 'bb82c5', 'ac34c1', '9778bf', 'bf1402'
 ]
 
-router.post("/create_page", checkAuth.required, input_validation.checkRegexPagename, input_validation.checkUniquePagename, input_validation.vision, async (req, res) => {
+router.post("/create_page", check.AuthRequired, input_validation.checkRegexPagename, input_validation.checkUniquePagename, input_validation.vision, async (req, res) => {
     if(req.user_id){
         pool.getConnection(function(err, conn) {
             if (err){
@@ -42,7 +42,7 @@ router.post("/create_page", checkAuth.required, input_validation.checkRegexPagen
     }
 });
 
-router.post("/mission", checkAuth.required, input_validation.checkUniqueMissionTitle, input_validation.missionBody, async (req, res) => {
+router.post("/mission", check.AuthRequired, input_validation.checkUniqueMissionTitle, input_validation.missionBody, async (req, res) => {
     if(req.user_id){
         pool.getConnection(function(err, conn) {
             if (err){

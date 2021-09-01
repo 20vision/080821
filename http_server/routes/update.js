@@ -1,10 +1,10 @@
 const router = require("express").Router();
 const cloudStorage = require('../middleware/cloudStorage')
-const checkAuth = require('../middleware/checkAuth')
+const check = require('../middleware/check')
 const pool = require('../config/db');
 const input_validation = require('../middleware/input_validation');
 
-router.post("/profile_picture", checkAuth.required, cloudStorage.profile_picture, async (req, res) => {
+router.post("/profile_picture", check.AuthRequired, cloudStorage.profile_picture, async (req, res) => {
 
     if(!req.user_id){
         res.status(401).send('Not authenticated')
@@ -16,7 +16,7 @@ router.post("/profile_picture", checkAuth.required, cloudStorage.profile_picture
 
 });
 
-router.post("/username",checkAuth.required, input_validation.checkRegexUsername, input_validation.checkUniqueUsername, async (req, res) => {
+router.post("/username",check.AuthRequired, input_validation.checkRegexUsername, input_validation.checkUniqueUsername, async (req, res) => {
     if(req.user_id){
         pool.query(
             'UPDATE User set username = ? where user_id = ?;',
