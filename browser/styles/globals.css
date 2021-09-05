@@ -52,6 +52,11 @@ span{
   line-height: 16px;
 }
 
+.smalltext{
+  font-size: 12px!important;
+  margin-top: 5px;
+}
+
 svg{
   display: flex;
   align-items: center;
@@ -212,6 +217,12 @@ input[type=range]::-ms-track {
   border-radius: 2px;
   border: none;
 }
+
+.filepond--root,
+.filepond--root .filepond--drop-label {
+  min-height: 300px!important;
+}
+
 
 /*
 html, body{

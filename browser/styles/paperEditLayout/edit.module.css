@@ -1,0 +1,21 @@
+.body{
+    margin-top: 25px;
+    height: 120px;
+    display: flex;
+    flex-direction: column;
+}
+
+.editContainer{
+    margin-top: 35px;
+}
+
+.header{
+    font-size:18px;
+    line-height: 20px;
+}
+
+.text{
+    display: flex;
+    flex-direction: column;
+    margin-top: 25px;
+}

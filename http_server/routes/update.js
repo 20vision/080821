@@ -5,7 +5,6 @@ const pool = require('../config/db');
 const input_validation = require('../middleware/input_validation');
 
 router.post("/profile_picture", check.AuthRequired, cloudStorage.profile_picture, async (req, res) => {
-
     if(!req.user_id){
         res.status(401).send('Not authenticated')
     }else if(!req.imageUrl){
@@ -13,10 +12,9 @@ router.post("/profile_picture", check.AuthRequired, cloudStorage.profile_picture
     }else{
         res.json({url: req.imageUrl})
     }
-
 });
 
-router.post("/username",check.AuthRequired, input_validation.checkRegexUsername, input_validation.checkUniqueUsername, async (req, res) => {
+router.post("/username", check.AuthRequired, input_validation.checkRegexUsername, input_validation.checkUniqueUsername, async (req, res) => {
     if(req.user_id){
         pool.query(
             'UPDATE User set username = ? where user_id = ?;',

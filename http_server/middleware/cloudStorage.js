@@ -5,6 +5,116 @@ var validator = require('validator');
 let pool = require('../config/db');
 const { random_image_id } = require("../config/random");
 
+
+exports.paper_image = function(req, res, next) {
+    
+    const upload = multer({
+        storage: multer.memoryStorage(),
+        fileFilter: function (req, file, callback) {
+            if(file.mimetype !== 'image/jpeg' && file.mimetype !== 'image/png') {
+                return callback(new Error('Only images are allowed'))
+            }
+            callback(null, true)
+        },
+        limits: {
+            fieldSize: 5 * 1024 * 1024
+        }
+    }).single('filepond')
+    
+    upload(req, res, async function (err) {
+        if (err) {
+            if(err.code == 'LIMIT_FIELD_VALUE'){
+                res.status(422).send('File too large.')
+            }else{
+                console.log(err.code)
+                res.status(500).send('An error occured while uploading your file')
+            }
+        }else{
+            let ratio = [512]
+            
+            let data = {
+                bucketname: 'paper_images',
+                timefolder: (new Date()).getTime().toString(),
+                randomfolder: await random_image_id(8)
+            }
+
+            for(var i=0; i<ratio.length;i++){
+                await sharp(req.file.buffer)
+                .resize({ fit: sharp.fit.contain, width: ratio[i], height: ratio[i] })
+                .webp({ quality: 60 })
+                .toBuffer()
+                .then(async response => {
+                    data.buffer = response,
+                    data.filename = ratio[i].toString()+'x'+ratio[i].toString()+'.webp'
+
+                    try{
+                        req.imageUrl = await uploadFile(data)
+                    }catch(error){
+                        console.log(error)
+                        res.status(500).send('An error occured while uploading file')
+                    }
+
+                }).catch(err =>{
+                    console.log("err: ",err);   
+                    res.status(500).send() 
+                })
+            }
+
+
+            pool.getConnection(function(err, conn) {
+                if (err){
+                    res.status(500).send('An error occurred')
+                    console.log(err)
+                }else{
+                    if(req.query.mission_title && req.query.page_name){
+                        conn.query(
+                            'INSERT into Paper values (?,?,?,?);',
+                            [null, data.timefolder, req.mission_id, 1],
+                            function(err, results) {
+                                if (err){
+                                    res.status(500).send('An error occurred')
+                                    console.log(err)
+                                }else{
+                                    conn.query(
+                                        'INSERT into Paper_Version values (?,?,?,?,now());',
+                                        [null, results.insertId, '1.0.0', null, null],
+                                        function(err, resultsPaperVersion) {
+                                            if (err){
+                                                res.status(500).send('An error occurred')
+                                                console.log(err)
+                                            }else{
+                                                conn.query(
+                                                    'INSERT into Paper_Media values (?,?,?);',
+                                                    [null, req.imageUrl, resultsPaperVersion.insertId],
+                                                    function(err, results) {
+                                                        if (err){
+                                                            res.status(500).send('An error occurred')
+                                                            console.log(err)
+                                                        }else{
+                                                            req.paper_uid = data.timefolder
+                                                            next()
+                                                        }
+                                                    }
+                                                );
+                                            }
+                                        }
+                                    );
+                                }
+                            }
+                        );
+                    }
+                    
+                }
+                pool.releaseConnection(conn);
+            })
+
+
+        }
+    })
+    
+}
+
+
 exports.profile_picture = function(req, res, next) {
     const upload = multer({
         storage: multer.memoryStorage(),

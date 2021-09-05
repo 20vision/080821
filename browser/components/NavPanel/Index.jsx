@@ -43,8 +43,8 @@ function MissionNavWithRole(){
     const router = useRouter()
 
     return(
-        <>
-            <a onClick={() => router.push(`/${router.query.page}/${router.query.mission.toLowerCase()}/new/edit`)}>
+        <>  
+            <a onClick={() => router.push(`/${router.query.page}/${router.query.mission}/new-paper/edit`)}>
                 <Plus color="#FAFAFA"/>
                 <div>Paper</div>
             </a>

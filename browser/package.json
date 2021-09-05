@@ -10,17 +10,23 @@
   },
   "dependencies": {
     "axios": "^0.21.1",
+    "filepond-plugin-file-poster": "^2.4.4",
+    "filepond-plugin-file-validate-type": "^1.2.6",
+    "filepond-plugin-image-editor": "file:local_modules/filepond-plugin-image-editor",
     "framer-motion": "^4.1.17",
     "next": "^11.1.0",
+    "pintura": "file:local_modules/pintura",
     "react": "17.0.2",
     "react-avatar-editor": "^12.0.0",
     "react-click-outside": "^3.0.1",
     "react-dom": "17.0.2",
+    "react-filepond": "^7.1.1",
     "react-infinite-scroll-component": "^6.1.0",
     "react-onclickoutside": "^6.11.2",
     "react-query": "^3.19.5",
     "react-spinners": "^0.11.0",
     "react-textarea-autosize": "^8.3.3",
+    "socket.io-client": "^4.2.0",
     "zustand": "^3.5.7"
   },
   "devDependencies": {

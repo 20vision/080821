@@ -2,6 +2,7 @@ const router = require("express").Router();
 const check = require('../middleware/check')
 const input_validation = require('../middleware/input_validation')
 let pool = require('../config/db');
+const cloudStorage = require('../middleware/cloudStorage')
 
 const colorOptions = [
     '7dbef5', '097bdc', '2dc3bc', '70908e', '67c166', '189c3b', 'c3c52e', 'd28e2a', 'dcb882', 'af9877', 'd64675', 'bb82c5', 'ac34c1', '9778bf', 'bf1402'
@@ -42,7 +43,7 @@ router.post("/create_page", check.AuthRequired, input_validation.checkRegexPagen
     }
 });
 
-router.post("/mission", check.AuthRequired, input_validation.checkUniqueMissionTitle, input_validation.missionBody, async (req, res) => {
+router.post("/mission", check.AuthRequired, check.role, input_validation.checkUniqueMissionTitle, input_validation.missionBody, async (req, res) => {
     if(req.user_id){
         pool.getConnection(function(err, conn) {
             if (err){
@@ -74,6 +75,29 @@ router.post("/mission", check.AuthRequired, input_validation.checkUniqueMissionT
             }
             pool.releaseConnection(conn);
         })
+    }else{
+        res.status(401).send('Not authenticated')
+    }
+});
+
+
+/*router.post("/paper_image/:page_name", check.AuthRequired, cloudStorage.paper_image, async (req, res) => {
+    if(req.user_id){
+        res.json({url: req.imageUrl})
+    }else{
+        res.status(401).send('Not authenticated')
+    }
+});*/
+
+router.post("/paper_image/process", check.AuthRequired, check.paperAuth, cloudStorage.paper_image, async (req, res) => {
+    if(req.user_id){
+        let resObject = {url: req.imageUrl}
+
+        if(req.paper_uid){
+            resObject.paper_uid = req.paper_uid
+        }
+
+        res.json(resObject)
     }else{
         res.status(401).send('Not authenticated')
     }
