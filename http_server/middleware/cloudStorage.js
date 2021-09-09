@@ -66,7 +66,104 @@ exports.paper_image = function(req, res, next) {
                     res.status(500).send('An error occurred')
                     console.log(err)
                 }else{
-                    if(req.query.mission_title && req.query.page_name){
+                    if(req.paper_id){
+                        conn.query(
+                            'SELECT pv.paper_version_id from Paper_Version pv where pv.version = ? and pv.paper_id = ?;',
+                            ['0.0.0',req.paper_id],
+                            function(err, results) {
+                                if (err){
+                                    res.status(500).send('An error occurred')
+                                    console.log(err)
+                                }else{
+                                    if(results[0] && results[0].paper_version_id){
+                                        /*
+                                        Use paper_version_id to either append new Media or update old Media with same version id
+                                        */
+                                        conn.query(
+                                            'SELECT pm.content from Paper_Media pm where pm.paper_version_id = ?;',
+                                            [results[0].paper_version_id],
+                                            async function(err, resultsPaperMediaContent) {
+                                                if (err){
+                                                    res.status(500).send('An error occurred')
+                                                    console.log(err)
+                                                }else{
+                                                    /*
+                                                    If there already is a media on that paper version -> update, otherwise insert
+                                                    */
+                                                    if(resultsPaperMediaContent[0] && resultsPaperMediaContent[0].content){
+                                                        const paperMedia = resultsPaperMediaContent[0].content.split('/')
+                                                        const mediaData = {
+                                                            bucketname: paperMedia[0],
+                                                            timefolder: paperMedia[1],
+                                                            randomfolder: paperMedia[2]
+                                                        }
+                                                        try{
+                                                            await deleteFile(mediaData)
+                                                        }catch(error){
+                                                            console.log(error)
+                                                            res.status(500).send('An error occured')
+                                                        }
+                                                        conn.query(
+                                                            'UPDATE Paper_Media pm set pm.content = ? where pm.paper_version_id = ?;',
+                                                            [req.imageUrl, results[0].paper_version_id],
+                                                            function(err, results) {
+                                                                if (err){
+                                                                    res.status(500).send('An error occurred')
+                                                                    console.log(err)
+                                                                }else{
+                                                                    next()
+                                                                }
+                                                            }
+                                                        );
+                                                    }else{
+                                                        conn.query(
+                                                            'INSERT into Paper_Media values (?,?,?);',
+                                                            [null, req.imageUrl, results[0].paper_version_id],
+                                                            function(err, results) {
+                                                                if (err){
+                                                                    res.status(500).send('An error occurred')
+                                                                    console.log(err)
+                                                                }else{
+                                                                    next()
+                                                                }
+                                                            }
+                                                        );
+                                                    }
+                                                }
+                                            }
+                                        );
+                                    }else if(req.paper_id){
+                                        /*
+                                        If no paper_version_id available at 0.0.0 -> no edit version -> create new one Use paper_version_id to either append new Media or update old Media with same version id
+                                        */
+                                        conn.query(
+                                            'INSERT into Paper_Version values (?,?,?,?,now());',
+                                            [null, req.paper_id, '0.0.0', null, null],
+                                            function(err, resultsPaperVersion) {
+                                                if (err){
+                                                    res.status(500).send('An error occurred')
+                                                    console.log(err)
+                                                }else{
+                                                    conn.query(
+                                                        'INSERT into Paper_Media values (?,?,?);',
+                                                        [null, req.imageUrl, resultsPaperVersion.insertId],
+                                                        function(err, results) {
+                                                            if (err){
+                                                                res.status(500).send('An error occurred')
+                                                                console.log(err)
+                                                            }else{
+                                                                next()
+                                                            }
+                                                        }
+                                                    );
+                                                }
+                                            }
+                                        );
+                                    }
+                                }
+                            }
+                        );
+                    }else if(req.query.mission_title && req.query.page_name){
                         conn.query(
                             'INSERT into Paper values (?,?,?,?);',
                             [null, data.timefolder, req.mission_id, 1],
@@ -77,7 +174,7 @@ exports.paper_image = function(req, res, next) {
                                 }else{
                                     conn.query(
                                         'INSERT into Paper_Version values (?,?,?,?,now());',
-                                        [null, results.insertId, '1.0.0', null, null],
+                                        [null, results.insertId, '0.0.0', null, null],
                                         function(err, resultsPaperVersion) {
                                             if (err){
                                                 res.status(500).send('An error occurred')
@@ -102,6 +199,8 @@ exports.paper_image = function(req, res, next) {
                                 }
                             }
                         );
+                    }else{
+                        res.status(400).send('An error occured, paper not updated')
                     }
                     
                 }

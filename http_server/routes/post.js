@@ -80,15 +80,6 @@ router.post("/mission", check.AuthRequired, check.role, input_validation.checkUn
     }
 });
 
-
-/*router.post("/paper_image/:page_name", check.AuthRequired, cloudStorage.paper_image, async (req, res) => {
-    if(req.user_id){
-        res.json({url: req.imageUrl})
-    }else{
-        res.status(401).send('Not authenticated')
-    }
-});*/
-
 router.post("/paper_image/process", check.AuthRequired, check.paperAuth, cloudStorage.paper_image, async (req, res) => {
     if(req.user_id){
         let resObject = {url: req.imageUrl}

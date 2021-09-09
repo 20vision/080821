@@ -79,7 +79,7 @@ export default function CreateMission() {
     return (
         <div>
             <div className='areaLine'>
-                <input maxlength="100" ref={missionTitleRef} placeholder="Mission Title" onChange={e => {e.target.value = e.target.value.replace('_', ' '); setMissionTitle(e.target.value);}}/>
+                <input maxLength="100" ref={missionTitleRef} placeholder="Mission Title" onChange={e => {e.target.value = e.target.value.replace('_', ' '); setMissionTitle(e.target.value);}}/>
                 <div className={styles.body}>
                     <TextareaAutosize 
                         minRows={6}

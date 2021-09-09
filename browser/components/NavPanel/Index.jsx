@@ -2,13 +2,20 @@ import styles from '../../styles/navPanel/index.module.css'
 
 import Plus from '../../assets/Plus'
 import DollarSign from '../../assets/DollarSign'
+import Check from '../../assets/Check'
 import MessageCircle from '../../assets/MessageCircle'
 import Info from '../../assets/Info'
 import Tool from '../../assets/Tool'
+import Share from '../../assets/Share'
 import UserPlus from '../../assets/UserPlus'
 import useUserProfile from '../../hooks/User/useUserProfile'
 import { useModalStore } from '../../store/modal'
 import { useRouter } from 'next/router'
+import AddSub from '../../assets/AddSub'
+import Loading from '../../assets/Loading/Loading'
+import usePaperSocket from '../../hooks/Socket/usePaperSocket'
+
+import { useState } from 'react'
 
 export default function Index() {
     const [profile, isLoading, setUser] = useUserProfile()
@@ -23,7 +30,9 @@ export default function Index() {
                 <div className={styles.child}>
                     {profile.username?
                         <>
-                            {router.query.mission?
+                            {router.pathname.split('/')[4] == 'edit'?
+                                <PaperEdit/>             
+                            :router.query.mission?
                                 <MissionNavWithRole/>
                             :
                                 <PageNavWithRole/>
@@ -117,6 +126,47 @@ function PageNav(){
                 <Info color="#FAFAFA"/>
                 <div>Info ? or just display on left panel ?</div>
             </a>
+        </>
+    )
+}
+
+
+function PaperEdit(){
+    const socket = usePaperSocket()
+    const [saved, setSaved] = useState()
+
+    return(
+        <>
+            <a>
+                <Share color="#FAFAFA"/>
+                <div>Publish</div>
+            </a>
+
+            <a>
+                <Plus color="#FAFAFA"/>
+                <div>Comment</div>
+            </a>
+
+            <a>
+                <AddSub color="#FAFAFA"/>
+                <div>Add Sub-</div>
+            </a>
+
+            {saved == true?
+
+                <a>
+                    <Check color="#FAFAFA"/>
+                    <div>Saved</div>
+                </a>
+
+            :
+
+                <a>
+                    <Loading color="#FAFAFA"/>
+                    <div>Saving...</div>
+                </a>
+
+            }
         </>
     )
 }

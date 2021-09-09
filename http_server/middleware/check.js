@@ -93,27 +93,28 @@ exports.role = function(req, res, next) {
 }
 
 exports.paperAuth = function(req, res, next) {
-    if(req.query.paper_uid){
-        /*pool.query(
-            'SELECT p.page_id from Page p join Mission m on m.page_id = p.page_id join PageUser pu on pu.page_id = p.page_id and pu.user_id = ? join Paper pa on pa.mission_id = m.mission_id and pa.uid = ?',
-            [req.user_id, req.query.paper_uid],
+    if(req.query.paper_uid && req.query.mission_title && req.query.page_name){
+        pool.query(
+            'SELECT pu.role, pa.paper_id from PageUser pu join Mission m on pu.page_id = m.page_id and pu.user_id = ? join Paper pa on pa.mission_id = m.mission_id and pa.uid = ? and m.title = ? join Page p on pu.page_id = p.page_id and p.unique_pagename = ?;',
+            [req.user_id, req.query.paper_uid, req.query.mission_title, req.query.page_name],
             function(err, results) {
                 if (err){
                     res.status(500).send('An error occurred')
                     console.log(err)
                 }else{
-                    if(results[0] && results[0].role && (results[0].role >= parseInt(req.query.role))){
+                    if(results[0] && results[0].role && (results[0].role >= 0) && results[0].paper_id){
+                        req.paper_id = results[0].paper_id
                         next();
                     }else{
                         res.status(403).send('Permission denied')
                     }
                 }
             }
-        );*/
+        );
     }else if(req.query.mission_title && req.query.page_name){
         pool.query(
-            'SELECT pu.role, m.mission_id from PageUser pu join Page p on pu.page_id = p.page_id and pu.user_id = ? join Mission m on p.page_id = m.page_id and m.title = ? and p.unique_pagename = ?;',
-            [req.user_id, req.query.mission_title, req.query.page_name],
+            'SELECT pu.role, m.mission_id from PageUser pu join Page p on pu.page_id = p.page_id and pu.user_id = ? and p.unique_pagename = ? join Mission m on p.page_id = m.page_id and m.title = ?;',
+            [req.user_id, req.query.page_name, req.query.mission_title],
             function(err, results) {
                 if (err){
                     res.status(500).send('An error occurred')
