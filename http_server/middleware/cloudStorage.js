@@ -3,7 +3,7 @@ const multer = require('multer')
 const sharp = require('sharp')
 var validator = require('validator');
 let pool = require('../config/db');
-const { random_string } = require("../config/random");
+const { random_string } = require("../utils/random");
 
 
 exports.paper_image = function(req, res, next) {
