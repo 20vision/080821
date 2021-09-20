@@ -3,7 +3,7 @@ const multer = require('multer')
 const sharp = require('sharp')
 var validator = require('validator');
 let pool = require('../config/db');
-const { random_image_id } = require("../config/random");
+const { random_string } = require("../config/random");
 
 
 exports.paper_image = function(req, res, next) {
@@ -35,7 +35,7 @@ exports.paper_image = function(req, res, next) {
             let data = {
                 bucketname: 'paper_images',
                 timefolder: (new Date()).getTime().toString(),
-                randomfolder: await random_image_id(8)
+                randomfolder: await random_string(8)
             }
 
             for(var i=0; i<ratio.length;i++){
@@ -254,7 +254,7 @@ exports.profile_picture = function(req, res, next) {
             let data = {
                 bucketname: 'visionary_profile_picture',
                 timefolder: (new Date()).getTime().toString(),
-                randomfolder: await random_image_id(8)
+                randomfolder: await random_string(8)
             }
 
             for(var i=0; i<ratio.length;i++){

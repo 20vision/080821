@@ -1,5 +1,7 @@
 .terms{
     font-size: 14px;
+    margin-top:25px;
+    padding: 0px 15px;
 }
 
 .terms span{
@@ -11,12 +13,28 @@
     color: var(--red)
 }
 
-.yoroi{
+/*.yoroi{
     width: 250px;
     margin-bottom: 25px;
-}
+}*/
 
 .connectWalletButton{
+    height: 70px;
+    display: flex;
+    align-items: center;
+    align-self: stretch;
+    margin-top: 30px;
+    border: 1px solid var(--grey);
+    border-radius: 20px;
+}
+
+.connectWalletButton img{
+    height:40px;
+    width: 40px;
+    padding: 25px;
+}
+
+.finishButton{
     background-color: var(--red);
     color: var(--white);
     padding: 15px 25px;
@@ -27,9 +45,9 @@
     align-self: stretch;
 }
 
-.connectWalletButtonInvalid, .connectWalletButtonInvalid:hover{
+.finishButtonInvalid, .finishButtonInvalid:hover{
     opacity: 0.3;
-    cursor:auto;
+    cursor:default;
 }
 
 .errorMsg{

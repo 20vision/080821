@@ -1,4 +1,4 @@
-const random_image_id = (length) => new Promise((res, rej) => {
+const random_string = (length) => new Promise((res, rej) => {
     var result           = '';
     var characters       = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
     var charactersLength = characters.length;
@@ -19,6 +19,6 @@ const random_int = (length) => new Promise((res, rej) => {
 });
 
 module.exports = {
-  random_image_id,
+  random_string,
   random_int
 }
