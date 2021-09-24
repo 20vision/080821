@@ -86,7 +86,7 @@ function PageNavWithRole(){
                 <div>Mission</div>
             </a>
 
-            <a>
+            <a onClick={() => setModal(5)}>
                 <DollarSign color="#FAFAFA"/>
                 <div>Trade</div>
             </a>
@@ -112,7 +112,7 @@ function PageNav(){
                 <div>Follow</div>
             </a>
 
-            <a>
+            <a onClick={() => setModal(5)}>
                 <DollarSign color="#FAFAFA"/>
                 <div>Trade</div>
             </a>

@@ -128,7 +128,7 @@ function Menu({opened}) {
                     {profile.username ? '@'+profile.username : 'Guest'}
                 </h3>
                 <span>
-                    0 Tokens · $0 USD
+                    Portfolio · $0 USD
                 </span>
             </div>
 

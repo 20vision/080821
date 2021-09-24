@@ -6,7 +6,9 @@ import { devtools } from 'zustand/middleware'
     0 = no modal
     1 = Connect Wallet Modal
     2 = User
-    3= Add Page
+    3 = User Pages
+    4 = Create Mission
+    5 = Trade
 */
 
 let modalStore = (set) => ({

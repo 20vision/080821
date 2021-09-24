@@ -8,10 +8,12 @@
   --grey: #8A8A8A;
   --white: #FAFAFA;
   --red: #FF5B77;
+
+  --chart_negative: #e63f3f;
+  --chart_positive: #26ab5e;
   /*Canvas*/
   --max_width: 1800px;
   --radius_large: 25px;
-
 }
 
 html, body, #__next{
@@ -223,6 +225,14 @@ input[type=range]::-ms-track {
   min-height: 300px!important;
 }
 
+.noselect {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
 
 /*
 html, body{
@@ -601,14 +611,6 @@ body{
   cursor: pointer;
 }
 
-.noselect {
-  -webkit-touch-callout: none;
-  -webkit-user-select: none;
-  -khtml-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
-  user-select: none;
-}
 
 
 *::-webkit-scrollbar,

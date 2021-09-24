@@ -23,7 +23,7 @@ export default function UserPages() {
 
     return (
         <div>
-            <div className={indexStyles.header}>
+            <div className={`noselect ${indexStyles.header}`}>
                 <h1 onClick={() => setSelectedRoute(0)} className={selectedRoute == 0?indexStyles.highlight:null}>
                     Create
                 </h1>

@@ -37,7 +37,7 @@
 .invalidButton{
     opacity: 0.3;
     pointer-events: none;
-    cursor: auto;
+    cursor: default;
 }
 
 .visionCount{

@@ -27,6 +27,7 @@
     "react-query": "^3.19.5",
     "react-spinners": "^0.11.0",
     "react-textarea-autosize": "^8.3.3",
+    "recharts": "^2.1.4",
     "socket.io-client": "^4.2.0",
     "zustand": "^3.5.7"
   },

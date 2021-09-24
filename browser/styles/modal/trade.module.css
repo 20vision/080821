@@ -1,0 +1,64 @@
+.header{
+    width: 100%;
+    display: flex;
+    align-items: center;
+    margin-bottom: 35px;
+}
+
+.header h1{
+    flex-grow: 1;
+    text-align: center;
+    padding: 5px 15px;
+    margin: 0px 10px;
+    color: var(--grey);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.charts h1{
+    margin-right:0px;
+    padding-right:5px;
+}
+
+.header .highlight{
+    border-bottom: 2px solid var(--red);
+    color: var(--red);
+}
+
+.highlightH1{
+    color: var(--red)!important;
+}
+
+.charts{
+    display: flex;
+    align-items: center;
+}
+
+.charts span{
+    padding-top: 4px;
+}
+
+.chartNegative{
+    color: var(--chart_negative);
+}
+
+.chartPositive{
+    color: var(--chart_positive);
+}
+
+.tradeButton{
+    background-color: var(--red);
+    color: var(--white);
+    padding: 15px 25px;
+    border-radius: 15px;
+    margin:25px 15px 0px 15px;
+    display: flex;
+    justify-content: center;
+    align-self: stretch;
+}
+
+.invalidButton{
+    opacity: 0.3;
+    pointer-events: none;
+    cursor: default;
+}
