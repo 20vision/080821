@@ -34,32 +34,39 @@ export default function ConnectWallet() {
         }
     }
 
-    window.solana.on("connect", async () => {
-        setPublicAddress(window.solana.publicKey.toString())
-        axios.post('http://localhost:4000/wallet/check_existing',{publicKey: window.solana.publicKey.toString()}
-        ).then(async response => {
-            if(response.data.new == true){
-                setStep(2)
-            }else{
-                Sign()
-            }
-        })
-        .catch(error =>{
-            if(error.response) console.error(error.response.data)
-        })
+    {window.solana && window.solana.isPhantom ?
+        window.solana.on("connect", async () => {
+            setPublicAddress(window.solana.publicKey.toString())
+            axios.post('http://localhost:4000/wallet/check_existing',{publicKey: window.solana.publicKey.toString()}
+            ).then(async response => {
+                if(response.data.new == true){
+                    setStep(2)
+                }else{
+                    Sign()
+                }
+            })
+            .catch(error =>{
+                if(error.response) console.error(error.response.data)
+            })
 
-    })
+        })
+    :
+        null
+    }
 
     function Connect(type){
         if(type == 'phantom'){
-            if(window.solana && window.solana.isPhantom){
-                window.solana.connect();
+            if ("solana" in window) {
+                const provider = window.solana;
+                if (provider.isPhantom) {
+                    provider.connect();
+                }
             }else{
                 window.open("https://phantom.app/", "_blank");
             }
-        }else if(type == 'sollet'){
+        }/*else if(type == 'sollet'){
 
-        }
+        }*/
     }
 
     async function CreateUser(){

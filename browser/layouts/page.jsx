@@ -13,9 +13,9 @@ export default function PageLayout( {children, page, missions} ) {
     const modal = useModalStore(state => state.modal)
     return (
         <>  
-            {(modal > 0) ? <div className="ignore_click_outside_page_modal"><Index/></div> : null}
+            {(modal > 0) ? <div className="ignore_click_outside_page"><Index/></div> : null}
             <div className={styles.container}>
-                <Panel children={children} page={page} missions={missions} outsideClickIgnoreClass={'ignore_click_outside_page_modal'}/>
+                <Panel children={children} page={page} missions={missions} outsideClickIgnoreClass={'ignore_click_outside_page'}/>
             </div>
         </>
     )

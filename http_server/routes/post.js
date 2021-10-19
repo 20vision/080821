@@ -17,8 +17,8 @@ router.post("/create_page", check.AuthRequired, input_validation.checkRegexPagen
             }else{
                 var page_color = colorOptions[Math.floor(Math.random() * colorOptions.length)]
                 conn.query(
-                    'INSERT INTO Page values (?,?,?,?,?,now());',
-                    [null, page_color, req.body.pagename, req.body.pagename.toLowerCase(), req.body.vision, null],
+                    'INSERT INTO Page values (?,?,?,?,?,?,now());',
+                    [null, page_color, req.body.pagename, req.body.pagename.toLowerCase(), req.body.vision, null, null],
                     function(err, results) {
                         if (err){
                             res.status(500).send('An error occurred')

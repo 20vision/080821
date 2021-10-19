@@ -2,7 +2,6 @@ import styles from '../../styles/modal/index.module.css'
 import onClickOutside from "react-onclickoutside"
 import { useModalStore } from '../../store/modal'
 import { motion } from "framer-motion"
-import { useEffect } from 'react'
 import { useRouter } from 'next/router'
 import {useUserStore} from '../../store/user'
 
@@ -11,16 +10,22 @@ import ConnectWallet from './ConnectWallet'
 import User from "./User"
 import CreateMission from './CreateMission'
 import Trade from './Trade'
+import { useEffect } from 'react'
 
 export default function Modal() {
+
     return (
         <motion.div 
         initial={{ opacity: 0}}
         animate={{ opacity: 1}}
         exit={{ opacity: 0}}
-        className={`ignore_click_outside_page_modal ${styles.opacity}`}>
+        className={`ignore_click_outside_page ${styles.opacity}`}>
 
-            <ClickOutside/>
+            {typeof window !== "undefined"?
+                <ClickOutside outsideClickIgnoreClass={'ignore_click_outside_modal'}/>
+            :
+                null
+            }
             
         </motion.div>
     )
