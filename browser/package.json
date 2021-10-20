@@ -9,7 +9,6 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@project-serum/sol-wallet-adapter": "^0.2.5",
     "@solana/spl-token": "^0.1.8",
     "@solana/wallet-adapter-base": "^0.6.0",
     "@solana/wallet-adapter-react": "^0.12.5",
@@ -41,6 +40,7 @@
   },
   "devDependencies": {
     "eslint": "7.32.0",
+    "next-transpile-modules": "^8.0.0",
     "eslint-config-next": "11.0.1"
   }
 }
