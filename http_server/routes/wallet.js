@@ -6,16 +6,16 @@ const input_validation = require('../middleware/input_validation');
 const nacl = require('tweetnacl');
 const solanaWeb3 = require('@solana/web3.js');
 const {create_user, login_user} = require('../utils/walletActions.js')
-
+const bs58 = require('bs58')
 
 router.post("/connect", async (req, res) => {
     if(req.body.publicKey && req.body.signature){
 
-        const signature = new Uint8Array(req.body.signature.data);
+        const signature = bs58.decode(req.body.signature)
         const publicKey = new solanaWeb3.PublicKey(req.body.publicKey)
         const message = new TextEncoder().encode(`Sign this Message to verify Wallet Ownership and Log Into 20.Vision.`);
 
-        if(nacl.sign.detached.verify(message, signature, publicKey.toBuffer())){
+        if(nacl.sign.detached.verify(message, signature, publicKey.toBytes())){
             pool.getConnection(function(err, conn) {
                 conn.query(
                     'SELECT user_id from User where public_key = ?',

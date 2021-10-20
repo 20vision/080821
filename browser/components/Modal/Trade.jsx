@@ -18,9 +18,6 @@ export default function Trade() {
               <h1 className={selectedRoute == 2?styles.highlightH1:null}>Charts</h1><span className={styles.chartNegative}>↓9%</span>
           </div>
       </div>
-
-      <AreaChart width={400} height={250}/>
-
     </div>
   )
 }
