@@ -4,15 +4,22 @@ import axios from 'axios'
 import Router from 'next/router'
 import { useState, useEffect } from 'react'
 import Loading from '../../assets/Loading/Loading'
+import useUserProfile from '../../hooks/User/useUserProfile'
 import useUsernameValidation from "../../hooks/User/useUsernameValidation"
+import { useModalStore } from '../../store/modal'
 import { useWallet } from '@solana/wallet-adapter-react';
 import { toast } from "react-toastify"
 import bs58 from 'bs58';
+import { useRouter } from 'next/router'
 export default function ConnectWallet() {
+    
     const [step, setStep] = useState(1)
     const [selectedWallet, setSelectedWallet] = useState()
     const message = new TextEncoder().encode(`Sign this Message to verify Wallet Ownership and Log Into 20.Vision.`);
     const [username, setUsername, valid, errorMsg, loading, publishNewUsername] = useUsernameValidation()
+    const [profile, isLoading, setUser] = useUserProfile()
+    const setModal = useModalStore(state => state.setModal)
+    const router = useRouter()
     const {
         wallets,
         connecting,
@@ -92,7 +99,6 @@ export default function ConnectWallet() {
     })
 
     const SignIn = async() => {
-        console.log('run as well')
         let signature = null
         try{
             signature = await SignMsg()
@@ -104,7 +110,11 @@ export default function ConnectWallet() {
             withCredentials: true
         }
         ).then(async response => {
-            Router.reload(window.location.pathname)
+            if((profile.username != null) && (router.query.page)){
+                setModal(5)
+            }else{
+                Router.reload(window.location.pathname)
+            }
         })
         .catch(error =>{
             unselectWallet()

@@ -1,19 +1,15 @@
-import Index from "../components/Modal/Index"
 import styles from "../styles/pageLayout/index.module.css"
 
 import PageInfo from '../components/PageLayout/PageInfo'
 import Missions from '../components/PageLayout/Missions'
 import onClickOutside from "react-onclickoutside";
-import { useModalStore } from "../store/modal"
 import NavPanel from "../components/NavPanel/Index"
 import Overview from "../components/Paper/Overview"
 import { useRouter } from "next/router";
 
 export default function PageLayout( {children, page, missions} ) {
-    const modal = useModalStore(state => state.modal)
     return (
         <>  
-            {(modal > 0) ? <div className="ignore_click_outside_page"><Index/></div> : null}
             <div className={styles.container}>
                 <Panel children={children} page={page} missions={missions} outsideClickIgnoreClass={'ignore_click_outside_page'}/>
             </div>

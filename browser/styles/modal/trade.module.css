@@ -8,16 +8,10 @@
 .header h1{
     flex-grow: 1;
     text-align: center;
-    padding: 5px 15px;
-    margin: 0px 10px;
+    padding: 5px 30px;
     color: var(--grey);
     cursor: pointer;
     white-space: nowrap;
-}
-
-.charts h1{
-    margin-right:0px;
-    padding-right:5px;
 }
 
 .header .highlight{
@@ -27,23 +21,6 @@
 
 .highlightH1{
     color: var(--red)!important;
-}
-
-.charts{
-    display: flex;
-    align-items: center;
-}
-
-.charts span{
-    padding-top: 4px;
-}
-
-.chartNegative{
-    color: var(--chart_negative);
-}
-
-.chartPositive{
-    color: var(--chart_positive);
 }
 
 .tradeButton{
@@ -61,4 +38,14 @@
     opacity: 0.3;
     pointer-events: none;
     cursor: default;
+}
+
+.connectWallet{
+    background-color: var(--red);
+    padding: 15px 25px;
+    border-radius: 15px;
+    margin-bottom:25px;
+    display: flex;
+    justify-content: center;
+    color: var(--white)
 }

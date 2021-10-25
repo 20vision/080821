@@ -1,16 +1,10 @@
 import Menu from "../components/DefaultLayout/Menu"
-import Index from "../components/Modal/Index"
 import styles from "../styles/defaultLayout/index.module.css"
 
-import { useModalStore } from "../store/modal"
-
 export default function DefaultLayout( {children} ) {
-    const modal = useModalStore(state => state.modal)
 
     return (
         <>  
-            {(modal > 0) ? <Index/> : null}
-
             <div className={styles.container}>
                 <div className={styles.child}>
                     <div className={styles.menu}>

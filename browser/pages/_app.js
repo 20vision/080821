@@ -8,13 +8,18 @@ import dynamic from 'next/dynamic';
 const WalletConnectionProvider = dynamic(() => import('../components/User/Wallet/WalletConnectionProvider'), {
   ssr: false,
 });
+const Index = dynamic(() => import('../components/Modal/Index'), {
+  ssr: false,
+});
+import { useModalStore } from "../store/modal"
 
 function MyApp({ Component, pageProps }) {
   const queryClient = new QueryClient()
-
+  const modal = useModalStore(state => state.modal)
   return(
     <WalletConnectionProvider>
       <QueryClientProvider client={queryClient}>
+        {(modal > 0) ? <div className="ignore_click_outside_page"><Index/></div> : null}
         <Component {...pageProps} />
         <ReactQueryDevtools/>
         <ToastContainer position="bottom-left" className={`ignore_click_outside_paper-image_modal ignore_click_outside_modal ignore_click_outside_page`}/>
