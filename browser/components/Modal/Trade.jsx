@@ -102,7 +102,7 @@ const fundPageToken = (walletPublicKey) => {
   const tokenMintTransaction = null
 
   try{
-    tokenMintTransaction = await createLazyMintTransaction(authority, connection, walletPublicKey)
+    tokenMintTransaction = await createLazyMintTransaction(pageTokenPoolAccount, authority, connection, walletPublicKey)
     tx.add(tokenMintTransaction)
   }catch{
     toast.error('Minting Error')
@@ -114,9 +114,15 @@ const fundPageToken = (walletPublicKey) => {
 
 }
 
-const createLazyMintTransaction = (authority, connection, walletPublicKey) => new Promise(async(resolve, reject) => {
+const createLazyMintTransaction = (pageTokenPoolAccount, authority, connection, walletPublicKey) => new Promise(async(resolve, reject) => {
   const pageTokenMintKeypair = Keypair.generate()
-
+  const pageTokenMintToAccountKeypair = Keypair.generate()
+  const token = new Token(
+    connection,
+    pageTokenMintKeypair.publicKey,
+    TOKEN_PROGRAM_ID,
+    walletPublicKey,
+  );
   const MintTokenLayout = BufferLayout.struct([
     BufferLayout.u32('mintAuthorityOption'),
     publicKeyLayout('mintAuthority'),
@@ -130,10 +136,14 @@ const createLazyMintTransaction = (authority, connection, walletPublicKey) => ne
   const balanceForRentExemption = await connection.getMinimumBalanceForRentExemption(
     MintTokenLayout.span
   )
-  
+
+  const balanceNeededForCreateAccount = await Token.getMinBalanceRentForExemptAccount(
+    this.connection,
+  );
+
   resolve([
     SystemProgram.createAccount({
-      fromPubkey: walletPublicKey,
+      fromPubkey: walletPublicKey.publicKey,
       lamports: balanceForRentExemption,
       newAccountPubkey: pageTokenMintKeypair.publicKey,
       space: MintTokenLayout.span,
@@ -143,11 +153,37 @@ const createLazyMintTransaction = (authority, connection, walletPublicKey) => ne
       TOKEN_PROGRAM_ID,
       pageTokenMintKeypair.publicKey,
       18,
-      authority,
+      pageTokenPoolAccount.publicKey,
       null
     ),
+    SystemProgram.createAccount({
+      fromPubkey: walletPublicKey.publicKey,
+      newAccountPubkey: pageTokenMintToAccountKeypair.publicKey,
+      lamports: balanceNeededForCreateAccount,
+      space: AccountLayout.span,
+      programId: TOKEN_PROGRAM_ID,
+    }),
+    Token.createInitAccountInstruction(
+      TOKEN_PROGRAM_ID,
+      pageTokenMintKeypair.publicKey,
+      pageTokenMintToAccountKeypair.publicKey,
+      authority,
+    ),
     Token.createMintToInstruction(
-      TOKEN_PROGRAM_ID
+      TOKEN_PROGRAM_ID,
+      pageTokenMintKeypair.publicKey,
+      pageTokenMintToAccountKeypair.publicKey,
+      pageTokenPoolAccount.publicKey,
+      [],
+      1000000
+    ),
+    Token.createSetAuthorityInstruction(
+      TOKEN_PROGRAM_ID,
+      pageTokenMintKeypair.publicKey,
+      null,
+      'MintTokens',
+      pageTokenPoolAccount.publicKey,
+      [],
     )
   ])
 
