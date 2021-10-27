@@ -14,7 +14,8 @@ export default function Trade() {
     wallet,
     connected,
     connect,
-    publicKey
+    publicKey,
+    signTransaction
     // connecting,
     // wallets,
     // autoConnect,
@@ -32,7 +33,7 @@ export default function Trade() {
     // signTransaction,
     // signAllTransactions,
     // signMessage 
-} = useWallet();
+  } = useWallet();
   const connectThisWallet = async() => {
     try{
       await connect()
@@ -65,7 +66,7 @@ export default function Trade() {
           </div>
         </a>
       :
-        <a onClick={() => fundPageToken(publicKey)}>
+        <a onClick={() => fundPageToken(publicKey, signTransaction)}>
           <div className={styles.connectWallet}>
             <h2>Swap</h2>
           </div>
@@ -75,13 +76,14 @@ export default function Trade() {
   )
 }
 
-import { Connection, Account, SystemProgram, PublicKey, Keypair, Transaction,TransactionInstruction,FeeCalculator } from "@solana/web3.js";
+import { Connection, Account, SystemProgram, PublicKey, Keypair, Transaction,TransactionInstruction,FeeCalculator, sendAndConfirmTransaction, sendAndConfirmRawTransaction } from "@solana/web3.js";
 import { AccountLayout, Token, TOKEN_PROGRAM_ID } from "@solana/spl-token"
-import * as BufferLayout from "buffer-layout";
 import { connect } from 'socket.io-client';
 
-const TOKEN_SWAP_PROGRAM_ID = new PublicKey('20VisionTokenSwap68M4DjnLqgtticKg6CnyNwgAC8');
+const VisionProgramId = 'JDUpYzeNkkaeMUd7gdfwrLpsuLAJ1tRo3hYgccjchU2c'
 
+// Layout
+import * as BufferLayout from "buffer-layout";
 const uint64Layout = (property = "uint64") => {
   return BufferLayout.blob(8, property);
 };
@@ -89,7 +91,89 @@ const publicKeyLayout = (property = "publicKey") => {
   return BufferLayout.blob(32, property);
 };
 
-const fundPageToken = (walletPublicKey) => {
+// On Chain Token Funding
+const fundPageToken = async(walletPublicKey, signTransaction) => {
+  const connection = new Connection('http://localhost:8899', 'confirmed')
+  const tx = new Transaction()
+
+  const mintAccount = Keypair.generate();
+
+  // Token Minting
+  const MintLayout = BufferLayout.struct([
+    BufferLayout.u32('mintAuthorityOption'),
+    publicKeyLayout('mintAuthority'),
+    uint64Layout('supply'),
+    BufferLayout.u8('decimals'),
+    BufferLayout.u8('isInitialized'),
+    BufferLayout.u32('freezeAuthorityOption'),
+    publicKeyLayout('freezeAuthority'),
+  ]);
+  
+  const balanceNeeded = await connection.getMinimumBalanceForRentExemption(MintLayout.span)
+  console.log(balanceNeeded)
+  tx.add(systemProgram_createAccount(walletPublicKey, mintAccount, balanceNeeded, MintLayout.span, TOKEN_PROGRAM_ID))
+  try{
+    tx.recentBlockhash = (await connection.getRecentBlockhash("confirmed")).blockhash
+    tx.feePayer = walletPublicKey
+    const signedTx = await signTransaction(tx)
+    await sendAndConfirmRawTransaction(connection, signedTx.serialize())
+  }catch(e){
+    console.log("error:",e)
+  }
+}
+
+const systemProgram_createAccount = (walletPublicKey, newAccountKeypair, lamports, space, ownerProgramId) => {
+
+  const dataLayout = BufferLayout.struct([
+    BufferLayout.u32('instruction'),
+    BufferLayout.ns64('lamports'),
+    BufferLayout.ns64('space'),
+    publicKeyLayout('programId'),
+  ])
+
+  const toBuffer = (arr) => {
+    if (Buffer.isBuffer(arr)) {
+      return arr;
+    } else if (arr instanceof Uint8Array) {
+      return Buffer.from(arr.buffer, arr.byteOffset, arr.byteLength);
+    } else {
+      return Buffer.from(arr);
+    }
+  };
+
+  const data = Buffer.alloc(dataLayout.span)
+  
+  dataLayout.encode(
+    {
+      instruction: 0, // Initialize Page Token
+      lamports: lamports,
+      space: space,
+      programId: toBuffer(ownerProgramId.toBuffer()),
+    },
+    data,
+  );
+
+  console.log(data)
+
+  return new TransactionInstruction({
+    keys: [
+      {pubkey: walletPublicKey, isSigner: true, isWritable: true},
+    ],
+    programId: new PublicKey(VisionProgramId),
+    data,
+  });
+
+}
+
+// Off Chain Token Funding + On Chain initialization
+/*const uint64Layout = (property = "uint64") => {
+  return BufferLayout.blob(8, property);
+};
+const publicKeyLayout = (property = "publicKey") => {
+  return BufferLayout.blob(32, property);
+};
+
+const fundPageToken = async(walletPublicKey) => {
   const connection = new Connection('http://localhost:8899', 'confirmed')
   const tx = new Transaction()
   const pageTokenPoolAccount = Keypair.generate()
@@ -99,7 +183,7 @@ const fundPageToken = (walletPublicKey) => {
     TOKEN_SWAP_PROGRAM_ID,
   );
   
-  const tokenMintTransaction = null
+  let tokenMintTransaction
 
   try{
     tokenMintTransaction = await createLazyMintTransaction(pageTokenPoolAccount, authority, connection, walletPublicKey)
@@ -108,21 +192,12 @@ const fundPageToken = (walletPublicKey) => {
     toast.error('Minting Error')
     return
   }
-
-
-  
-
 }
 
 const createLazyMintTransaction = (pageTokenPoolAccount, authority, connection, walletPublicKey) => new Promise(async(resolve, reject) => {
   const pageTokenMintKeypair = Keypair.generate()
   const pageTokenMintToAccountKeypair = Keypair.generate()
-  const token = new Token(
-    connection,
-    pageTokenMintKeypair.publicKey,
-    TOKEN_PROGRAM_ID,
-    walletPublicKey,
-  );
+
   const MintTokenLayout = BufferLayout.struct([
     BufferLayout.u32('mintAuthorityOption'),
     publicKeyLayout('mintAuthority'),
@@ -138,7 +213,7 @@ const createLazyMintTransaction = (pageTokenPoolAccount, authority, connection, 
   )
 
   const balanceNeededForCreateAccount = await Token.getMinBalanceRentForExemptAccount(
-    this.connection,
+    connection,
   );
 
   resolve([
@@ -188,7 +263,7 @@ const createLazyMintTransaction = (pageTokenPoolAccount, authority, connection, 
   ])
 
 })
-
+*/
 
 /*import { Connection, Account, SystemProgram, PublicKey, Keypair, Transaction,TransactionInstruction,FeeCalculator } from "@solana/web3.js";
 import { AccountLayout, Token, TOKEN_PROGRAM_ID } from "@solana/spl-token"

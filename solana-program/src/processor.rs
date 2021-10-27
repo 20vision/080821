@@ -1,44 +1,47 @@
 use solana_program::{
-    pubkey::Pubkey,
-    account_info::AccountInfo,
+    account_info::{next_account_info, AccountInfo},
+    decode_error::DecodeError,
     entrypoint::ProgramResult,
+    system_instruction,
     msg,
+    program::invoke_signed,
+    program_error::{PrintProgramError, ProgramError},
+    program_option::COption,
+    program_pack::Pack,
+    pubkey::Pubkey,
+    sysvar::{rent::Rent, Sysvar},
 };
-use crate::instruction::SwapInstruction;
+use num_traits::FromPrimitive;
+use crate::{
+    error::VisionError,
+    instruction::VisionInstruction
+};
 
-use crate::{error::SwapError, instruction::EscrowInstruction}
-
-pub struct Processor;
-
+pub struct Processor {}
 impl Processor {
+
     pub fn process(
         program_id: &Pubkey,
         accounts: &[AccountInfo],
-        instruction_data: &[u8],
+        instruction_data: &[u8]
     ) -> ProgramResult {
-        let instruction = SwapInstruction::unpack(instruction_data)?;
+        let instruction = VisionInstruction::unpack(instruction_data)?;
 
-        match instruction{
-            SwapInstruction::InitSwap(Initialize {fee} => {
-                msg!("Instruction: InitSwap")
-                Self::process_init_escrow(accounts, fee, program_id)
-            })
+        match instruction {
+            VisionInstruction::Initialize(Initialize { space, owner }) => {
+                msg!("Instruction: Init");
+            }
         }
     }
+}
 
-    fn process_init_escrow(
-        accounts: &[AccountInfo],
-        fee: u64,
-        program_id: &Pubkey
-    ) -> ProgramResult {
-        let account_info_iter = &mut accounts.iter();
-        let token_swap_account = next_account_info(account_info_iter)?;
-
-        if !token_swap_account.is_signer{
-            return Err(ProgramError::MissingRequiredSignature);
+impl PrintProgramError for VisionError {
+    fn print<E>(&self)
+    where
+        E: 'static + std::error::Error + DecodeError<E> + PrintProgramError + FromPrimitive,
+    {
+        match self {
+            VisionError::InvalidInstruction => msg!("Error: InvalidInstruction"),
         }
-
-        
-
     }
 }
