@@ -76,11 +76,11 @@ export default function Trade() {
   )
 }
 
-import { Connection, Account, SystemProgram, PublicKey, Keypair, Transaction,TransactionInstruction,FeeCalculator, sendAndConfirmTransaction, sendAndConfirmRawTransaction } from "@solana/web3.js";
+import { Connection, SYSVAR_RENT_PUBKEY, Account, SystemProgram, PublicKey, Keypair, Transaction,TransactionInstruction,FeeCalculator, sendAndConfirmTransaction, sendAndConfirmRawTransaction } from "@solana/web3.js";
 import { AccountLayout, Token, TOKEN_PROGRAM_ID } from "@solana/spl-token"
 import { connect } from 'socket.io-client';
-
-const VisionProgramId = 'JDUpYzeNkkaeMUd7gdfwrLpsuLAJ1tRo3hYgccjchU2c'
+const SYSTEM_PROGRAM_ID = new PublicKey('11111111111111111111111111111111')
+const VisionProgramId = new PublicKey('64YG9ttAgP9ScjDmEVb5oZVTMdb6ajAiHVJBwjMeGtCz')
 
 // Layout
 import * as BufferLayout from "buffer-layout";
@@ -111,10 +111,14 @@ const fundPageToken = async(walletPublicKey, signTransaction) => {
   
   const balanceNeeded = await connection.getMinimumBalanceForRentExemption(MintLayout.span)
   console.log(balanceNeeded)
-  tx.add(systemProgram_createAccount(walletPublicKey, mintAccount, balanceNeeded, MintLayout.span, TOKEN_PROGRAM_ID))
+  const new_mint_account = Keypair.generate();
+  const mint_hodler_account = Keypair.generate();
+  tx.add(systemProgram_createAccount(walletPublicKey, new_mint_account, mint_hodler_account))
   try{
     tx.recentBlockhash = (await connection.getRecentBlockhash("confirmed")).blockhash
     tx.feePayer = walletPublicKey
+    tx.partialSign(new_mint_account);
+    tx.partialSign(mint_hodler_account);
     const signedTx = await signTransaction(tx)
     await sendAndConfirmRawTransaction(connection, signedTx.serialize())
   }catch(e){
@@ -122,46 +126,66 @@ const fundPageToken = async(walletPublicKey, signTransaction) => {
   }
 }
 
-const systemProgram_createAccount = (walletPublicKey, newAccountKeypair, lamports, space, ownerProgramId) => {
+const systemProgram_createAccount = (walletPublicKey, new_mint_account, mint_hodler_account) => {
 
+  // const dataLayout = BufferLayout.struct([
+  //   BufferLayout.u32('instruction'),
+  //   BufferLayout.ns64('lamports'),
+  //   BufferLayout.ns64('space'),
+  //   publicKeyLayout('programId'),
+  // ])
+
+  // const toBuffer = (arr) => {
+  //   if (Buffer.isBuffer(arr)) {
+  //     return arr;
+  //   } else if (arr instanceof Uint8Array) {
+  //     return Buffer.from(arr.buffer, arr.byteOffset, arr.byteLength);
+  //   } else {
+  //     return Buffer.from(arr);
+  //   }
+  // };
+
+  // const data = Buffer.alloc(dataLayout.span)
+  
+  // dataLayout.encode(
+  //   {
+  //     instruction: 0, // Initialize Page Token
+  //     lamports: lamports,
+  //     space: space,
+  //     programId: toBuffer(ownerProgramId.toBuffer()),
+  //   },
+  //   data,
+  // );
+
+  // console.log(data)
   const dataLayout = BufferLayout.struct([
     BufferLayout.u32('instruction'),
-    BufferLayout.ns64('lamports'),
-    BufferLayout.ns64('space'),
-    publicKeyLayout('programId'),
+    BufferLayout.ns64('amount'),
   ])
-
-  const toBuffer = (arr) => {
-    if (Buffer.isBuffer(arr)) {
-      return arr;
-    } else if (arr instanceof Uint8Array) {
-      return Buffer.from(arr.buffer, arr.byteOffset, arr.byteLength);
-    } else {
-      return Buffer.from(arr);
-    }
-  };
 
   const data = Buffer.alloc(dataLayout.span)
   
   dataLayout.encode(
     {
       instruction: 0, // Initialize Page Token
-      lamports: lamports,
-      space: space,
-      programId: toBuffer(ownerProgramId.toBuffer()),
+      amount: 1000000,
     },
     data,
   );
 
-  console.log(data)
-
   return new TransactionInstruction({
     keys: [
       {pubkey: walletPublicKey, isSigner: true, isWritable: true},
+      {pubkey: new_mint_account.publicKey, isSigner: true, isWritable: true},
+      {pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false},
+      {pubkey: mint_hodler_account.publicKey, isSigner: true, isWritable: true},
+      {pubkey: SYSTEM_PROGRAM_ID, isSigner: false, isWritable: false},
+      {pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false},
     ],
-    programId: new PublicKey(VisionProgramId),
+    programId: VisionProgramId,
     data,
   });
+
 
 }
 

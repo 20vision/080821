@@ -5,13 +5,8 @@ use solana_program::{
 };
 use crate::error::VisionError;
 
-pub struct Initialize {
-    pub space: u64,
-    pub owner: &Pubkey
-}
-
 pub enum VisionInstruction {
-    Initialize(Initialize)
+    Initialize()
 }
 
 impl VisionInstruction {
@@ -19,7 +14,7 @@ impl VisionInstruction {
         let (&tag, rest) = instruction_data.split_first().ok_or(VisionError::InvalidInstruction)?;
         Ok(match tag {
             0 => {
-                Self::Initialize(Initialize{ space, owner })
+                Self::Initialize()
             }
             _ => return Err(VisionError::InvalidInstruction.into()),
         })
