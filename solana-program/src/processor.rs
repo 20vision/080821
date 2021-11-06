@@ -54,7 +54,7 @@ impl Processor {
             ]
         )?;
 
- /// !!!--> INSERT -> Amm PDA that holds tokens
+        /// !!!--> INSERT -> Amm PDA that holds tokens
 
         /// Create Hodler account / Initiator Account
 
@@ -84,7 +84,7 @@ impl Processor {
                 new_mint_account_info.key,
                 payer_info.key,
                 None,
-                0
+                18
             )?,
             &[
                 token_program_info.clone(),
@@ -117,7 +117,7 @@ impl Processor {
                 new_hodler_account_info.key,
                 payer_info.key,
                 &[],
-                1000000 as u64
+                6900420000 as u64
             )?,
             &[
                 token_program_info.clone(),

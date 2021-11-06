@@ -49,3 +49,7 @@
     justify-content: center;
     color: var(--white)
 }
+
+.selectionParent{
+    margin:25px 0px;
+}
