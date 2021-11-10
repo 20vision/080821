@@ -5,13 +5,17 @@ import useUserProfile from '../../hooks/User/useUserProfile'
 import { useWallet } from '@solana/wallet-adapter-react';
 import { toast } from 'react-toastify';
 import Arrow from '../../assets/ArrowDown'
+import {usePageSelectedStore} from '../../store/pageSelected'
+import PageIcon from '../../assets/PageIcon/PageIcon'
+import SolanaIcon from '../../assets/SolanaIcon'
+import NumberFormat from 'react-number-format';
 
 export default function Trade() {
   const [selectedRoute, setSelectedRoute] = useState(1)
-  const [fromTo, setFromTo] = useState(0) // 0 -> Sol to Page // 1 -> Page to Sol
+  const [buy, setBuy] = useState(true) // true -> Sol to Page // false -> Page to Sol
   const setModal = useModalStore(state => state.setModal)
   const [profile, isLoading, setUser] = useUserProfile()
-
+  const page = usePageSelectedStore(state => state.page)
   const {
     wallet,
     connected,
@@ -50,36 +54,26 @@ export default function Trade() {
           <h1 onClick={() => setSelectedRoute(0)} style={{marginRight: '10px'}} className={`${selectedRoute == 0?styles.highlight:null}`}>
             Info
           </h1>
-          <h1 onClick={() => setSelectedRoute(0)} style={{marginRight: '10px'}} className={`${selectedRoute == 1?styles.highlight:null}`}>
+          <h1 onClick={() => setSelectedRoute(1)} style={{marginRight: '10px'}} className={`${selectedRoute == 1?styles.highlight:null}`}>
             Swap
           </h1>
-          <h1 onClick={() => setSelectedRoute(1)} style={{marginLeft: '10px'}} className={`${selectedRoute == 2?styles.highlight:null}`}>
+          <h1 onClick={() => setSelectedRoute(2)} style={{marginLeft: '10px'}} className={`${selectedRoute == 2?styles.highlight:null}`}>
             %
           </h1>
       </div>
 
       <div className={styles.selectionParent}>
-        {fromTo == 0 ?
-          <>
-            <SelectionPageToken/>
-              <div>
-                <div style={{width: '100%', height: '20px', borderBottom: '2px solid #444', textAlign: 'center'}}>
-                  <span style={{fontSize: '40px', backgroundColor: '#F3F5F6', padding: '0 10px'}}>
-                    <a><Arrow strokeWidth='3'/></a>
-                  </span>
-                </div>
-              </div>
-            <SelectionSol/>
-          </>
-        :
-          <>
-            <SelectionSol/>
-              <div className={styles.selectionSeperator}>
-                <a><Arrow className='pointer' strokeWidth='3'/></a>
-              </div>
-            <SelectionPageToken/>
-          </>
-        }
+        {buy?<SelectionSol/>:<SelectionPageToken page={page}/>}
+          <div className={styles.tradeDirectionArrowParent}>
+            <div className={styles.tradeDirectionArrowChild}>
+              <a onClick={() => setBuy(!buy)}><Arrow strokeWidth='3'/></a>
+            </div>
+          </div>
+        {buy?<SelectionPageToken page={page}/>:<SelectionSol/>}
+      </div>
+
+      <div className={`smalltext ${styles.priceInDollar}`}>
+        ~$400USD
       </div>
 
       {!profile.username || !wallet?
@@ -97,7 +91,7 @@ export default function Trade() {
       :
         <a onClick={() => fundPageToken(publicKey, signTransaction)}>
           <div className={styles.connectWallet}>
-            <h2>Swap</h2>
+            <h2>Fund & Swap</h2>
           </div>
         </a>
       }
@@ -105,17 +99,43 @@ export default function Trade() {
   )
 }
 
-const SelectionSol = (isFirst) => {
+const SelectionSol = () => {
   return(
-    <div>
+    <div className={styles.tradePageInfoParent}>
+
+      <SolanaIcon/>
+
+      <div className={styles.tradePageInfoChild}>
+        <h3>
+          Solana
+        </h3>
+        <span className="smalltext">0&nbsp;</span><span className="smalltext">($0)</span>
+      </div>
+
+      <NumberFormat allowedDecimalSeparators={','} placeholder="0" thousandSeparator=" " allowNegative={false} decimalSeparator="." type="text"/>
 
     </div>
   )
 }
 
-const SelectionPageToken = (isFirst) => {
+const SelectionPageToken = ({page}) => {
   return(
-    <div>
+    <div className={styles.tradePageInfoParent}>
+
+      {page.page_icon.length > 6 ?
+          <img src={page.page_icon}/>
+      :
+          <PageIcon color={'#'+page.page_icon}/>
+      }
+
+      <div className={styles.tradePageInfoChild}>
+        <h3>
+          /{page.unique_pagename}
+        </h3>
+        <span className="smalltext">0&nbsp;</span><span className="smalltext">($0)</span>
+      </div>
+
+      <NumberFormat allowedDecimalSeparators={','} placeholder="0" thousandSeparator=" " allowNegative={false} decimalSeparator="." type="text"/>
 
     </div>
   )
@@ -125,9 +145,73 @@ import { Connection, SYSVAR_RENT_PUBKEY, Account, SystemProgram, PublicKey, Keyp
 import { AccountLayout, Token, TOKEN_PROGRAM_ID } from "@solana/spl-token"
 import { connect } from 'socket.io-client';
 const SYSTEM_PROGRAM_ID = new PublicKey('11111111111111111111111111111111')
-const VisionProgramId = new PublicKey('64YG9ttAgP9ScjDmEVb5oZVTMdb6ajAiHVJBwjMeGtCz')
+const VisionProgramId = new PublicKey('GKRDrSsUwMvVJCwPtbiMUckXTpiJTU2r7GFk4NcqQYgR')
 
-const fundPageToken = async() => {
+import * as BufferLayout from "buffer-layout";
+
+const fundPageToken = async(walletPublicKey, signTransaction) => {
+
+  const connection = new Connection('http://localhost:8899', 'confirmed')
+  const tx = new Transaction()
+
+//! Fetch Fee collector from DB, for now random pubkey:
+  const feeCollector = new PublicKey('uDE3BJCVgFaxT8LrwjFZzLSja4HoT3rfKkQAuNE8LMW')
+  // Page Token Keypair
+  const new_mint_keypair = Keypair.generate();
+
+  // PDA
+  const [pda] = await PublicKey.findProgramAddress(
+    [new_mint_keypair.publicKey.toBuffer()],
+    VisionProgramId,
+  );
+  
+  // Accounts sent to Contract
+  const keys = [
+    // Funder - Pays for funding and first swap
+    {pubkey: walletPublicKey, isSigner: true, isWritable: true},
+
+    // Mint PubKey
+    {pubkey: new_mint_keypair.publicKey, isSigner: false, isWritable: true},
+
+    // Pda where the Swap state is stored to(is_initialized, bump_seed, fee(0-50000), fee_collector)
+    {pubkey: pda, isSigner: false, isWritable: true},
+
+    // Fee collector Pub Key
+    {pubkey: feeCollector, isSigner: false, isWritable: false},
+
+    // For invoke_signed - To create Accounts
+    {pubkey: SystemProgram.programId, isSigner: false, isWritable: false},
+  ]
+
+  // Data sent to Contract as Buffer
+  const dataLayout = BufferLayout.struct([BufferLayout.u8('instruction')])
+  const data = Buffer.alloc(dataLayout.span);
+  dataLayout.encode(
+    {
+      instruction: 0
+    },
+    data
+  );
+
+  const txInst = new TransactionInstruction({
+    keys,
+    programId: VisionProgramId,
+    data,
+  });
+
+  tx.add(txInst);
+
+  // Send Transaction
+  try{
+    tx.recentBlockhash = (await connection.getRecentBlockhash("confirmed")).blockhash
+    tx.feePayer = walletPublicKey
+    //tx.partialSign(new_mint_keypair);
+    const signedTx = await signTransaction(tx)
+    await sendAndConfirmRawTransaction(connection, signedTx.serialize())
+  }catch(e){
+    console.log("error:",e)
+  }
+
 
 }
 

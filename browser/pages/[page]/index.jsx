@@ -2,8 +2,17 @@ import PageLayout from '../../layouts/page'
 import axios from 'axios'
 import {useInfiniteQuery} from 'react-query'
 import Preview from '../../components/Paper/Preview'
+import {usePageSelectedStore} from '../../store/pageSelected'
+import { useEffect } from 'react'
 
 export default function index({page, missions}) {
+  const setPageSelection = usePageSelectedStore(state => state.setPageSelection)
+
+  useEffect(() => {
+    if(page){
+      setPageSelection(page)
+    }
+  }, [page])
   const papers = useInfiniteQuery(
     `papers/${page.unique_pagename}`,
     async () => {
