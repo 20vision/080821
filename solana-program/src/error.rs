@@ -18,6 +18,10 @@ pub enum VisionError {
     // Invalid instruction number passed in.
     #[error("Invalid instruction")]
     InvalidInstruction,
+
+    // Invalid pda associated token address
+    #[error("Invalid pda associated token address")]
+    InvalidAssociatedPdaTokenAddress
 }
 impl From<VisionError> for ProgramError {
     fn from(e: VisionError) -> Self {
