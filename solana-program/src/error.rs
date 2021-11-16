@@ -21,7 +21,11 @@ pub enum VisionError {
 
     // Invalid pda associated token address
     #[error("Invalid pda associated token address")]
-    InvalidAssociatedPdaTokenAddress
+    InvalidAssociatedPdaTokenAddress,
+
+    /// Address of the provided swap token account is incorrect.
+    #[error("Address of the provided swap token account is incorrect")]
+    IncorrectSwapAccount,
 }
 impl From<VisionError> for ProgramError {
     fn from(e: VisionError) -> Self {

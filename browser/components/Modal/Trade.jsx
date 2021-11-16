@@ -96,7 +96,7 @@ export default function Trade() {
             </div>
           </a>
 
-          <a onClick={() => swap(publicKey, signTransaction, new PublicKey('4qWSa41Y9EuWWhLenbTtFKjUAQxJLCmeohf1UEVQphnk'))}>
+          <a onClick={() => swap(publicKey, signTransaction)}>
             <div className={styles.connectWallet}>
               <h2>Swap</h2>
             </div>
@@ -152,8 +152,10 @@ const SelectionPageToken = ({page}) => {
 import { Connection, SYSVAR_RENT_PUBKEY, Account, SystemProgram, PublicKey, Keypair, Transaction,TransactionInstruction,FeeCalculator, sendAndConfirmTransaction, sendAndConfirmRawTransaction } from "@solana/web3.js";
 import { AccountLayout, Token, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/spl-token"
 import { connect } from 'socket.io-client';
+import BN from 'bn.js';
+import assert from 'assert';
 const SYSTEM_PROGRAM_ID = new PublicKey('11111111111111111111111111111111')
-const VisionProgramId = new PublicKey('EYh89c1ZG5KvJYaqXYwBa83NwBWuMYh41xfeoy67SSVD')
+const VisionProgramId = new PublicKey('3yu4xjDRFj4vpDFErdZToXfhy43K2JA3NH7b5WqngKvS')
 
 import * as BufferLayout from "buffer-layout";
 
@@ -164,51 +166,67 @@ const publicKeyLayout = (property = "publicKey") => {
   return BufferLayout.blob(32, property);
 };
 
-const swap = async(walletPublicKey, signTransaction, tokenMint) => {
-
+const swap = async(walletPublicKey, signTransaction) => {
+  const tokenMint = new PublicKey('GipKsrbDCb8YzzDpEkmPfkJBJCfxP3Aagfb6RveScAn2')
   const connection = new Connection('http://localhost:8899', 'confirmed')
+  const tx = new Transaction()
 
   // PDA
   const [pda, bump_seed] = await PublicKey.findProgramAddress(
     [tokenMint.toBuffer()],
     VisionProgramId,
   );
-  
-  const userAssociatedAccount = await manualGetOrCreateUserAssociatedAccountInfo(connection, tokenMint, walletPublicKey, signTransaction);
-  console.log(userAssociatedAccount.address)
 
-  const pdaAssociatedAccount = await manualGetAssociatedAccountInfo(connection, tokenMint, pda)
-  console.log(pdaAssociatedAccount.address)
+  const [pda_associatedTokenAddress, _bump_seed] = await PublicKey.findProgramAddress(
+    [pda.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), tokenMint.toBuffer()],
+    ASSOCIATED_TOKEN_PROGRAM_ID,
+  )
 
+  const [user_associatedTokenAddress, __bump_seed] = await PublicKey.findProgramAddress(
+    [walletPublicKey.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), tokenMint.toBuffer()],
+    ASSOCIATED_TOKEN_PROGRAM_ID,
+  )
+  // const user_associatedTokenAddress = await manualGetOrCreateAssociatedAccountInfo(
+  //   walletPublicKey,
+  //   tx,
+  //   connection,
+  //   tokenMint,
+  // )
+
+  // Accounts sent to Contract
   const keys = [
-    // User Swapping
+    // Funder - Pays for funding and first swap
     {pubkey: walletPublicKey, isSigner: true, isWritable: true},
-    // User Token Account
-    {pubkey: userAssociatedAccount.address, isSigner: false, isWritable: true},
-    // Pda 
+    // Funder - Associated Token Address
+    {pubkey: user_associatedTokenAddress, isSigner: false, isWritable: true},
+    // PDA
     {pubkey: pda, isSigner: false, isWritable: true},
-    // Pda Token Account
-    {pubkey: pdaAssociatedAccount.address, isSigner: false, isWritable: true},
-    // Token Mint 
+    // Pda - Associated Token Address 
+    {pubkey: pda_associatedTokenAddress, isSigner: false, isWritable: true},
+    // Mint PubKey
     {pubkey: tokenMint, isSigner: false, isWritable: false},
-    // For invoking - Transfering tokens
-    {pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false},
     // For invoke_signed - To create Accounts
     {pubkey: SystemProgram.programId, isSigner: false, isWritable: false},
+    // Associated Token Program Id for creating token account
+    {pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false},
+    // For invoking - To create Mint & Mint Account
+    {pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false},
+    // Rent Sysvar for Token Program (e.g. Initializing mint)
+    {pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false},
   ]
-
+  
+  // Data sent to Contract as Buffer
   const dataLayout = BufferLayout.struct([
     BufferLayout.u8('instruction'),
     uint64Layout('amountIn'),
-    uint64('minimumAmountOut'),
+    uint64Layout('minimumAmountOut'),
   ])
-
   const data = Buffer.alloc(dataLayout.span);
   dataLayout.encode(
     {
-      instruction: 1, // Swap instruction
-      amountIn: new Numberu64(amountIn).toBuffer(),
-      minimumAmountOut: new Numberu64(minimumAmountOut).toBuffer(),
+      instruction: 1,
+      amountIn: new Numberu64(50).toBuffer(),
+      minimumAmountOut: new Numberu64(100).toBuffer(),
     },
     data
   );
@@ -220,7 +238,7 @@ const swap = async(walletPublicKey, signTransaction, tokenMint) => {
   });
 
   tx.add(txInst);
-
+  // Send Transaction
   try{
     tx.recentBlockhash = (await connection.getRecentBlockhash("confirmed")).blockhash
     tx.feePayer = walletPublicKey
@@ -229,6 +247,8 @@ const swap = async(walletPublicKey, signTransaction, tokenMint) => {
   }catch(e){
     console.log("error:",e)
   }
+  
+
 }
 
 const fundPageToken = async(walletPublicKey, signTransaction) => {
@@ -238,12 +258,10 @@ const fundPageToken = async(walletPublicKey, signTransaction) => {
 
 //! Fetch Fee collector from DB, for now random pubkey:
   const feeCollector = new PublicKey('HBwQjmrR4eHYPGDE3aQD8DTwoVYVgtd22e19L75v1NGj')
-  // Page Token Keypair
+
   const new_mint_keypair = Keypair.generate();
 
-  console.log('New mint is: ', new_mint_keypair.publicKey.toString())
-
-  const pda_mint_account_keypair = Keypair.generate();
+  console.log('print the mint: ',new_mint_keypair.publicKey.toString())
 
   // PDA
   const [pda, bump_seed] = await PublicKey.findProgramAddress(
@@ -251,40 +269,31 @@ const fundPageToken = async(walletPublicKey, signTransaction) => {
     VisionProgramId,
   );
 
-  const [pdaAssociatedAccountAddress, _bump_seed] = await PublicKey.findProgramAddress(
-    [walletPublicKey.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), new_mint_keypair.publicKey.toBuffer()],
+  const [pda_associatedTokenAddress, _bump_seed] = await PublicKey.findProgramAddress(
+    [pda.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), new_mint_keypair.publicKey.toBuffer()],
     ASSOCIATED_TOKEN_PROGRAM_ID,
   )
-  console.log('pda :', pdaAssociatedAccountAddress.toString())
   
   // Accounts sent to Contract
   const keys = [
     // Funder - Pays for funding and first swap
     {pubkey: walletPublicKey, isSigner: true, isWritable: true},
-
     // Mint PubKey
     {pubkey: new_mint_keypair.publicKey, isSigner: true, isWritable: true},
-
-    // Pda Mint Account
-    {pubkey: pdaAssociatedAccountAddress, isSigner: false, isWritable: true},
-
     // Pda where the Swap state is stored to(is_initialized, bump_seed, fee(0-50000), fee_collector)
     {pubkey: pda, isSigner: false, isWritable: true},
-
-    // Fee collector Pub Key
-    {pubkey: feeCollector, isSigner: false, isWritable: false},
-
+    // Pda Mint Account
+    {pubkey: pda_associatedTokenAddress, isSigner: false, isWritable: true},
     // For invoke_signed - To create Accounts
     {pubkey: SystemProgram.programId, isSigner: false, isWritable: false},
-
+    // Associated Token Program Id for creating token account
+    {pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false},
     // For invoking - To create Mint & Mint Account
     {pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false},
-
-    // For Associated Token Address
-    {pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false},
-
     // Rent Sysvar for Token Program (e.g. Initializing mint)
     {pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false},
+    // Fee collector Pub Key
+    {pubkey: feeCollector, isSigner: false, isWritable: false},
   ]
 
   // Data sent to Contract as Buffer
@@ -310,7 +319,6 @@ const fundPageToken = async(walletPublicKey, signTransaction) => {
     tx.recentBlockhash = (await connection.getRecentBlockhash("confirmed")).blockhash
     tx.feePayer = walletPublicKey
     tx.partialSign(new_mint_keypair);
-    tx.partialSign(pda_mint_account_keypair);
     const signedTx = await signTransaction(tx)
     await sendAndConfirmRawTransaction(connection, signedTx.serialize())
   }catch(e){
@@ -318,60 +326,76 @@ const fundPageToken = async(walletPublicKey, signTransaction) => {
   }
 }
 
+// const manualGetOrCreateAssociatedAccountInfo = async(walletPublicKey, tx, connection, tokenMint) => {
+//   const token = new Token(
+//     connection,
+//     tokenMint,
+//     TOKEN_PROGRAM_ID,
+//     walletPublicKey
+//   )
 
-const manualGetOrCreateUserAssociatedAccountInfo = async(connection, tokenMint, walletPublicKey, signTransaction) => {
-  // GET OR CREATE ASSOCIATED ACCOUNT ADDRESS
-  const token = new Token(connection, tokenMint, TOKEN_PROGRAM_ID, walletPublicKey)
+//   const [user_associatedTokenAddress, __bump_seed] = await PublicKey.findProgramAddress(
+//     [walletPublicKey.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), tokenMint.toBuffer()],
+//     ASSOCIATED_TOKEN_PROGRAM_ID,
+//   )
 
-  const [userAssociatedAccountAddress, bump_seed] = await PublicKey.findProgramAddress(
-    [walletPublicKey.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), tokenMint.toBuffer()],
-    ASSOCIATED_TOKEN_PROGRAM_ID,
-  );
+//   try {
+//     await token.getAccountInfo(user_associatedTokenAddress);
+//     return user_associatedTokenAddress;
+//   } catch (err) {
+//     if (
+//       err.message === 'Failed to find account' ||
+//       err.message === 'Invalid account owner'
+//     ) {
 
-  try{
-    return await token.getAccountInfo(userAssociatedAccountAddress)
-  }catch(err){
-    if (
-      err.message === 'Failed to find account' ||
-      err.message === 'Invalid account owner'
-    ) {
-      const tx = new Transaction().add(
-        Token.createAssociatedTokenAccountInstruction(
-          ASSOCIATED_TOKEN_PROGRAM_ID,
-          TOKEN_PROGRAM_ID,
-          tokenMint,
-          userAssociatedAccountAddress,
-          walletPublicKey,
-          walletPublicKey,
-        ),
-      )
-      try{
-        tx.recentBlockhash = (await connection.getRecentBlockhash("confirmed")).blockhash
-        tx.feePayer = walletPublicKey
-        const signedTx = await signTransaction(tx)
-        await sendAndConfirmRawTransaction(connection, signedTx.serialize())
-      }catch(e){
-        console.log("error:",e)
-        return;
-      }
-    }else{
-      throw err;
+//       tx.add(
+//         Token.createAssociatedTokenAccountInstruction(
+//           token.associatedProgramId,
+//           token.programId,
+//           token.publicKey,
+//           user_associatedTokenAddress,
+//           walletPublicKey,
+//           token.payer.publicKey,
+//         )
+//       )
+
+//       return user_associatedTokenAddress;
+//     } else {
+//       throw err;
+//     }
+//   }
+
+// }
+
+export class Numberu64 extends BN {
+  /**
+   * Convert to Buffer representation
+   */
+  toBuffer() {
+    const a = super.toArray().reverse();
+    const b = Buffer.from(a);
+    if (b.length === 8) {
+      return b;
     }
+    assert(b.length < 8, 'Numberu64 too large');
+
+    const zeroPad = Buffer.alloc(8);
+    b.copy(zeroPad);
+    return zeroPad;
   }
-}
 
-
-const manualGetAssociatedAccountInfo = async(connection, tokenMint, walletPublicKey) => {
-  const token = new Token(connection, tokenMint, TOKEN_PROGRAM_ID, walletPublicKey)
-  const [userAssociatedAccountAddress, _bump_seed] = await PublicKey.findProgramAddress(
-    [walletPublicKey.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), tokenMint.toBuffer()],
-    ASSOCIATED_TOKEN_PROGRAM_ID,
-  )
-
-  try{
-    return await token.getAccountInfo(userAssociatedAccountAddress)
-  }catch(err){
-    throw err;
+  /**
+   * Construct a Numberu64 from Buffer representation
+   */
+  static fromBuffer(buffer) {
+    assert(buffer.length === 8, `Invalid buffer length: ${buffer.length}`);
+    return new Numberu64(
+      [...buffer]
+        .reverse()
+        .map(i => `00${i.toString(16)}`.slice(-2))
+        .join(''),
+      16,
+    );
   }
 }
 
