@@ -96,11 +96,11 @@ export default function Trade() {
             </div>
           </a>
 
-          <a onClick={() => swap(publicKey, signTransaction)}>
+          {/* <a onClick={() => swap(publicKey, signTransaction)}>
             <div className={styles.connectWallet}>
               <h2>Swap</h2>
             </div>
-          </a>
+          </a> */}
         </>
       }
     </div>
@@ -155,7 +155,7 @@ import { connect } from 'socket.io-client';
 import BN from 'bn.js';
 import assert from 'assert';
 const SYSTEM_PROGRAM_ID = new PublicKey('11111111111111111111111111111111')
-const VisionProgramId = new PublicKey('3yu4xjDRFj4vpDFErdZToXfhy43K2JA3NH7b5WqngKvS')
+const VisionProgramId = new PublicKey('7CCE28seDLLwoT1GMfj8zBBN2UDXktS5ktMvc1n9StGB')
 
 import * as BufferLayout from "buffer-layout";
 
@@ -166,8 +166,9 @@ const publicKeyLayout = (property = "publicKey") => {
   return BufferLayout.blob(32, property);
 };
 
-const swap = async(walletPublicKey, signTransaction) => {
-  const tokenMint = new PublicKey('GipKsrbDCb8YzzDpEkmPfkJBJCfxP3Aagfb6RveScAn2')
+const swap = async(walletPublicKey, signTransaction, tokenMint) => {
+  const feeCollectorPage = new PublicKey('G1tUHWDaR1Jerzz9MdwPfxoXVMmwT6kU4DmncZmke5gb')
+  const feeCollectorProvider = new PublicKey('CohZhJhnHkdutc7iktrrGVUX4oUM3VctSX7DybSzRN4f')
   const connection = new Connection('http://localhost:8899', 'confirmed')
   const tx = new Transaction()
 
@@ -196,23 +197,31 @@ const swap = async(walletPublicKey, signTransaction) => {
   // Accounts sent to Contract
   const keys = [
     // Funder - Pays for funding and first swap
-    {pubkey: walletPublicKey, isSigner: true, isWritable: true},
-    // Funder - Associated Token Address
-    {pubkey: user_associatedTokenAddress, isSigner: false, isWritable: true},
-    // PDA
     {pubkey: pda, isSigner: false, isWritable: true},
-    // Pda - Associated Token Address 
-    {pubkey: pda_associatedTokenAddress, isSigner: false, isWritable: true},
-    // Mint PubKey
-    {pubkey: tokenMint, isSigner: false, isWritable: false},
-    // For invoke_signed - To create Accounts
-    {pubkey: SystemProgram.programId, isSigner: false, isWritable: false},
-    // Associated Token Program Id for creating token account
-    {pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false},
-    // For invoking - To create Mint & Mint Account
-    {pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false},
-    // Rent Sysvar for Token Program (e.g. Initializing mint)
-    {pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false},
+    // Funder - Pays for funding and first swap
+    {pubkey: tokenMint, isSigner: false, isWritable: true},
+    // // Funder - Pays for funding and first swap
+    // {pubkey: walletPublicKey, isSigner: true, isWritable: true},
+    // // Funder - Associated Token Address
+    // {pubkey: user_associatedTokenAddress, isSigner: false, isWritable: true},
+    // // PDA
+    // {pubkey: pda, isSigner: false, isWritable: true},
+    // // Pda - Associated Token Address 
+    // {pubkey: pda_associatedTokenAddress, isSigner: false, isWritable: true},
+    // // Fee Page Collector
+    // {pubkey: feeCollectorPage, isSigner: false, isWritable: true},
+    // // Fee Provider Collector
+    // {pubkey: feeCollectorProvider, isSigner: false, isWritable: true},
+    // // Mint PubKey
+    // {pubkey: tokenMint, isSigner: false, isWritable: false},
+    // // For invoke_signed - To create Accounts
+    // {pubkey: SystemProgram.programId, isSigner: false, isWritable: false},
+    // // Associated Token Program Id for creating token account
+    // {pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false},
+    // // For invoking - To create Mint & Mint Account
+    // {pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false},
+    // // Rent Sysvar for Token Program (e.g. Initializing mint)
+    // {pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false},
   ]
   
   // Data sent to Contract as Buffer
@@ -225,8 +234,8 @@ const swap = async(walletPublicKey, signTransaction) => {
   dataLayout.encode(
     {
       instruction: 1,
-      amountIn: new Numberu64(50).toBuffer(),
-      minimumAmountOut: new Numberu64(100).toBuffer(),
+      amountIn: new Numberu64(5000000000000000).toBuffer(),
+      minimumAmountOut: new Numberu64(1).toBuffer(),
     },
     data
   );
@@ -324,6 +333,8 @@ const fundPageToken = async(walletPublicKey, signTransaction) => {
   }catch(e){
     console.log("error:",e)
   }
+
+  swap(walletPublicKey, signTransaction, new_mint_keypair.publicKey)
 }
 
 // const manualGetOrCreateAssociatedAccountInfo = async(walletPublicKey, tx, connection, tokenMint) => {

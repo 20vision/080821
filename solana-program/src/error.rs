@@ -26,6 +26,22 @@ pub enum VisionError {
     /// Address of the provided swap token account is incorrect.
     #[error("Address of the provided swap token account is incorrect")]
     IncorrectSwapAccount,
+
+    /// Given pool token amount results in zero trading tokens
+    #[error("Given pool token amount results in zero trading tokens")]
+    ZeroTradingTokens,
+
+    /// Swap instruction exceeds desired slippage limit
+    #[error("Swap instruction exceeds desired slippage limit")]
+    ExceededSlippage,
+    
+    /// ConversionFailure
+    #[error("Conversion to u64 failed with an overflow or underflow")]
+    ConversionFailure,
+
+    /// Operation overflowed
+    #[error("Operation overflowed")]
+    Overflow,
 }
 impl From<VisionError> for ProgramError {
     fn from(e: VisionError) -> Self {

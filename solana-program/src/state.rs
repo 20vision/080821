@@ -20,6 +20,13 @@ pub struct PageTokenSwap {
     pub fee_collector_pubkey: Pubkey
 }
 
+pub struct BuyAmt {
+    pub adjusted_amount_in: u128,
+    pub token_amt: u128,
+    pub fee_page: u128,
+    pub fee_provider: u128
+}
+
 impl Sealed for PageTokenSwap {}
 impl IsInitialized for PageTokenSwap {
     fn is_initialized(&self) -> bool {

@@ -14,7 +14,7 @@ use solana_program::{
 };
 use num_traits::FromPrimitive;
 use crate::{
-    state::PageTokenSwap,
+    state::{PageTokenSwap, BuyAmt},
     error::VisionError,
     instruction::{VisionInstruction, Swap},
 };
@@ -22,29 +22,31 @@ use spl_token::{
     state::{Account, Mint}
 };
 use spl_associated_token_account;
+use std::convert::TryInto;
 
 pub struct Processor {}
+
 impl Processor {
     pub fn initialize_page_token(
         program_id: &Pubkey,
         accounts: &[AccountInfo]
     ) -> Result<(), ProgramError>{
-    /// Accounts
+    // Accounts
         let account_info_iter = &mut accounts.iter();
-        let payer_info = next_account_info(account_info_iter)?; /// Signer & Writable
-        let new_mint_info = next_account_info(account_info_iter)?; /// Signer & Writable
-        let pda_info = next_account_info(account_info_iter)?; /// Writable
-        let pda_associated_token_info = next_account_info(account_info_iter)?; /// Writable
-        let system_program_info = next_account_info(account_info_iter)?; /// X
-        let associated_token_program_info = next_account_info(account_info_iter)?; /// X
-        let token_program_info = next_account_info(account_info_iter)?; /// X
-        let rent_sysvar_info = next_account_info(account_info_iter)?; /// X
-        let fee_collector_info = next_account_info(account_info_iter)?; /// X
+        let payer_info = next_account_info(account_info_iter)?; // Signer & Writable
+        let new_mint_info = next_account_info(account_info_iter)?; // Signer & Writable
+        let pda_info = next_account_info(account_info_iter)?; // Writable
+        let pda_associated_token_info = next_account_info(account_info_iter)?; // Writable
+        let system_program_info = next_account_info(account_info_iter)?; // X
+        let associated_token_program_info = next_account_info(account_info_iter)?; // X
+        let token_program_info = next_account_info(account_info_iter)?; // X
+        let rent_sysvar_info = next_account_info(account_info_iter)?; // X
+        let fee_collector_info = next_account_info(account_info_iter)?; // X
 
-    /// Variables
+    // Variables
         let rent = Rent::get()?;
 
-    /// Checks
+    // Checks
         if new_mint_info.lamports() > 0{
             return Err(VisionError::AlreadyInUse.into());
         }
@@ -70,15 +72,20 @@ impl Processor {
         if fee_collector_info.lamports() == 0{
             return Err(VisionError::IncorrectSwapAccount.into());
         }
-    ///
-    /// MAIN
-    /// 
-    /// Create PDA Account & store State in it
+    //
+    // MAIN
+    // 
+    //Create PDA Account & store State in it
+
+        // Collateral for one single token is 31 Lamports
+        //m*CW*tokenSupply^(1/CW)*10^9 = collateral
+        let collateral = 31 as u64;
+        let collateral_rent = collateral.checked_add(rent.minimum_balance(PageTokenSwap::LEN)).ok_or(VisionError::Overflow)?;
         invoke_signed(
             &system_instruction::create_account(
                 payer_info.key,
                 pda_info.key,
-                rent.minimum_balance(PageTokenSwap::LEN),
+                collateral_rent,
                 PageTokenSwap::LEN as u64,
                 program_id,
             ),
@@ -96,9 +103,10 @@ impl Processor {
         swap_state.is_initialized = true;
         swap_state.bump_seed = bump_seed;
         swap_state.fee = 5000;
+        // Replace Fee collector with Program that distributes fee % towards multiple accounts
         swap_state.fee_collector_pubkey = *fee_collector_info.key;
         PageTokenSwap::pack(swap_state, &mut pda_info.data.borrow_mut())?;
-    /// Mint Token
+    // Mint Token
         invoke(
             &system_instruction::create_account(
                 payer_info.key,
@@ -128,7 +136,7 @@ impl Processor {
                 rent_sysvar_info.clone()
             ]
         )?;
-    /// Create and Mint To associated token program address of Pda and Remove Minting authority
+    // Create and Mint To associated token program address of Pda and Remove Minting authority
         invoke(
             &spl_associated_token_account::create_associated_token_account(
                 payer_info.key,
@@ -153,7 +161,7 @@ impl Processor {
                 pda_associated_token_info.key,
                 pda_info.key,
                 &[],
-                6900420000000000000 as u64
+                1 as u64
             )?,
             &[
                 token_program_info.clone(),
@@ -166,27 +174,7 @@ impl Processor {
                 &[bump_seed]
             ]]
         )?;
-        invoke_signed(
-            &spl_token::instruction::set_authority(
-                token_program_info.key,
-                new_mint_info.key,
-                None,
-                spl_token::instruction::AuthorityType::MintTokens,
-                pda_info.key,
-                &[]
-            )?,
-            &[
-                token_program_info.clone(),
-                new_mint_info.clone(),
-                pda_info.clone()
-            ],
-            &[&[
-                &new_mint_info.key.to_bytes(),
-                &[bump_seed]
-            ]]
-        )?;
 
-    // FINISHED
         Ok(())
 
     }
@@ -198,183 +186,33 @@ impl Processor {
         minimum_amount_out: u64
     ) -> Result<(), ProgramError> {
         let account_info_iter = &mut accounts.iter();
-    /// Accounts
-        let wallet_info = next_account_info(account_info_iter)?; /// Signer
-        let wallet_associated_token_info = next_account_info(account_info_iter)?; /// Writable
-        let pda_info = next_account_info(account_info_iter)?; /// Writable
-        let pda_associated_token_info = next_account_info(account_info_iter)?; /// Writable
-        let new_mint_info = next_account_info(account_info_iter)?;  /// X
-        let system_program_info = next_account_info(account_info_iter)?; /// X
-        let associated_token_program_info = next_account_info(account_info_iter)?; /// X
-        let token_program_info = next_account_info(account_info_iter)?; /// X
-        let rent_sysvar_info = next_account_info(account_info_iter)?; /// X
-    
-    /// Check
-        if spl_associated_token_account::get_associated_token_address(pda_info.key, new_mint_info.key) != *pda_associated_token_info.key{
-            return Err(VisionError::InvalidAssociatedPdaTokenAddress.into());
-        }
+        
+        let pda_info = next_account_info(account_info_iter)?; // Writable
+        let mint_info = next_account_info(account_info_iter)?; // Writable
 
-        let mut swap_state = PageTokenSwap::unpack_unchecked(&pda_info.data.borrow())?;
-        msg!("Fee collector: {:?}", swap_state.fee_collector_pubkey);
-    ///
-    /// MAIN
-        if wallet_associated_token_info.lamports() == 0 {
-            invoke(
-                &spl_associated_token_account::create_associated_token_account(
-                    wallet_info.key,
-                    wallet_info.key,
-                    new_mint_info.key
-                ),
-                &[
-                    wallet_info.clone(),
-                    wallet_associated_token_info.clone(),
-                    wallet_info.clone(),
-                    new_mint_info.clone(),
-                    system_program_info.clone(),
-                    token_program_info.clone(),
-                    rent_sysvar_info.clone(),
-                    associated_token_program_info.clone()
-                ]
-            )?;
-        }
+        let rent = Rent::get()?;
 
-        let (pda, bump_seed) = Pubkey::find_program_address(&[&new_mint_info.key.to_bytes()], program_id);
+    // VARIABLES
+    // tokenSupply * ((1+amtPaid/colleteral)^CW -1)
+        let mint_state = spl_token::state::Mint::unpack(&mint_info.data.borrow())?;
+        let token_supply = mint_state.supply as u128;
+        let rent_payed = rent.minimum_balance(PageTokenSwap::LEN);
+        let collateral = pda_info.lamports().checked_sub(rent_payed).ok_or(VisionError::Overflow)?;
 
-        if pda != *pda_info.key{
-            return Err(VisionError::IncorrectSwapAccount.into());
-        }
+        let numerator = ((1f64 + amount_in as f64).powf(0.60606f64) as u128).checked_mul(token_supply).ok_or(VisionError::Overflow)?;
+        msg!("numerator: {:?}", numerator);
+        let denominator = (collateral as f64).powf(0.60606f64) as u128;
+        msg!("denominator: {:?}", denominator);
 
-        invoke_signed(
-            &spl_token::instruction::transfer(
-                &spl_token::id(),
-                pda_associated_token_info.key,
-                wallet_associated_token_info.key,
-                pda_info.key,
-                &[],
-                50000000000 as u64
-            )?,
-            &[
-                token_program_info.clone(),
-                pda_associated_token_info.clone(),
-                wallet_associated_token_info.clone(),
-                pda_info.clone()
-            ],
-            &[&[
-                &new_mint_info.key.to_bytes(),
-                &[bump_seed]
-            ]]
-        )?;
+        let division = numerator.checked_div(denominator).ok_or(VisionError::Overflow)?;
+        msg!("division: {:?}", division);
 
-        invoke(
-            &solana_program::system_instruction::transfer(
-                wallet_info.key,
-                pda_info.key,
-                5000000000 as u64,
-            ),
-            &[
-                system_program_info.clone(),
-                wallet_info.clone(),
-                pda_info.clone()
-            ]
-        )?;
-
+        let result = division.checked_sub(token_supply).ok_or(VisionError::Overflow)?;
+        msg!("Result: {:?}", result);
 
         Ok(())
 
-        
     }
-
-    // pub fn swap(
-    //     program_id: &Pubkey,
-    //     accounts: &[AccountInfo],
-    //     amount_in: u64,
-    //     minimum_amount_out: u64
-    // ) -> Result<(), ProgramError> {
-    //     let account_info_iter = &mut accounts.iter();
-
-    //     let wallet_info = next_account_info(account_info_iter)?;
-    //     let wallet_associated_token_info = next_account_info(account_info_iter)?;
-    //     let pda_info = next_account_info(account_info_iter)?;
-    //     let pda_associated_token_info = next_account_info(account_info_iter)?;
-    //     let mint_info = next_account_info(account_info_iter)?;
-    //     let token_program_info = next_account_info(account_info_iter)?;
-    //     let system_program_info = next_account_info(account_info_iter)?;
-    //     let rent_info = next_account_info(account_info_iter)?;
-
-        
-    //     let (pda, bump_seed) = Pubkey::find_program_address(&[&mint_info.key.to_bytes()], program_id);
-
-    //     if *pda_info.key != pda {
-    //         return Err(VisionError::InvalidProgramAddress.into());
-    //     }
-
-    //     let get_wallet_associated_token_info = spl_associated_token_account::get_associated_token_address(wallet_info.key, mint_info.key);
-
-    //     if *wallet_associated_token_info.key != get_wallet_associated_token_info {
-    //         return Err(VisionError::IncorrectSwapAccount.into());
-    //     }
-
-        
-    //     if wallet_associated_token_info.lamports() == 0 {
-    //         invoke(
-    //             &spl_associated_token_account::create_associated_token_account(
-    //                 wallet_info.key,
-    //                 wallet_info.key,
-    //                 mint_info.key
-    //             ),
-    //             &[
-    //                 wallet_info.clone(),
-    //                 wallet_associated_token_info.clone(),
-    //                 mint_info.clone(),
-    //                 system_program_info.clone(),
-    //                 token_program_info.clone(),
-    //                 rent_info.clone()
-    //             ]
-    //         )?;
-    //     }
-
-    //     let get_pda_associated_token_info = spl_associated_token_account::get_associated_token_address(pda_info.key, mint_info.key);
-
-    //     if *pda_associated_token_info.key != get_pda_associated_token_info {
-    //         return Err(VisionError::IncorrectSwapAccount.into());
-    //     }
-
-    //     invoke_signed(
-    //         &spl_token::instruction::transfer(
-    //             &spl_token::id(),
-    //             pda_associated_token_info.key,
-    //             wallet_associated_token_info.key,
-    //             pda_info.key,
-    //             &[],
-    //             50
-    //         )?,
-    //         &[
-    //             token_program_info.clone(),
-    //             pda_associated_token_info.clone(),
-    //             wallet_associated_token_info.clone(),
-    //             pda_info.clone()
-    //         ],
-    //         &[&[
-    //             &mint_info.key.to_bytes(),
-    //             &[bump_seed]
-    //         ]]
-    //     )?;
-
-    //     invoke(
-    //         &solana_program::system_instruction::transfer(
-    //             wallet_info.key,
-    //             pda_info.key,
-    //             500000 as u64,
-    //         ),
-    //         &[
-    //             system_program_info.clone(),
-    //             wallet_info.clone(),
-    //             pda_info.clone()
-    //         ]
-    //     )?;
-
-    //     Ok(())
-    // }
 
     pub fn process(
         program_id: &Pubkey,
@@ -394,6 +232,69 @@ impl Processor {
     }
 }
 
+fn to_u128(val: u64) -> Result<u128, VisionError> {
+    val.try_into().map_err(|_| VisionError::ConversionFailure)
+}
+
+fn to_f64(val: i32) -> Result<f64, VisionError> {
+    val.try_into().map_err(|_| VisionError::ConversionFailure)
+}
+
+// pub fn calculate_buy_amt(
+//     fee: u128,
+//     token_supply: u128,
+//     amount_in: u128,
+//     collateral: u128
+// ) -> Option<BuyAmt> {
+//     msg!("fee {:?}", fee);
+//     msg!("token_supply: {:?}", token_supply);
+//     msg!("amount_in {:?}", amount_in);
+//     msg!("colleteral {:?}", collateral);
+
+//     let fee_page = (amount_in.checked_mul(fee)?).checked_div(100000 as u128)?;
+//     msg!("fee_page {:?}", fee_page);
+//     let fee_provider = (amount_in.checked_mul(2 as u128)?).checked_div(100 as u128)?;
+//     msg!("fee_provider {:?}", fee_provider);
+
+//     let total_fee = fee_page.checked_add(fee_provider)?;
+//     msg!("total_fee {:?}", total_fee);
+
+//     let adjusted_amount_in = amount_in.checked_sub(total_fee)?;
+//     msg!("adjusted_amount_in {:?}", adjusted_amount_in);
+
+
+//     let numerator = adjusted_amount_in.checked_add(1 as u128)?;
+//     msg!("numerator {:?}", numerator);
+//     let denominator = collateral;
+//     msg!("denominator {:?}", denominator);
+
+
+//     //let ratio = ((numerator.checked_div(denominator)?).checked_pow((to_u128(2).checked_div(to_u128(3))?))?).checked_sub(1 as u128)?;
+//     let ratio = numerator.checked_div(denominator)? as f64;
+//     msg!("ratio {:?}", ratio);
+//     let connector_weight = 2f32.checked_div(3 as f32)?;
+//     msg!("connector_weight {:?}", connector_weight);
+//     let pow_ratio = ratio.powf(connector_weight as f32)?;
+//     msg!("pow_ratio {:?}", pow_ratio);
+//     let scale = pow_ratio.checked_sub(1 as u64)?;
+//     msg!("scale {:?}", scale);
+
+//     let supply = token_supply.checked_sub(6900420000000000000 as u128)?;
+//     msg!("supply {:?}", supply);
+//     let result = supply.checked_mul(scale as u128)?;
+//     msg!("result {:?}", result);
+
+//     Some(
+//         BuyAmt{
+//             adjusted_amount_in: adjusted_amount_in,
+//             token_amt: result,
+//             fee_page: fee_page,
+//             fee_provider: fee_provider
+//         }
+//     )
+
+// }
+
 impl PrintProgramError for VisionError {
     fn print<E>(&self)
     where
@@ -410,7 +311,15 @@ impl PrintProgramError for VisionError {
             },
             VisionError::IncorrectSwapAccount => {
                 msg!("Error: Address of the provided swap token account is incorrect")
-            }
+            },
+            VisionError::ZeroTradingTokens => {
+                msg!("Error: Given pool token amount results in zero trading tokens")
+            },
+            VisionError::ExceededSlippage => {
+                msg!("Error: Swap instruction exceeds desired slippage limit")
+            },
+            VisionError::ConversionFailure => msg!("Error: Conversion to or from u64 failed."),
+            VisionError::Overflow => msg!("Error: Operation overflowed.")
         }
     }
 }
