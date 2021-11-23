@@ -23,6 +23,10 @@ pub enum VisionError {
     #[error("Invalid pda associated token address")]
     InvalidAssociatedPdaTokenAddress,
 
+    // Invalid pda associated token address
+    #[error("Invalid swapper associated token address")]
+    InvalidAssociatedSwapperTokenAddress,
+
     /// Address of the provided swap token account is incorrect.
     #[error("Address of the provided swap token account is incorrect")]
     IncorrectSwapAccount,

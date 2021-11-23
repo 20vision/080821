@@ -155,7 +155,7 @@ import { connect } from 'socket.io-client';
 import BN from 'bn.js';
 import assert from 'assert';
 const SYSTEM_PROGRAM_ID = new PublicKey('11111111111111111111111111111111')
-const VisionProgramId = new PublicKey('7CCE28seDLLwoT1GMfj8zBBN2UDXktS5ktMvc1n9StGB')
+const VisionProgramId = new PublicKey('4vmi9yrsYrAyDn9NsgueRZvcuXAjoADA4VCKR3zxmLhh')
 
 import * as BufferLayout from "buffer-layout";
 
@@ -197,31 +197,21 @@ const swap = async(walletPublicKey, signTransaction, tokenMint) => {
   // Accounts sent to Contract
   const keys = [
     // Funder - Pays for funding and first swap
+    {pubkey: walletPublicKey, isSigner: true, isWritable: true},
+    // Funder - Associated Token Address
+    {pubkey: user_associatedTokenAddress, isSigner: false, isWritable: true},
+    // Funder - Pays for funding and first swap
     {pubkey: pda, isSigner: false, isWritable: true},
     // Funder - Pays for funding and first swap
     {pubkey: tokenMint, isSigner: false, isWritable: true},
-    // // Funder - Pays for funding and first swap
-    // {pubkey: walletPublicKey, isSigner: true, isWritable: true},
-    // // Funder - Associated Token Address
-    // {pubkey: user_associatedTokenAddress, isSigner: false, isWritable: true},
-    // // PDA
-    // {pubkey: pda, isSigner: false, isWritable: true},
-    // // Pda - Associated Token Address 
-    // {pubkey: pda_associatedTokenAddress, isSigner: false, isWritable: true},
-    // // Fee Page Collector
-    // {pubkey: feeCollectorPage, isSigner: false, isWritable: true},
-    // // Fee Provider Collector
-    // {pubkey: feeCollectorProvider, isSigner: false, isWritable: true},
-    // // Mint PubKey
-    // {pubkey: tokenMint, isSigner: false, isWritable: false},
-    // // For invoke_signed - To create Accounts
-    // {pubkey: SystemProgram.programId, isSigner: false, isWritable: false},
-    // // Associated Token Program Id for creating token account
-    // {pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false},
-    // // For invoking - To create Mint & Mint Account
-    // {pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false},
-    // // Rent Sysvar for Token Program (e.g. Initializing mint)
-    // {pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false},
+    // For invoke_signed - To create Accounts
+    {pubkey: SystemProgram.programId, isSigner: false, isWritable: false},
+    // Associated Token Program Id for creating token account
+    {pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false},
+    // For invoking - To create Mint & Mint Account
+    {pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false},
+    // Rent Sysvar for Token Program (e.g. Initializing mint)
+    {pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false},
   ]
   
   // Data sent to Contract as Buffer
@@ -234,7 +224,7 @@ const swap = async(walletPublicKey, signTransaction, tokenMint) => {
   dataLayout.encode(
     {
       instruction: 1,
-      amountIn: new Numberu64(5000000000000000).toBuffer(),
+      amountIn: new Numberu64(30000000000).toBuffer(),
       minimumAmountOut: new Numberu64(1).toBuffer(),
     },
     data

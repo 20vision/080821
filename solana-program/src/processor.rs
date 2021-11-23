@@ -187,28 +187,95 @@ impl Processor {
     ) -> Result<(), ProgramError> {
         let account_info_iter = &mut accounts.iter();
         
+        let payer_info = next_account_info(account_info_iter)?; // Signer & Writable
+        let payer_associated_token_address_info = next_account_info(account_info_iter)?; // Writable
         let pda_info = next_account_info(account_info_iter)?; // Writable
         let mint_info = next_account_info(account_info_iter)?; // Writable
+        let system_program_info = next_account_info(account_info_iter)?; // X
+        let associated_token_program_info = next_account_info(account_info_iter)?; // X
+        let token_program_info = next_account_info(account_info_iter)?; // X
+        let rent_sysvar_info = next_account_info(account_info_iter)?; // X
 
         let rent = Rent::get()?;
 
     // VARIABLES
+        let swap_state = PageTokenSwap::unpack_unchecked(&pda_info.data.borrow())?;
+        let bump_seed = swap_state.bump_seed as u8;
+        let pda_info_derived = &Pubkey::create_program_address(&[&mint_info.key.to_bytes(), &[bump_seed]], program_id)?;
+
+        if pda_info_derived != pda_info.key{
+            return Err(VisionError::InvalidProgramAddress.into());
+        }
+        
     // tokenSupply * ((1+amtPaid/colleteral)^CW -1)
+
         let mint_state = spl_token::state::Mint::unpack(&mint_info.data.borrow())?;
         let token_supply = mint_state.supply as u128;
         let rent_payed = rent.minimum_balance(PageTokenSwap::LEN);
         let collateral = pda_info.lamports().checked_sub(rent_payed).ok_or(VisionError::Overflow)?;
+        let division = ((((1f64 + amount_in as f64).powf(0.60606f64)) / ((collateral as f64).powf(0.60606f64))) - 1f64).round() as u128;
+        let result = division.checked_mul(token_supply).ok_or(VisionError::Overflow)?;
+        msg!("result {:?}", result);
 
-        let numerator = ((1f64 + amount_in as f64).powf(0.60606f64) as u128).checked_mul(token_supply).ok_or(VisionError::Overflow)?;
-        msg!("numerator: {:?}", numerator);
-        let denominator = (collateral as f64).powf(0.60606f64) as u128;
-        msg!("denominator: {:?}", denominator);
+        if result < minimum_amount_out as u128 {
+            return Err(VisionError::ExceededSlippage.into());
+        }
 
-        let division = numerator.checked_div(denominator).ok_or(VisionError::Overflow)?;
-        msg!("division: {:?}", division);
+        if spl_associated_token_account::get_associated_token_address(payer_info.key, mint_info.key) != *payer_associated_token_address_info.key{
+            return Err(VisionError::InvalidAssociatedSwapperTokenAddress.into());
+        }
 
-        let result = division.checked_sub(token_supply).ok_or(VisionError::Overflow)?;
-        msg!("Result: {:?}", result);
+        invoke(
+            &spl_associated_token_account::create_associated_token_account(
+                payer_info.key,
+                payer_info.key,
+                mint_info.key
+            ),
+            &[
+                payer_info.clone(),
+                payer_associated_token_address_info.clone(),
+                payer_info.clone(),
+                mint_info.clone(),
+                system_program_info.clone(),
+                token_program_info.clone(),
+                rent_sysvar_info.clone(),
+                associated_token_program_info.clone()
+            ]
+        )?;
+
+        invoke_signed(
+            &spl_token::instruction::mint_to(
+                token_program_info.key,
+                mint_info.key,
+                payer_associated_token_address_info.key,
+                pda_info.key,
+                &[],
+                result as u64
+            )?,
+            &[
+                token_program_info.clone(),
+                mint_info.clone(),
+                payer_associated_token_address_info.clone(),
+                pda_info.clone()
+            ],
+            &[&[
+                &mint_info.key.to_bytes(),
+                &[bump_seed]
+            ]]
+        )?;
+
+        invoke(
+            &system_instruction::transfer(
+                payer_info.key,
+                pda_info.key,
+                amount_in as u64
+            ),
+            &[
+                system_program_info.clone(),
+                payer_info.clone(),
+                pda_info.clone()
+            ]
+        )?;
 
         Ok(())
 
@@ -240,61 +307,6 @@ fn to_f64(val: i32) -> Result<f64, VisionError> {
     val.try_into().map_err(|_| VisionError::ConversionFailure)
 }
 
-// pub fn calculate_buy_amt(
-//     fee: u128,
-//     token_supply: u128,
-//     amount_in: u128,
-//     collateral: u128
-// ) -> Option<BuyAmt> {
-//     msg!("fee {:?}", fee);
-//     msg!("token_supply: {:?}", token_supply);
-//     msg!("amount_in {:?}", amount_in);
-//     msg!("colleteral {:?}", collateral);
-
-//     let fee_page = (amount_in.checked_mul(fee)?).checked_div(100000 as u128)?;
-//     msg!("fee_page {:?}", fee_page);
-//     let fee_provider = (amount_in.checked_mul(2 as u128)?).checked_div(100 as u128)?;
-//     msg!("fee_provider {:?}", fee_provider);
-
-//     let total_fee = fee_page.checked_add(fee_provider)?;
-//     msg!("total_fee {:?}", total_fee);
-
-//     let adjusted_amount_in = amount_in.checked_sub(total_fee)?;
-//     msg!("adjusted_amount_in {:?}", adjusted_amount_in);
-
-
-//     let numerator = adjusted_amount_in.checked_add(1 as u128)?;
-//     msg!("numerator {:?}", numerator);
-//     let denominator = collateral;
-//     msg!("denominator {:?}", denominator);
-
-
-//     //let ratio = ((numerator.checked_div(denominator)?).checked_pow((to_u128(2).checked_div(to_u128(3))?))?).checked_sub(1 as u128)?;
-//     let ratio = numerator.checked_div(denominator)? as f64;
-//     msg!("ratio {:?}", ratio);
-//     let connector_weight = 2f32.checked_div(3 as f32)?;
-//     msg!("connector_weight {:?}", connector_weight);
-//     let pow_ratio = ratio.powf(connector_weight as f32)?;
-//     msg!("pow_ratio {:?}", pow_ratio);
-//     let scale = pow_ratio.checked_sub(1 as u64)?;
-//     msg!("scale {:?}", scale);
-
-//     let supply = token_supply.checked_sub(6900420000000000000 as u128)?;
-//     msg!("supply {:?}", supply);
-//     let result = supply.checked_mul(scale as u128)?;
-//     msg!("result {:?}", result);
-
-//     Some(
-//         BuyAmt{
-//             adjusted_amount_in: adjusted_amount_in,
-//             token_amt: result,
-//             fee_page: fee_page,
-//             fee_provider: fee_provider
-//         }
-//     )
-
-// }
-
 impl PrintProgramError for VisionError {
     fn print<E>(&self)
     where
@@ -308,6 +320,9 @@ impl PrintProgramError for VisionError {
             },
             VisionError::InvalidAssociatedPdaTokenAddress => {
                 msg!("Error: Invalid pda associated token address")
+            },
+            VisionError::InvalidAssociatedSwapperTokenAddress => {
+                msg!("Error: Invalid swapper associated token address")
             },
             VisionError::IncorrectSwapAccount => {
                 msg!("Error: Address of the provided swap token account is incorrect")
