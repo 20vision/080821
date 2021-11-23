@@ -155,7 +155,7 @@ import { connect } from 'socket.io-client';
 import BN from 'bn.js';
 import assert from 'assert';
 const SYSTEM_PROGRAM_ID = new PublicKey('11111111111111111111111111111111')
-const VisionProgramId = new PublicKey('4vmi9yrsYrAyDn9NsgueRZvcuXAjoADA4VCKR3zxmLhh')
+const VisionProgramId = new PublicKey('EjqiYVGzoao5cVKjM1hB5M9aC2YDMNqywopnpZvofv9a')
 
 import * as BufferLayout from "buffer-layout";
 
@@ -200,6 +200,10 @@ const swap = async(walletPublicKey, signTransaction, tokenMint) => {
     {pubkey: walletPublicKey, isSigner: true, isWritable: true},
     // Funder - Associated Token Address
     {pubkey: user_associatedTokenAddress, isSigner: false, isWritable: true},
+    // Page Fee Collector
+    {pubkey: feeCollectorPage, isSigner: false, isWritable: true},
+    // Provider Fee Collector
+    {pubkey: feeCollectorProvider, isSigner: false, isWritable: true},
     // Funder - Pays for funding and first swap
     {pubkey: pda, isSigner: false, isWritable: true},
     // Funder - Pays for funding and first swap
@@ -251,12 +255,11 @@ const swap = async(walletPublicKey, signTransaction, tokenMint) => {
 }
 
 const fundPageToken = async(walletPublicKey, signTransaction) => {
-
   const connection = new Connection('http://localhost:8899', 'confirmed')
   const tx = new Transaction()
 
 //! Fetch Fee collector from DB, for now random pubkey:
-  const feeCollector = new PublicKey('HBwQjmrR4eHYPGDE3aQD8DTwoVYVgtd22e19L75v1NGj')
+  const feeCollector = new PublicKey('G1tUHWDaR1Jerzz9MdwPfxoXVMmwT6kU4DmncZmke5gb')
 
   const new_mint_keypair = Keypair.generate();
 

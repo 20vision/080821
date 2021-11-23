@@ -69,9 +69,6 @@ impl Processor {
         if spl_associated_token_account::get_associated_token_address(pda_info.key, new_mint_info.key) != *pda_associated_token_info.key{
             return Err(VisionError::InvalidAssociatedPdaTokenAddress.into());
         }
-        if fee_collector_info.lamports() == 0{
-            return Err(VisionError::IncorrectSwapAccount.into());
-        }
     //
     // MAIN
     // 
@@ -79,7 +76,7 @@ impl Processor {
 
         // Collateral for one single token is 31 Lamports
         //m*CW*tokenSupply^(1/CW)*10^9 = collateral
-        let collateral = 31 as u64;
+        let collateral = 36 as u64;
         let collateral_rent = collateral.checked_add(rent.minimum_balance(PageTokenSwap::LEN)).ok_or(VisionError::Overflow)?;
         invoke_signed(
             &system_instruction::create_account(
@@ -161,7 +158,7 @@ impl Processor {
                 pda_associated_token_info.key,
                 pda_info.key,
                 &[],
-                1 as u64
+                1000000000 as u64
             )?,
             &[
                 token_program_info.clone(),
@@ -189,6 +186,8 @@ impl Processor {
         
         let payer_info = next_account_info(account_info_iter)?; // Signer & Writable
         let payer_associated_token_address_info = next_account_info(account_info_iter)?; // Writable
+        let page_fee_collector_info = next_account_info(account_info_iter)?; // Writable
+        let provider_fee_collector_info = next_account_info(account_info_iter)?; // Writable
         let pda_info = next_account_info(account_info_iter)?; // Writable
         let mint_info = next_account_info(account_info_iter)?; // Writable
         let system_program_info = next_account_info(account_info_iter)?; // X
@@ -206,18 +205,38 @@ impl Processor {
         if pda_info_derived != pda_info.key{
             return Err(VisionError::InvalidProgramAddress.into());
         }
-        
+
+        let swap_state = PageTokenSwap::unpack(&pda_info.data.borrow())?;
+
+// + Check if valid provider fee collector key
+        if *page_fee_collector_info.key != swap_state.fee_collector_pubkey {
+            return Err(VisionError::InvalidFeeAccount.into());
+        }
     // tokenSupply * ((1+amtPaid/colleteral)^CW -1)
 
         let mint_state = spl_token::state::Mint::unpack(&mint_info.data.borrow())?;
         let token_supply = mint_state.supply as u128;
         let rent_payed = rent.minimum_balance(PageTokenSwap::LEN);
         let collateral = pda_info.lamports().checked_sub(rent_payed).ok_or(VisionError::Overflow)?;
-        let division = ((((1f64 + amount_in as f64).powf(0.60606f64)) / ((collateral as f64).powf(0.60606f64))) - 1f64).round() as u128;
-        let result = division.checked_mul(token_supply).ok_or(VisionError::Overflow)?;
-        msg!("result {:?}", result);
+        let fee_provider = (0.02f64*(amount_in as f64)).round() as u64;
+        msg!("fee_provider {:?}", fee_provider);
+        let fee_page = (((swap_state.fee as f64)/ 100000f64)*(amount_in as f64)).round() as u64;
+        msg!("fee_page {:?}", fee_page);
+        let fee = fee_provider.checked_add(fee_page).ok_or(VisionError::Overflow)?;
+        let adjusted_amount_in = amount_in.checked_sub(fee).ok_or(VisionError::Overflow)?;
+        msg!("adjusted_amount_in {:?}", adjusted_amount_in);
 
-        if result < minimum_amount_out as u128 {
+
+        let numerator = (1f64 + adjusted_amount_in as f64).powf(0.60976f64);
+        msg!("numerator {:?}", numerator);
+        let denominator = (collateral as f64).powf(0.60976f64);
+        msg!("denominator {:?}", denominator);
+        let result = (((numerator / denominator)- 1f64) * token_supply as f64);
+        msg!("result {:?}", result);
+        let result_u128 = result.round() as u128;
+        msg!("result_u128 {:?}", result_u128);
+
+        if result_u128 < minimum_amount_out as u128 {
             return Err(VisionError::ExceededSlippage.into());
         }
 
@@ -268,12 +287,38 @@ impl Processor {
             &system_instruction::transfer(
                 payer_info.key,
                 pda_info.key,
-                amount_in as u64
+                adjusted_amount_in as u64
             ),
             &[
                 system_program_info.clone(),
                 payer_info.clone(),
                 pda_info.clone()
+            ]
+        )?;
+
+        invoke(
+            &system_instruction::transfer(
+                payer_info.key,
+                provider_fee_collector_info.key,
+                fee_provider as u64
+            ),
+            &[
+                system_program_info.clone(),
+                payer_info.clone(),
+                provider_fee_collector_info.clone()
+            ]
+        )?;
+
+        invoke(
+            &system_instruction::transfer(
+                payer_info.key,
+                page_fee_collector_info.key,
+                fee_page as u64
+            ),
+            &[
+                system_program_info.clone(),
+                payer_info.clone(),
+                page_fee_collector_info.clone()
             ]
         )?;
 
@@ -318,6 +363,7 @@ impl PrintProgramError for VisionError {
             VisionError::InvalidProgramAddress => {
                 msg!("Error: Invalid program address generated from bump seed and key")
             },
+            VisionError::InvalidFeeAccount => msg!("Error: Invalid fee account"),
             VisionError::InvalidAssociatedPdaTokenAddress => {
                 msg!("Error: Invalid pda associated token address")
             },

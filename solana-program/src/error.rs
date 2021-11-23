@@ -27,6 +27,10 @@ pub enum VisionError {
     #[error("Invalid swapper associated token address")]
     InvalidAssociatedSwapperTokenAddress,
 
+    // User provided invalid fee account for swap
+    #[error("InvalidFeeAccount")]
+    InvalidFeeAccount,
+
     /// Address of the provided swap token account is incorrect.
     #[error("Address of the provided swap token account is incorrect")]
     IncorrectSwapAccount,
