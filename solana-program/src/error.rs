@@ -31,6 +31,18 @@ pub enum VisionError {
     #[error("InvalidFeeAccount")]
     InvalidFeeAccount,
 
+    // User changed Fee to invalid amount. valid:(0 - 50000)
+    #[error("InvalidFee")]
+    InvalidFee,
+
+    // Invalid Token Amount - Contract would hold less than 1 Token
+    #[error("InvalidTokenAmount")]
+    InvalidTokenAmount,
+
+    // Invalid Token Amount - Contract would hold less than 36 sol - The equivalent of the last Token
+    #[error("InvalidSolAmount")]
+    InvalidSolAmount,
+
     /// Address of the provided swap token account is incorrect.
     #[error("Address of the provided swap token account is incorrect")]
     IncorrectSwapAccount,

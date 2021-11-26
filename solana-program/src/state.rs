@@ -13,6 +13,9 @@ pub struct PageTokenSwap {
     /// bump_seed -> client side "findProgramAddress([-Mint PublicKey-], programId)"
     pub bump_seed: u8,
 
+    /// Pda bump seed for program derived address of Sol account
+    pub bump_seed_sol: u8,
+
     /// Fee from 0 - 50000.(0-50%). Will be divided by 100000 to create a precison of 0.001%
     pub fee: u16,
 
@@ -35,26 +38,29 @@ impl IsInitialized for PageTokenSwap {
 }
 
 impl Pack for PageTokenSwap {
-    const LEN: usize = 36;
+    const LEN: usize = 37;
 
     fn pack_into_slice(&self, output: &mut [u8]) {
         let output = array_mut_ref![output, 0, PageTokenSwap::LEN];
         let(
             is_initialized_dst,
             bump_seed_dst,
+            bump_seed_sol_dst,
             fee_dst,
             fee_collector_pubkey_dst
-        ) = mut_array_refs![output, 1, 1, 2, 32];
+        ) = mut_array_refs![output, 1, 1, 1, 2, 32];
 
         let PageTokenSwap {
             is_initialized,
             bump_seed,
+            bump_seed_sol,
             fee,
             fee_collector_pubkey
         } = self;
 
         is_initialized_dst[0] = *is_initialized as u8;
         bump_seed_dst[0] = *bump_seed;
+        bump_seed_sol_dst[0] = *bump_seed_sol;
         *fee_dst = fee.to_le_bytes();
         fee_collector_pubkey_dst.copy_from_slice(fee_collector_pubkey.as_ref());
     }
@@ -64,9 +70,10 @@ impl Pack for PageTokenSwap {
         let(
             is_initialized,
             bump_seed,
+            bump_seed_sol,
             fee,
             fee_collector_pubkey
-        ) = array_refs![input, 1, 1, 2, 32];
+        ) = array_refs![input, 1, 1, 1, 2, 32];
         let is_initialized = match is_initialized {
             [0] => false,
             [1] => true,
@@ -76,6 +83,7 @@ impl Pack for PageTokenSwap {
         Ok(PageTokenSwap{
             is_initialized,
             bump_seed: bump_seed[0],
+            bump_seed_sol: bump_seed_sol[0],
             fee: u16::from_le_bytes(*fee),
             fee_collector_pubkey: Pubkey::new_from_array(*fee_collector_pubkey)
         })
