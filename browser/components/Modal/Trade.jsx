@@ -155,18 +155,12 @@ import { connect } from 'socket.io-client';
 import BN from 'bn.js';
 import assert from 'assert';
 const SYSTEM_PROGRAM_ID = new PublicKey('11111111111111111111111111111111')
-const VisionProgramId = new PublicKey('5k2exr1KZLewJTF8ELspYPHZytfq58RES4Cvwje79VfV')
+const VisionProgramId = new PublicKey('2e3Y6KLzukn6AJy4fR7udDMdWNaqp1qMw9DDZsCrJCrV')
 
 import * as BufferLayout from "buffer-layout";
 
 const uint64Layout = (property = "uint64") => { 
   return BufferLayout.blob(8, property);
-};
-const uint16Layout = (property = "uint16") => { 
-  return BufferLayout.blob(8, property);
-};
-const publicKeyLayout = (property = "publicKey") => {
-  return BufferLayout.blob(32, property);
 };
 
 const fundPageToken = async(walletPublicKey, signTransaction) => {
@@ -250,8 +244,8 @@ const fundPageToken = async(walletPublicKey, signTransaction) => {
   }
 
   changeFee(walletPublicKey, signTransaction, new_mint_keypair.publicKey)
-  buy(walletPublicKey, signTransaction, new_mint_keypair.publicKey)
-  sell(walletPublicKey, signTransaction, new_mint_keypair.publicKey)
+  //buy(walletPublicKey, signTransaction, new_mint_keypair.publicKey)
+  //sell(walletPublicKey, signTransaction, new_mint_keypair.publicKey)
 }
 
 const buy = async(walletPublicKey, signTransaction, tokenMint) => {
@@ -435,8 +429,8 @@ const sell = async(walletPublicKey, signTransaction, tokenMint) => {
 
 const changeFee = async(walletPublicKey, signTransaction, tokenMint) => {
 
-  const feeCollectorProvider = walletPublicKey
-  const newfeeCollectorProvider = new PublicKey('G1tUHWDaR1Jerzz9MdwPfxoXVMmwT6kU4DmncZmke5gb')
+  const feeCollectorPage = walletPublicKey
+  const newfeeCollectorPage = new PublicKey('G1tUHWDaR1Jerzz9MdwPfxoXVMmwT6kU4DmncZmke5gb')
 
   const connection = new Connection('http://localhost:8899', 'confirmed')
   const tx = new Transaction()
@@ -450,9 +444,9 @@ const changeFee = async(walletPublicKey, signTransaction, tokenMint) => {
   // Accounts sent to Contract
   const keys = [
     // Previous fee collector
-    {pubkey: feeCollectorProvider, isSigner: true, isWritable: true},
+    {pubkey: feeCollectorPage, isSigner: true, isWritable: true},
     // New fee collector
-    {pubkey: newfeeCollectorProvider, isSigner: false, isWritable: true},
+    {pubkey: newfeeCollectorPage, isSigner: false, isWritable: true},
     // pda for data
     {pubkey: pda, isSigner: false, isWritable: true},
     // tokenmint to derive pda
@@ -464,13 +458,13 @@ const changeFee = async(walletPublicKey, signTransaction, tokenMint) => {
   // Data sent to Contract as Buffer
   const dataLayout = BufferLayout.struct([
     BufferLayout.u8('instruction'),
-    uint16Layout('fee'),
+    BufferLayout.u16('fee'),
   ])
   const data = Buffer.alloc(dataLayout.span);
   dataLayout.encode(
     {
       instruction: 3,
-      amountIn: new Numberu16(50000).toBuffer(),
+      fee: 50000,
     },
     data
   );

@@ -74,10 +74,10 @@ impl VisionInstruction {
     }
 
     fn unpack_u16(input: &[u8]) -> Result<(u16, &[u8]), ProgramError> {
-        if input.len() >= 8 {
-            let (amount, rest) = input.split_at(8);
+        if input.len() >= 2 {
+            let (amount, rest) = input.split_at(2);
             let amount = amount
-                .get(..8)
+                .get(..2)
                 .and_then(|slice| slice.try_into().ok())
                 .map(u16::from_le_bytes)
                 .ok_or(VisionError::InvalidInstruction)?;
