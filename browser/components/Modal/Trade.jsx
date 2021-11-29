@@ -155,7 +155,7 @@ import { connect } from 'socket.io-client';
 import BN from 'bn.js';
 import assert from 'assert';
 const SYSTEM_PROGRAM_ID = new PublicKey('11111111111111111111111111111111')
-const VisionProgramId = new PublicKey('2e3Y6KLzukn6AJy4fR7udDMdWNaqp1qMw9DDZsCrJCrV')
+const VisionProgramId = new PublicKey('HH4R2eAhV1YA9k2FsNDBzeBjW24HpVJVNzYeVywZsYg9')
 
 import * as BufferLayout from "buffer-layout";
 

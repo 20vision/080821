@@ -8,6 +8,7 @@ use solana_program::{
     program_error::{PrintProgramError, ProgramError},
     program_option::COption,
     program_pack::Pack,
+    pubkey,
     pubkey::Pubkey,
     sysvar::{rent::Rent, Sysvar},
     system_program
@@ -24,6 +25,8 @@ use spl_token::{
 use spl_associated_token_account;
 use std::convert::TryInto;
 
+static PROVIDER_FEE_COLLECTOR_ID: Pubkey = pubkey!("HBwQjmrR4eHYPGDE3aQD8DTwoVYVgtd22e19L75v1NGj");
+
 pub struct Processor {}
 
 impl Processor {
@@ -31,37 +34,50 @@ impl Processor {
         program_id: &Pubkey,
         accounts: &[AccountInfo]
     ) -> Result<(), ProgramError>{
-    // Accounts
         let account_info_iter = &mut accounts.iter();
-        let payer_info = next_account_info(account_info_iter)?; // Signer & Writable
-        let new_mint_info = next_account_info(account_info_iter)?; // Signer & Writable
-        let pda_info = next_account_info(account_info_iter)?; // Writable
-        let pda_associated_sol_info = next_account_info(account_info_iter)?; // Writable
-        let pda_associated_token_info = next_account_info(account_info_iter)?; // Writable
-        let system_program_info = next_account_info(account_info_iter)?; // X
-        let associated_token_program_info = next_account_info(account_info_iter)?; // X
-        let token_program_info = next_account_info(account_info_iter)?; // X
-        let rent_sysvar_info = next_account_info(account_info_iter)?; // X
-        let fee_collector_info = next_account_info(account_info_iter)?; // X
 
-    // Variables
+        let payer_info = next_account_info(account_info_iter)?;
+        let new_mint_info = next_account_info(account_info_iter)?;
+        let pda_info = next_account_info(account_info_iter)?;
+        let pda_associated_sol_info = next_account_info(account_info_iter)?;
+        let pda_associated_token_info = next_account_info(account_info_iter)?;
+        let system_program_info = next_account_info(account_info_iter)?;
+        let associated_token_program_info = next_account_info(account_info_iter)?;
+        let token_program_info = next_account_info(account_info_iter)?;
+        let rent_sysvar_info = next_account_info(account_info_iter)?;
+        let fee_collector_info = next_account_info(account_info_iter)?;
+
         let rent = Rent::get()?;
 
     // Checks
-        if new_mint_info.lamports() > 0{
+
+        // Payer Info
+        if !payer_info.is_signer {
+            return Err(VisionError::SignatureRequired.into()); 
+        }
+
+        // Mint info
+        if new_mint_info.lamports() > 0 {
             return Err(VisionError::AlreadyInUse.into());
         }
-        let (pda, bump_seed) = Pubkey::find_program_address(&[&new_mint_info.key.to_bytes()], program_id);
+        if !new_mint_info.is_signer{
+            return Err(VisionError::SignatureRequired.into()); 
+        }
+
+        // Pda Info
+        if pda_info.lamports() > 0{
+            return Err(VisionError::AlreadyInUse.into());
+        }
+        if *pda_info.key != Pubkey::find_program_address(&[&new_mint_info.key.to_bytes()], program_id){
+            return Err(VisionError::InvalidAccountAddress.into());
+        }
+
+
+
         let (pda_sol, bump_seed_sol) = Pubkey::find_program_address(&[&pda_info.key.to_bytes()], program_id);
 
         if pda_sol != *pda_associated_sol_info.key{
             return Err(VisionError::InvalidProgramAddress.into());
-        }
-        if *pda_info.key != pda {
-            return Err(VisionError::InvalidProgramAddress.into());
-        }
-        if pda_info.lamports() > 0{
-            return Err(VisionError::AlreadyInUse.into());
         }
         if system_program::ID != *system_program_info.key{
             return Err(VisionError::InvalidProgramAddress.into());
@@ -205,17 +221,17 @@ impl Processor {
     ) -> Result<(), ProgramError> {
         let account_info_iter = &mut accounts.iter();
         
-        let payer_info = next_account_info(account_info_iter)?; // Signer & Writable
-        let payer_associated_token_address_info = next_account_info(account_info_iter)?; // Writable
-        let page_fee_collector_info = next_account_info(account_info_iter)?; // Writable
-        let provider_fee_collector_info = next_account_info(account_info_iter)?; // Writable
-        let pda_info = next_account_info(account_info_iter)?; // Writable
-        let pda_associated_sol_info = next_account_info(account_info_iter)?; // Writable
-        let mint_info = next_account_info(account_info_iter)?; // Writable
-        let system_program_info = next_account_info(account_info_iter)?; // X
-        let associated_token_program_info = next_account_info(account_info_iter)?; // X
-        let token_program_info = next_account_info(account_info_iter)?; // X
-        let rent_sysvar_info = next_account_info(account_info_iter)?; // X
+        let payer_info = next_account_info(account_info_iter)?;
+        let payer_associated_token_address_info = next_account_info(account_info_iter)?;
+        let page_fee_collector_info = next_account_info(account_info_iter)?;
+        let provider_fee_collector_info = next_account_info(account_info_iter)?;
+        let pda_info = next_account_info(account_info_iter)?;
+        let pda_associated_sol_info = next_account_info(account_info_iter)?;
+        let mint_info = next_account_info(account_info_iter)?;
+        let system_program_info = next_account_info(account_info_iter)?;
+        let associated_token_program_info = next_account_info(account_info_iter)?;
+        let token_program_info = next_account_info(account_info_iter)?;
+        let rent_sysvar_info = next_account_info(account_info_iter)?;
 
         let rent = Rent::get()?;
 
@@ -231,6 +247,10 @@ impl Processor {
         let pda_sol_info_derived = &Pubkey::create_program_address(&[&pda_info.key.to_bytes(), &[bump_seed_sol]], program_id)?;
         if pda_sol_info_derived != pda_associated_sol_info.key{
             return Err(VisionError::InvalidProgramAddress.into());
+        }
+
+        if *provider_fee_collector_info.key != PROVIDER_FEE_COLLECTOR_ID {
+            return Err(VisionError::InvalidFeeAccount.into());
         }
 
         let swap_state = PageTokenSwap::unpack(&pda_info.data.borrow())?;
@@ -383,6 +403,11 @@ impl Processor {
         if pda_info_derived != pda_info.key{
             return Err(VisionError::InvalidProgramAddress.into());
         }
+
+        if *provider_fee_collector_info.key != PROVIDER_FEE_COLLECTOR_ID {
+            return Err(VisionError::InvalidFeeAccount.into());
+        }
+
         let pda_sol_info_derived = &Pubkey::create_program_address(&[&pda_info.key.to_bytes(), &[bump_seed_sol]], program_id)?;
         if pda_sol_info_derived != pda_associated_sol_info.key{
             return Err(VisionError::InvalidProgramAddress.into());
@@ -528,11 +553,11 @@ impl Processor {
     ) -> Result<(), ProgramError> {
         let account_info_iter = &mut accounts.iter();
 
-        let fee_collector_info = next_account_info(account_info_iter)?; // Signer & Writable
-        let new_fee_collector_info = next_account_info(account_info_iter)?; // Writable
-        let pda_info = next_account_info(account_info_iter)?; // Writable
-        let mint_info = next_account_info(account_info_iter)?; // X
-        let system_program_info = next_account_info(account_info_iter)?; // X
+        let fee_collector_info = next_account_info(account_info_iter)?;
+        let new_fee_collector_info = next_account_info(account_info_iter)?;
+        let pda_info = next_account_info(account_info_iter)?;
+        let mint_info = next_account_info(account_info_iter)?;
+        let system_program_info = next_account_info(account_info_iter)?;
 
         let rent = Rent::get()?;
 
@@ -614,8 +639,14 @@ impl PrintProgramError for VisionError {
         E: 'static + std::error::Error + DecodeError<E> + PrintProgramError + FromPrimitive,
     {
         match self {
+            VisionError::SignatureRequired => {
+                msg!("Error: Submitted Transaction is missing a signature")
+            },
+            VisionError::AlreadyInUse => msg!("Error: Keypair already in use"),
+            VisionError::InvalidAccountAddress => msg!("Error: Invalid Account Address Provided"),
+
+
             VisionError::InvalidInstruction => msg!("Error: InvalidInstruction"),
-            VisionError::AlreadyInUse => msg!("Error: Swap account already in use"),
             VisionError::InvalidProgramAddress => {
                 msg!("Error: Invalid program address generated from bump seed and key")
             },
