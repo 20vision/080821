@@ -202,6 +202,8 @@ const fundPageToken = async(walletPublicKey, signTransaction) => {
     {pubkey: pda_associatedSolAddress, isSigner: false, isWritable: true},
     // Pda Mint Account
     {pubkey: pda_associatedTokenAddress, isSigner: false, isWritable: true},
+    // Page Fee collector Pub Key
+    {pubkey: feeCollector, isSigner: false, isWritable: false},
     // For invoke_signed - To create Accounts
     {pubkey: SystemProgram.programId, isSigner: false, isWritable: false},
     // Associated Token Program Id for creating token account
@@ -210,8 +212,6 @@ const fundPageToken = async(walletPublicKey, signTransaction) => {
     {pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false},
     // Rent Sysvar for Token Program (e.g. Initializing mint)
     {pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false},
-    // Fee collector Pub Key
-    {pubkey: feeCollector, isSigner: false, isWritable: false},
   ]
 
   // Data sent to Contract as Buffer

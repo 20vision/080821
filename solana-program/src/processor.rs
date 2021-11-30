@@ -34,6 +34,9 @@ impl Processor {
         program_id: &Pubkey,
         accounts: &[AccountInfo]
     ) -> Result<(), ProgramError>{
+    
+    // Accounts
+
         let account_info_iter = &mut accounts.iter();
 
         let payer_info = next_account_info(account_info_iter)?;
@@ -41,13 +44,21 @@ impl Processor {
         let pda_info = next_account_info(account_info_iter)?;
         let pda_associated_sol_info = next_account_info(account_info_iter)?;
         let pda_associated_token_info = next_account_info(account_info_iter)?;
+        let fee_collector_info = next_account_info(account_info_iter)?;
         let system_program_info = next_account_info(account_info_iter)?;
         let associated_token_program_info = next_account_info(account_info_iter)?;
         let token_program_info = next_account_info(account_info_iter)?;
         let rent_sysvar_info = next_account_info(account_info_iter)?;
-        let fee_collector_info = next_account_info(account_info_iter)?;
 
+    // Variables
+        let (pda, bump_seed) = Pubkey::find_program_address(&[&new_mint_info.key.to_bytes()], program_id);
+        let (pda_sol, bump_seed_sol) = Pubkey::find_program_address(&[&pda_info.key.to_bytes()], program_id);
+
+        
         let rent = Rent::get()?;
+
+        // Minimum Collateral(Sol) needed for AMM to Mint the first Token to the Associated Token Account
+        let collateral = 36 as u64;
 
     // Checks
 
@@ -65,41 +76,55 @@ impl Processor {
         }
 
         // Pda Info
-        if pda_info.lamports() > 0{
+        if pda_info.lamports() > 0 {
             return Err(VisionError::AlreadyInUse.into());
         }
-        if *pda_info.key != Pubkey::find_program_address(&[&new_mint_info.key.to_bytes()], program_id){
+        if *pda_info.key != pda{
             return Err(VisionError::InvalidAccountAddress.into());
         }
 
+        // Pda Associated Sol Info
+        if pda_associated_sol_info.lamports() > 0 {
+            return Err(VisionError::AlreadyInUse.into());
+        }
+        if *pda_associated_sol_info.key != pda_sol{
+            return Err(VisionError::InvalidAccountAddress.into());
+        }
+        msg!("Rent exemption", &Rent.free());
 
+        // Pda Associated Token Info
+        if pda_associated_token_info.lamports() > 0 {
+            return Err(VisionError::AlreadyInUse.into());
+        }
+        if *pda_associated_token_info.key != spl_associated_token_account::get_associated_token_address(pda_info.key, new_mint_info.key){
+            return Err(VisionError::InvalidAccountAddress.into());
+        }
 
-        let (pda_sol, bump_seed_sol) = Pubkey::find_program_address(&[&pda_info.key.to_bytes()], program_id);
+        // Fee Collector
+        if (fee_collector_info.lamports() > 0) && (fee_collector_info.owner != system_program::ID){
+            return Err(VisionError::InvalidAccountOnwerProgram.into());
+        }
 
-        if pda_sol != *pda_associated_sol_info.key{
+        // System Program
+        if *system_program_info.key != system_program::ID{
             return Err(VisionError::InvalidProgramAddress.into());
         }
-        if system_program::ID != *system_program_info.key{
+
+        // Associated Token Program Id
+        if *associated_token_program_info.key != spl_associated_token_account::ID{
             return Err(VisionError::InvalidProgramAddress.into());
         }
-        if spl_associated_token_account::ID != *associated_token_program_info.key{
+
+        // Token Program Id
+        if *token_program_info.key != spl_token::ID{
             return Err(VisionError::InvalidProgramAddress.into());
         }
-        if spl_token::ID != *token_program_info.key{
-            return Err(VisionError::InvalidProgramAddress.into());
-        }
-        if spl_associated_token_account::get_associated_token_address(pda_info.key, new_mint_info.key) != *pda_associated_token_info.key{
-            return Err(VisionError::InvalidAssociatedPdaTokenAddress.into());
-        }
+
     //
     // MAIN
     // 
     //Create PDA Account & store State in it
 
-        // Collateral for one single token is 31 Lamports
-        //m*CW*tokenSupply^(1/CW)*10^9 = collateral
-        let collateral = 36 as u64;
-        msg!("rent: {:?}", rent.minimum_balance(0 as usize));
         let collateral_rent = collateral.checked_add(rent.minimum_balance(0 as usize)).ok_or(VisionError::Overflow)?;
         invoke_signed(
             &system_instruction::create_account(
@@ -255,7 +280,7 @@ impl Processor {
 
         let swap_state = PageTokenSwap::unpack(&pda_info.data.borrow())?;
 
-// + Check if valid provider fee collector key
+// + Check if valid provider fee collector key + Check ownership of Accounts
         if *page_fee_collector_info.key != swap_state.fee_collector_pubkey {
             return Err(VisionError::InvalidFeeAccount.into());
         }
@@ -644,12 +669,14 @@ impl PrintProgramError for VisionError {
             },
             VisionError::AlreadyInUse => msg!("Error: Keypair already in use"),
             VisionError::InvalidAccountAddress => msg!("Error: Invalid Account Address Provided"),
+            VisionError::InvalidProgramAddress => {
+                msg!("Error: Invalid program id")
+            },
+            VisionError::InvalidAccountOnwerProgram => msg!("Error: Invalid Account Owner Program"),
+
 
 
             VisionError::InvalidInstruction => msg!("Error: InvalidInstruction"),
-            VisionError::InvalidProgramAddress => {
-                msg!("Error: Invalid program address generated from bump seed and key")
-            },
             VisionError::InvalidFeeAccount => msg!("Error: Invalid fee account"),
             VisionError::InvalidAssociatedPdaTokenAddress => {
                 msg!("Error: Invalid pda associated token address")
