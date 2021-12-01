@@ -54,11 +54,9 @@ impl Processor {
         let (pda, bump_seed) = Pubkey::find_program_address(&[&new_mint_info.key.to_bytes()], program_id);
         let (pda_sol, bump_seed_sol) = Pubkey::find_program_address(&[&pda_info.key.to_bytes()], program_id);
 
-        
-        let rent = Rent::get()?;
-
         // Minimum Collateral(Sol) needed for AMM to Mint the first Token to the Associated Token Account
         let collateral = 36 as u64;
+        let collateral_rent = collateral.checked_add((Rent::get()?).minimum_balance(0 as usize)).ok_or(VisionError::Overflow)?;
 
     // Checks
 
@@ -90,7 +88,6 @@ impl Processor {
         if *pda_associated_sol_info.key != pda_sol{
             return Err(VisionError::InvalidAccountAddress.into());
         }
-        msg!("Rent exemption", &Rent.free());
 
         // Pda Associated Token Info
         if pda_associated_token_info.lamports() > 0 {
@@ -101,7 +98,7 @@ impl Processor {
         }
 
         // Fee Collector
-        if (fee_collector_info.lamports() > 0) && (fee_collector_info.owner != system_program::ID){
+        if (fee_collector_info.lamports() > 0) && (*fee_collector_info.owner != system_program::ID){
             return Err(VisionError::InvalidAccountOnwerProgram.into());
         }
 
@@ -120,17 +117,21 @@ impl Processor {
             return Err(VisionError::InvalidProgramAddress.into());
         }
 
+        // Rent Sysvar Id
+        if *rent_sysvar_info.key != solana_program::sysvar::rent::ID{
+            return Err(VisionError::InvalidProgramAddress.into());
+        }
+
     //
     // MAIN
     // 
     //Create PDA Account & store State in it
 
-        let collateral_rent = collateral.checked_add(rent.minimum_balance(0 as usize)).ok_or(VisionError::Overflow)?;
         invoke_signed(
             &system_instruction::create_account(
                 payer_info.key,
                 pda_info.key,
-                rent.minimum_balance(PageTokenSwap::LEN),
+                (Rent::get()?).minimum_balance(PageTokenSwap::LEN),
                 PageTokenSwap::LEN as u64,
                 program_id,
             ),
@@ -169,7 +170,7 @@ impl Processor {
             &system_instruction::create_account(
                 payer_info.key,
                 new_mint_info.key,
-                rent.minimum_balance(Mint::LEN),
+                (Rent::get()?).minimum_balance(Mint::LEN),
                 Mint::LEN as u64,
                 token_program_info.key,
             ),
