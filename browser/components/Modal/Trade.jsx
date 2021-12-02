@@ -155,7 +155,7 @@ import { connect } from 'socket.io-client';
 import BN from 'bn.js';
 import assert from 'assert';
 const SYSTEM_PROGRAM_ID = new PublicKey('11111111111111111111111111111111')
-const VisionProgramId = new PublicKey('HH4R2eAhV1YA9k2FsNDBzeBjW24HpVJVNzYeVywZsYg9')
+const VisionProgramId = new PublicKey('634HCEE4YjKS7UAmKEj1i1kbTaD65hUAGr4Vw9EupgEM')
 
 import * as BufferLayout from "buffer-layout";
 
@@ -180,11 +180,6 @@ const fundPageToken = async(walletPublicKey, signTransaction) => {
     VisionProgramId,
   );
 
-  const [pda_associatedTokenAddress, _bump_seed] = await PublicKey.findProgramAddress(
-    [pda.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), new_mint_keypair.publicKey.toBuffer()],
-    ASSOCIATED_TOKEN_PROGRAM_ID,
-  )
-
   const [pda_associatedSolAddress, __bump_seed] = await PublicKey.findProgramAddress(
     [pda.toBuffer()],
     VisionProgramId,
@@ -200,14 +195,10 @@ const fundPageToken = async(walletPublicKey, signTransaction) => {
     {pubkey: pda, isSigner: false, isWritable: true},
     // Pda bump seed for program derived address of Sol account
     {pubkey: pda_associatedSolAddress, isSigner: false, isWritable: true},
-    // Pda Mint Account
-    {pubkey: pda_associatedTokenAddress, isSigner: false, isWritable: true},
     // Page Fee collector Pub Key
     {pubkey: feeCollector, isSigner: false, isWritable: false},
     // For invoke_signed - To create Accounts
     {pubkey: SystemProgram.programId, isSigner: false, isWritable: false},
-    // Associated Token Program Id for creating token account
-    {pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false},
     // For invoking - To create Mint & Mint Account
     {pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false},
     // Rent Sysvar for Token Program (e.g. Initializing mint)
@@ -243,8 +234,8 @@ const fundPageToken = async(walletPublicKey, signTransaction) => {
     console.log("error:",e)
   }
 
-  changeFee(walletPublicKey, signTransaction, new_mint_keypair.publicKey)
-  //buy(walletPublicKey, signTransaction, new_mint_keypair.publicKey)
+  //changeFee(walletPublicKey, signTransaction, new_mint_keypair.publicKey)
+  buy(walletPublicKey, signTransaction, new_mint_keypair.publicKey)
   //sell(walletPublicKey, signTransaction, new_mint_keypair.publicKey)
 }
 
@@ -330,7 +321,7 @@ const buy = async(walletPublicKey, signTransaction, tokenMint) => {
     tx.recentBlockhash = (await connection.getRecentBlockhash("confirmed")).blockhash
     tx.feePayer = walletPublicKey
     const signedTx = await signTransaction(tx)
-    await sendAndConfirmRawTransaction(connection, signedTx.serialize())
+    // CREATE PAYER ASSOCIATED TOKEN ACCOUNT await sendAndConfirmRawTransaction(connection, signedTx.serialize())
   }catch(e){
     console.log("error:",e)
   }

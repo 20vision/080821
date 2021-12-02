@@ -27,6 +27,14 @@ pub enum VisionError {
     #[error("Invalid program id")]
     InvalidAccountOnwerProgram,
 
+    /// Swap instruction exceeds desired slippage limit
+    #[error("Swap instruction exceeds desired slippage limit")]
+    ExceededSlippage,
+
+     /// Swap instruction exceeds desired slippage limit
+     #[error("Invalid Mint")]
+     InvalidMint,
+
 
 
 
@@ -66,10 +74,6 @@ pub enum VisionError {
     /// Given pool token amount results in zero trading tokens
     #[error("Given pool token amount results in zero trading tokens")]
     ZeroTradingTokens,
-
-    /// Swap instruction exceeds desired slippage limit
-    #[error("Swap instruction exceeds desired slippage limit")]
-    ExceededSlippage,
     
     /// ConversionFailure
     #[error("Conversion to u64 failed with an overflow or underflow")]
