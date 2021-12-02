@@ -31,9 +31,17 @@ pub enum VisionError {
     #[error("Swap instruction exceeds desired slippage limit")]
     ExceededSlippage,
 
-     /// Swap instruction exceeds desired slippage limit
-     #[error("Invalid Mint")]
-     InvalidMint,
+    /// Swap instruction exceeds desired slippage limit
+    #[error("Invalid Mint")]
+    InvalidMint,
+
+    /// Invalid User Input
+    #[error("Invalid Input")]
+    InvalidInput,
+
+    /// Invalid User Input
+    #[error("Reserve Error")]
+    ReserveError,
 
 
 

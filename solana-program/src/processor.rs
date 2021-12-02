@@ -25,7 +25,7 @@ use spl_token::{
 use spl_associated_token_account;
 use std::convert::TryInto;
 
-static PROVIDER_FEE_COLLECTOR_ID: Pubkey = pubkey!("HBwQjmrR4eHYPGDE3aQD8DTwoVYVgtd22e19L75v1NGj");
+static PROVIDER_FEE_COLLECTOR_ID: Pubkey = pubkey!("CohZhJhnHkdutc7iktrrGVUX4oUM3VctSX7DybSzRN4f");
 
 pub struct Processor {}
 
@@ -53,6 +53,7 @@ impl Processor {
         // Minimum Collateral(Sol) needed for AMM to Mint the first Token to the Associated Token Account
         let collateral = 36 as u64;
         let collateral_rent = collateral.checked_add((Rent::get()?).minimum_balance(0 as usize)).ok_or(VisionError::Overflow)?;
+        msg!("collateral_rent {:?}", collateral_rent);
 
     // Checks
 
@@ -83,7 +84,6 @@ impl Processor {
         // Pda Associated Sol Info
         if pda_associated_sol_info.lamports() > 0 {
             return Err(VisionError::AlreadyInUse.into());
-            msg!("OKK2");
         }
         if *pda_associated_sol_info.key != pda_sol{
             return Err(VisionError::InvalidAccountAddress.into());
@@ -103,14 +103,6 @@ impl Processor {
         if *token_program_info.key != spl_token::ID{
             return Err(VisionError::InvalidProgramAddress.into());
         }
-
-        // Rent Sysvar Id
-        if *rent_sysvar_info.key != solana_program::sysvar::rent::ID{
-            return Err(VisionError::InvalidProgramAddress.into());
-        }
-        msg!("OKK3");
-
-
     // EXECUTION
 
         // AMM
@@ -202,9 +194,7 @@ impl Processor {
         minimum_amount_out: u64
     ) -> Result<(), ProgramError> {
         let account_info_iter = &mut accounts.iter();
-    
     // Accounts
-
         let payer_info = next_account_info(account_info_iter)?;
         let payer_associated_token_address_info = next_account_info(account_info_iter)?;    
         let pda_info = next_account_info(account_info_iter)?;
@@ -214,16 +204,15 @@ impl Processor {
         let provider_fee_collector_info = next_account_info(account_info_iter)?;    
         let system_program_info = next_account_info(account_info_iter)?;
         let token_program_info = next_account_info(account_info_iter)?;
-
     // Variables
 
         let mint_state = spl_token::state::Mint::unpack(&mint_info.data.borrow())?;
 
         // AMM state
         let swap_state = PageTokenSwap::unpack(&pda_info.data.borrow())?;
-
+        msg!("swapstatefee: {:?} fee_collector_pubkey {:?}", swap_state.fee, swap_state.fee_collector_pubkey);
         // FEES
-        let page_fee = ((amount_in as f64) * ((100000f64) / (swap_state.fee as f64))).round() as u64;
+        let page_fee = ((amount_in as f64) * ((swap_state.fee as f64) / (100000f64))).round() as u64;
         let provider_fee = ((amount_in as f64) * 0.01f64).round() as u64;
 
         // Bancor formula "purchaseTargetAmount"
@@ -236,13 +225,15 @@ impl Processor {
             // Tokens received if input is amount_in
             let token_amt_from_sol_input = (token_supply * (((1f64 + adjusted_amount_in / reserve_balance).powf(0.60976f64)) - 1f64)).round() as u64;
 
-
     // Checks
 
         // Check slippage
-        if token_amt_from_sol_input < minimum_amount_out {
-            return Err(VisionError::ExceededSlippage.into());
-        }
+            if token_amt_from_sol_input < minimum_amount_out {
+                return Err(VisionError::ExceededSlippage.into());
+            }
+            if amount_in > payer_info.lamports() {
+                return Err(VisionError::InvalidInput.into());
+            }
 
         // Accounts
             if !payer_info.is_signer {
@@ -252,7 +243,7 @@ impl Processor {
                 return Err(VisionError::InvalidAccountOnwerProgram.into());
             }
             // Create Associated token account off-chain and check everything on-chain
-            if *payer_associated_token_address_info.owner != spl_associated_token_account::ID {
+            if *payer_associated_token_address_info.owner != spl_token::ID {
                 return Err(VisionError::InvalidAccountOnwerProgram.into());
             }
             if *payer_associated_token_address_info.key != spl_associated_token_account::get_associated_token_address(payer_info.key, mint_info.key){
@@ -265,11 +256,12 @@ impl Processor {
             if *pda_info.key != (Pubkey::create_program_address(&[&mint_info.key.to_bytes(), &[swap_state.bump_seed]], program_id)?) {
                 return Err(VisionError::InvalidAccountAddress.into());
             }
+            
 
             if *pda_associated_sol_info.key != (Pubkey::create_program_address(&[&pda_info.key.to_bytes(), &[swap_state.bump_seed_sol]], program_id)?) {
                 return Err(VisionError::InvalidAccountAddress.into());
             }
-            if *pda_associated_sol_info.owner != *program_id{
+            if *pda_associated_sol_info.owner != system_program::ID{
                 return Err(VisionError::InvalidAccountOnwerProgram.into());
             }
 
@@ -304,7 +296,6 @@ impl Processor {
             if *token_program_info.key != spl_token::ID{
                 return Err(VisionError::InvalidProgramAddress.into());
             }
-
     // EXECUTION
         
         invoke_signed(
@@ -327,7 +318,6 @@ impl Processor {
                 &[swap_state.bump_seed]
             ]]
         )?;
-
 
         // Pay for token
         invoke(
@@ -356,7 +346,6 @@ impl Processor {
                 provider_fee_collector_info.clone()
             ]
         )?;
-
         // Pay fee to page fee collector
         invoke(
             &system_instruction::transfer(
@@ -382,184 +371,158 @@ impl Processor {
         amount_in: u64,
         minimum_amount_out: u64
     ) -> Result<(), ProgramError> {
+        let account_info_iter = &mut accounts.iter();
+    // Accounts
+        let payer_info = next_account_info(account_info_iter)?;
+        let payer_associated_token_address_info = next_account_info(account_info_iter)?;    
+        let pda_info = next_account_info(account_info_iter)?;
+        let pda_associated_sol_info = next_account_info(account_info_iter)?;
+        let mint_info = next_account_info(account_info_iter)?;
+        let provider_fee_collector_info = next_account_info(account_info_iter)?;    
+        let system_program_info = next_account_info(account_info_iter)?;
+        let token_program_info = next_account_info(account_info_iter)?;
+    // Variables
+
+        let mint_state = spl_token::state::Mint::unpack(&mint_info.data.borrow())?;
+
+        // AMM state
+        let swap_state = PageTokenSwap::unpack(&pda_info.data.borrow())?;
+
+        // Bancor formula "saleTargetAmount"
+            // Token supply in circulation + initial 1(*10^9) token.
+            let token_supply = (((spl_token::state::Mint::unpack(&mint_info.data.borrow())?).supply as u64).checked_add(1000000000u64).ok_or(VisionError::Overflow)?) as f64;
+            // Reserve Balance - Rent payed for Rent exemption
+            let reserve_balance = (pda_associated_sol_info.lamports().checked_sub((((Rent::get()?).minimum_balance(0 as usize)) as u64)).ok_or(VisionError::Overflow)?) as f64;
+            // sol received if input is amount_in
+            let sol_amt_from_token_input = (reserve_balance * (1f64 - (1f64 - (amount_in as f64) / token_supply).powf(1f64 / 0.60976f64))).round() as u64;
+
+        // FEES
+            let provider_fee = ((sol_amt_from_token_input as f64) * 0.01f64).round() as u64;
+
+        let adjusted_sol_amt_from_token_input = sol_amt_from_token_input.checked_sub(provider_fee).ok_or(VisionError::Overflow)?;
+    
+    
+    // Checks
+
+        // Check output
+            if sol_amt_from_token_input > ((reserve_balance as u64).checked_sub(36u64).ok_or(VisionError::Overflow)?){
+                return Err(VisionError::ReserveError.into());
+            }
+            if adjusted_sol_amt_from_token_input < minimum_amount_out {
+                return Err(VisionError::ExceededSlippage.into());
+            }
+            if amount_in > (spl_token::state::Account::unpack(&payer_associated_token_address_info.data.borrow())?).amount {
+                return Err(VisionError::InvalidInput.into());
+            }
+        // Accounts
+            if !payer_info.is_signer {
+                return Err(VisionError::SignatureRequired.into()); 
+            }
+            if *payer_info.owner != system_program::ID {
+                return Err(VisionError::InvalidAccountOnwerProgram.into());
+            }
+            
+            if *payer_associated_token_address_info.owner != spl_token::ID {
+                return Err(VisionError::InvalidAccountOnwerProgram.into());
+            }
+            if *payer_associated_token_address_info.key != spl_associated_token_account::get_associated_token_address(payer_info.key, mint_info.key){
+                return Err(VisionError::InvalidAccountAddress.into());
+            }
+
+            if *pda_info.owner != *program_id{
+                return Err(VisionError::InvalidAccountOnwerProgram.into());
+            }
+            if *pda_info.key != (Pubkey::create_program_address(&[&mint_info.key.to_bytes(), &[swap_state.bump_seed]], program_id)?) {
+                return Err(VisionError::InvalidAccountAddress.into());
+            }
+            
+
+            if *pda_associated_sol_info.key != (Pubkey::create_program_address(&[&pda_info.key.to_bytes(), &[swap_state.bump_seed_sol]], program_id)?) {
+                return Err(VisionError::InvalidAccountAddress.into());
+            }
+            if *pda_associated_sol_info.owner != system_program::ID{
+                return Err(VisionError::InvalidAccountOnwerProgram.into());
+            }
+
+            if *mint_info.owner != spl_token::ID {
+                return Err(VisionError::InvalidAccountOnwerProgram.into());
+            }
+            if !mint_state.is_initialized {
+                return Err(VisionError::InvalidMint.into());
+            }
+            if COption::Some(*pda_info.key) != mint_state.mint_authority {
+                return Err(VisionError::InvalidMint.into());
+            }
+
+            if *provider_fee_collector_info.owner != system_program::ID{
+                return Err(VisionError::InvalidAccountOnwerProgram.into());
+            }
+            if *provider_fee_collector_info.key != PROVIDER_FEE_COLLECTOR_ID {
+                return Err(VisionError::InvalidAccountAddress.into());
+            }
+
+            if *system_program_info.key != system_program::ID{
+                return Err(VisionError::InvalidProgramAddress.into());
+            }
+
+            if *token_program_info.key != spl_token::ID{
+                return Err(VisionError::InvalidProgramAddress.into());
+            }
+
+    // EXECUTION
+
+            invoke_signed(
+                &system_instruction::transfer(
+                    pda_associated_sol_info.key,
+                    provider_fee_collector_info.key,
+                    provider_fee as u64
+                ),
+                &[
+                    system_program_info.clone(),
+                    pda_associated_sol_info.clone(),
+                    provider_fee_collector_info.clone()
+                ],
+                &[&[
+                    &pda_info.key.to_bytes(),
+                    &[swap_state.bump_seed_sol]
+                ]]
+            )?;
+    
+            invoke_signed(
+                &system_instruction::transfer(
+                    pda_associated_sol_info.key,
+                    payer_info.key,
+                    adjusted_sol_amt_from_token_input as u64
+                ),
+                &[
+                    system_program_info.clone(),
+                    pda_associated_sol_info.clone(),
+                    payer_info.clone()
+                ],
+                &[&[
+                    &pda_info.key.to_bytes(),
+                    &[swap_state.bump_seed_sol]
+                ]]
+            )?;
+    
+            invoke(
+                &spl_token::instruction::burn(
+                    token_program_info.key,
+                    payer_associated_token_address_info.key,
+                    mint_info.key,
+                    payer_info.key,
+                    &[],
+                    amount_in as u64
+                )?,
+                &[
+                    token_program_info.clone(),
+                    payer_associated_token_address_info.clone(),
+                    mint_info.clone(),
+                    payer_info.clone()
+                ]
+            )?;
         Ok(())
     }
-//     pub fn sell(
-//         program_id: &Pubkey,
-//         accounts: &[AccountInfo],
-//         amount_in: u64,
-//         minimum_amount_out: u64
-//     ) -> Result<(), ProgramError> {
-//         let account_info_iter = &mut accounts.iter();
-        
-//         let seller_info = next_account_info(account_info_iter)?; // Signer & Writable
-//         let seller_associated_token_address_info = next_account_info(account_info_iter)?; // Writable
-//         let provider_fee_collector_info = next_account_info(account_info_iter)?; // Writable
-//         let pda_info = next_account_info(account_info_iter)?; // Writable
-//         let pda_associated_sol_info = next_account_info(account_info_iter)?; // Writable
-//         let mint_info = next_account_info(account_info_iter)?; // Writable
-//         let system_program_info = next_account_info(account_info_iter)?; // X
-//         let token_program_info = next_account_info(account_info_iter)?; // X
-
-//         let rent = Rent::get()?;
-
-//         if seller_associated_token_address_info.lamports() == 0 {
-//             return Err(VisionError::InvalidAssociatedSwapperTokenAddress.into());
-//         }
-//         if spl_associated_token_account::get_associated_token_address(seller_info.key, mint_info.key) != *seller_associated_token_address_info.key{
-//             return Err(VisionError::InvalidAssociatedSwapperTokenAddress.into());
-//         }
-
-//         let swap_state = PageTokenSwap::unpack_unchecked(&pda_info.data.borrow())?;
-//         let bump_seed = swap_state.bump_seed as u8;
-//         let bump_seed_sol = swap_state.bump_seed_sol as u8;
-
-//         let pda_info_derived = &Pubkey::create_program_address(&[&mint_info.key.to_bytes(), &[bump_seed]], program_id)?;
-//         if pda_info_derived != pda_info.key{
-//             return Err(VisionError::InvalidProgramAddress.into());
-//         }
-
-//         if *provider_fee_collector_info.key != PROVIDER_FEE_COLLECTOR_ID {
-//             return Err(VisionError::InvalidFeeAccount.into());
-//         }
-
-//         let pda_sol_info_derived = &Pubkey::create_program_address(&[&pda_info.key.to_bytes(), &[bump_seed_sol]], program_id)?;
-//         if pda_sol_info_derived != pda_associated_sol_info.key{
-//             return Err(VisionError::InvalidProgramAddress.into());
-//         }
-
-//         let mint_state = spl_token::state::Mint::unpack(&mint_info.data.borrow())?;
-
-//         if (amount_in as u64) > ((mint_state.supply as u64).checked_sub(1000000000u64).ok_or(VisionError::Overflow)?) {
-//             return Err(VisionError::InvalidTokenAmount.into());
-//         }
-
-//         msg!("tokenSupply {:?}", mint_state.supply);
-//         msg!("amount_in {:?}", amount_in);
-
-//         let rent_payed = rent.minimum_balance(0 as usize);
-//         msg!("rent_payed {:?}", rent_payed);
-//         let reserve_balance = pda_associated_sol_info.lamports().checked_sub(rent_payed).ok_or(VisionError::Overflow)?;
-//         msg!("reserve_balance {:?}", reserve_balance);
-
-//         let sell_sol_amt = ((reserve_balance as f64) * (1f64 - (1f64 - (amount_in as f64) / ((mint_state.supply as u64).checked_add(1000000000u64) as f64)).powf(1f64 / 0.60976f64))).round() as u64;
-//         msg!("sell_sol_amt {:?}", sell_sol_amt);
-
-//         // let numerator = (1f64 + amount_in as f64).powf(1f64/0.60976f64);
-//         // msg!("numerator {:?}", numerator);
-//         // let denominator = (mint_state.supply as f64).powf(1f64/0.60976f64);
-//         // msg!("denominator {:?}", denominator);
-    
-//         // let result = (((numerator / denominator)- 1f64) * collateral as f64) * (-1f64);
-//         // msg!("result {:?}", result);
-//         // let result_u128 = result.round() as u128;
-//         // msg!("result_u128 {:?}", result_u128);
-//         if (sell_sol_amt as u64) > ((reserve_balance as u64).checked_sub(36u64).ok_or(VisionError::Overflow)?) {
-//             return Err(VisionError::InvalidSolAmount.into());
-//         }
-
-//         let fee_provider = (0.01f64*(sell_sol_amt as f64)).round() as u64;
-
-//         let adjusted_sell_sol_amt = sell_sol_amt.checked_sub(fee_provider as u64).ok_or(VisionError::Overflow)?;
-//         msg!("adjusted_sell_sol_amt {:?}", adjusted_sell_sol_amt);
-
-//         if adjusted_sell_sol_amt < (minimum_amount_out as u64) {
-//             return Err(VisionError::ExceededSlippage.into());
-//         }
-
-//         msg!("pda_associated_sol_info: {:?}", pda_associated_sol_info.key);
-//         msg!("pda_info: {:?}", pda_info.key);
-
-//         invoke_signed(
-//             &system_instruction::transfer(
-//                 pda_associated_sol_info.key,
-//                 provider_fee_collector_info.key,
-//                 fee_provider as u64
-//             ),
-//             &[
-//                 system_program_info.clone(),
-//                 pda_associated_sol_info.clone(),
-//                 provider_fee_collector_info.clone()
-//             ],
-//             &[&[
-//                 &pda_info.key.to_bytes(),
-//                 &[bump_seed_sol]
-//             ]]
-//         )?;
-
-//         invoke_signed(
-//             &system_instruction::transfer(
-//                 pda_associated_sol_info.key,
-//                 seller_info.key,
-//                 adjusted_sell_sol_amt as u64
-//             ),
-//             &[
-//                 system_program_info.clone(),
-//                 pda_associated_sol_info.clone(),
-//                 seller_info.clone()
-//             ],
-//             &[&[
-//                 &pda_info.key.to_bytes(),
-//                 &[bump_seed_sol]
-//             ]]
-//         )?;
-
-//         invoke(
-//             &spl_token::instruction::burn(
-//                 token_program_info.key,
-//                 seller_associated_token_address_info.key,
-//                 mint_info.key,
-//                 seller_info.key,
-//                 &[],
-//                 amount_in as u64
-//             )?,
-//             &[
-//                 token_program_info.clone(),
-//                 seller_associated_token_address_info.clone(),
-//                 mint_info.clone(),
-//                 seller_info.clone()
-//             ]
-//         )?;
-
-//         // if amount_in == (spl_token::state::Account::unpack(&seller_associated_token_address_info.data.borrow())?).amount {
-//         //     invoke(
-//         //         &spl_token::instruction::close_account(
-//         //             token_program_info.key,
-//         //             seller_associated_token_address_info.key,
-//         //             seller_info.key,
-//         //             seller_info.key,
-//         //             &[],
-//         //         )?,
-//         //         &[
-//         //             token_program_info.clone(),
-//         //             system_program_info.clone(),
-//         //             seller_associated_token_address_info.clone(),
-//         //             seller_info.clone()
-//         //         ]
-//         //     )?;
-//         // }
-//         invoke(
-//             &spl_token::instruction::close_account(
-//                 token_program_info.key,
-//                 seller_associated_token_address_info.key,
-//                 seller_info.key,
-//                 seller_info.key,
-//                 &[],
-//             )?,
-//             &[
-//                 token_program_info.clone(),
-//                 system_program_info.clone(),
-//                 seller_associated_token_address_info.clone(),
-//                 seller_info.clone()
-//             ]
-//         )?;
-        
-
-//         Ok(())
-
-// // Close Spl Account if selling all Tokens
-
-//     }
 
     pub fn change_page_fee(
         program_id: &Pubkey,
@@ -568,16 +531,51 @@ impl Processor {
     ) -> Result<(), ProgramError> {
         let account_info_iter = &mut accounts.iter();
 
+    // Accounts
+
         let fee_collector_info = next_account_info(account_info_iter)?;
         let new_fee_collector_info = next_account_info(account_info_iter)?;
         let pda_info = next_account_info(account_info_iter)?;
         let mint_info = next_account_info(account_info_iter)?;
         let system_program_info = next_account_info(account_info_iter)?;
 
-        let rent = Rent::get()?;
-
+    // Variables
+        let mut swap_state = PageTokenSwap::unpack(&pda_info.data.borrow())?;
+        let mint_state = spl_token::state::Mint::unpack(&mint_info.data.borrow())?;
+    // Checks
         if !fee_collector_info.is_signer {
             return Err(VisionError::InvalidFeeAccount.into());
+        }
+        if *fee_collector_info.owner != system_program::ID{
+            return Err(VisionError::InvalidAccountOnwerProgram.into());
+        }
+        if *fee_collector_info.key != swap_state.fee_collector_pubkey{
+            return Err(VisionError::InvalidAccountAddress.into());
+        }
+
+        if (new_fee_collector_info.lamports() > 0) && (*new_fee_collector_info.owner != system_program::ID){
+            return Err(VisionError::InvalidAccountOnwerProgram.into());
+        }
+
+        if *pda_info.owner != *program_id{
+            return Err(VisionError::InvalidAccountOnwerProgram.into());
+        }
+        if *pda_info.key != (Pubkey::create_program_address(&[&mint_info.key.to_bytes(), &[swap_state.bump_seed]], program_id)?) {
+            return Err(VisionError::InvalidAccountAddress.into());
+        }
+
+        if *mint_info.owner != spl_token::ID {
+            return Err(VisionError::InvalidAccountOnwerProgram.into());
+        }
+        if !mint_state.is_initialized {
+            return Err(VisionError::InvalidMint.into());
+        }
+        if COption::Some(*pda_info.key) != mint_state.mint_authority {
+            return Err(VisionError::InvalidMint.into());
+        }
+
+        if *system_program_info.key != system_program::ID{
+            return Err(VisionError::InvalidProgramAddress.into());
         }
 
         if new_fee_collector_info.lamports() == 0 {
@@ -585,7 +583,7 @@ impl Processor {
                 &system_instruction::transfer(
                     fee_collector_info.key,
                     new_fee_collector_info.key,
-                    rent.minimum_balance(0 as usize),
+                    (Rent::get()?).minimum_balance(0 as usize),
                 ),
                 &[
                     fee_collector_info.clone(),
@@ -595,18 +593,7 @@ impl Processor {
             )?;
         }
 
-        let mut swap_state = PageTokenSwap::unpack(&pda_info.data.borrow())?;
-
-        let (pda, bump_seed) = Pubkey::find_program_address(&[&mint_info.key.to_bytes()], program_id);
-
-        if *pda_info.key != pda {
-            return Err(VisionError::InvalidProgramAddress.into());
-        }
-
-        if swap_state.fee_collector_pubkey != *fee_collector_info.key {
-            return Err(VisionError::InvalidFeeAccount.into());
-        }
-
+    // EXECUTION
         if (fee_collector_info.key != new_fee_collector_info.key){
             swap_state.fee_collector_pubkey = *new_fee_collector_info.key;
         }
@@ -618,6 +605,8 @@ impl Processor {
                 swap_state.fee = fee;
             }
         }
+
+        PageTokenSwap::pack(swap_state, &mut pda_info.data.borrow_mut())?;
     
         Ok(())
     }
@@ -669,6 +658,8 @@ impl PrintProgramError for VisionError {
             VisionError::InvalidMint=> {
                 msg!("Error: Invalid Mint")
             },
+            VisionError::InvalidInput => msg!("Error: Invalid User Input"),
+            VisionError::ReserveError => msg!("Error: Reserve error"),
             
 
 

@@ -155,7 +155,7 @@ import { connect } from 'socket.io-client';
 import BN from 'bn.js';
 import assert from 'assert';
 const SYSTEM_PROGRAM_ID = new PublicKey('11111111111111111111111111111111')
-const VisionProgramId = new PublicKey('634HCEE4YjKS7UAmKEj1i1kbTaD65hUAGr4Vw9EupgEM')
+const VisionProgramId = new PublicKey('2jB8qMmfpgmmhzUUDrF4y6uNU7ipsjg57rVeBs3jGXWh')
 
 import * as BufferLayout from "buffer-layout";
 
@@ -234,9 +234,13 @@ const fundPageToken = async(walletPublicKey, signTransaction) => {
     console.log("error:",e)
   }
 
-  //changeFee(walletPublicKey, signTransaction, new_mint_keypair.publicKey)
-  buy(walletPublicKey, signTransaction, new_mint_keypair.publicKey)
-  //sell(walletPublicKey, signTransaction, new_mint_keypair.publicKey)
+  try{
+    await changeFee(walletPublicKey, signTransaction, new_mint_keypair.publicKey)
+    await buy(walletPublicKey, signTransaction, new_mint_keypair.publicKey)
+    await sell(walletPublicKey, signTransaction, new_mint_keypair.publicKey)
+  }catch(err) {
+    throw err;
+  }
 }
 
 const buy = async(walletPublicKey, signTransaction, tokenMint) => {
@@ -256,10 +260,36 @@ const buy = async(walletPublicKey, signTransaction, tokenMint) => {
     VisionProgramId,
   )
 
-  const [user_associatedTokenAddress, _bump_seed] = await PublicKey.findProgramAddress(
-    [walletPublicKey.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), tokenMint.toBuffer()],
+
+  let pageToken = new Token(connection, tokenMint, TOKEN_PROGRAM_ID, walletPublicKey)
+
+  const user_associatedTokenAddress = await Token.getAssociatedTokenAddress(
     ASSOCIATED_TOKEN_PROGRAM_ID,
+    TOKEN_PROGRAM_ID,
+    tokenMint,
+    walletPublicKey
   )
+
+  try {
+    await pageToken.getAccountInfo(user_associatedTokenAddress)
+  }catch(err){
+    if (err.message === 'Failed to find account' || err.message === 'Invalid account owner'){
+      tx.add(
+        Token.createAssociatedTokenAccountInstruction(
+          ASSOCIATED_TOKEN_PROGRAM_ID,
+          TOKEN_PROGRAM_ID,
+          tokenMint,
+          user_associatedTokenAddress,
+          walletPublicKey,
+          walletPublicKey,
+        )
+      )
+    }else {
+      throw err;
+    }
+  }
+  console.log(tx)
+
   // const user_associatedTokenAddress = await manualGetOrCreateAssociatedAccountInfo(
   //   walletPublicKey,
   //   tx,
@@ -273,24 +303,20 @@ const buy = async(walletPublicKey, signTransaction, tokenMint) => {
     {pubkey: walletPublicKey, isSigner: true, isWritable: true},
     // Funder - Associated Token Address
     {pubkey: user_associatedTokenAddress, isSigner: false, isWritable: true},
-    // Page Fee Collector
-    {pubkey: feeCollectorPage, isSigner: false, isWritable: true},
-    // Provider Fee Collector
-    {pubkey: feeCollectorProvider, isSigner: false, isWritable: true},
     // Funder - Pays for funding and first swap
     {pubkey: pda, isSigner: false, isWritable: true},
     // Pda bump seed for program derived address of Sol account
     {pubkey: pda_associatedSolAddress, isSigner: false, isWritable: true},
     // Funder - Pays for funding and first swap
     {pubkey: tokenMint, isSigner: false, isWritable: true},
+    // Page Fee Collector
+    {pubkey: feeCollectorPage, isSigner: false, isWritable: true},
+    // Provider Fee Collector
+    {pubkey: feeCollectorProvider, isSigner: false, isWritable: true},
     // For invoke_signed - To create Accounts
     {pubkey: SystemProgram.programId, isSigner: false, isWritable: false},
-    // Associated Token Program Id for creating token account
-    {pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false},
     // For invoking - To create Mint & Mint Account
     {pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false},
-    // Rent Sysvar for Token Program (e.g. Initializing mint)
-    {pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false},
   ]
   
   // Data sent to Contract as Buffer
@@ -315,13 +341,15 @@ const buy = async(walletPublicKey, signTransaction, tokenMint) => {
     data,
   });
 
+
   tx.add(txInst);
+
   // Send Transaction
   try{
     tx.recentBlockhash = (await connection.getRecentBlockhash("confirmed")).blockhash
     tx.feePayer = walletPublicKey
     const signedTx = await signTransaction(tx)
-    // CREATE PAYER ASSOCIATED TOKEN ACCOUNT await sendAndConfirmRawTransaction(connection, signedTx.serialize())
+    await sendAndConfirmRawTransaction(connection, signedTx.serialize())
   }catch(e){
     console.log("error:",e)
   }
@@ -350,9 +378,15 @@ const sell = async(walletPublicKey, signTransaction, tokenMint) => {
     VisionProgramId,
   )
 
-  const [user_associatedTokenAddress, _bump_seed] = await PublicKey.findProgramAddress(
-    [walletPublicKey.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), tokenMint.toBuffer()],
+  // const [user_associatedTokenAddress, _bump_seed] = await PublicKey.findProgramAddress(
+  //   [walletPublicKey.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), tokenMint.toBuffer()],
+  //   ASSOCIATED_TOKEN_PROGRAM_ID,
+  // )
+  const user_associatedTokenAddress = await Token.getAssociatedTokenAddress(
     ASSOCIATED_TOKEN_PROGRAM_ID,
+    TOKEN_PROGRAM_ID,
+    tokenMint,
+    walletPublicKey
   )
   // const user_associatedTokenAddress = await manualGetOrCreateAssociatedAccountInfo(
   //   walletPublicKey,
@@ -367,14 +401,14 @@ const sell = async(walletPublicKey, signTransaction, tokenMint) => {
     {pubkey: walletPublicKey, isSigner: true, isWritable: true},
     // Funder - Associated Token Address
     {pubkey: user_associatedTokenAddress, isSigner: false, isWritable: true},
-    // Provider Fee Collector
-    {pubkey: feeCollectorProvider, isSigner: false, isWritable: true},
     // Funder - Pays for funding and first swap
     {pubkey: pda, isSigner: false, isWritable: true},
     // Pda bump seed for program derived address of Sol account
     {pubkey: pda_associatedSolAddress, isSigner: false, isWritable: true},
     // Funder - Pays for funding and first swap
     {pubkey: tokenMint, isSigner: false, isWritable: true},
+    // Provider Fee Collector
+    {pubkey: feeCollectorProvider, isSigner: false, isWritable: true},
     // For invoke_signed - To create Accounts
     {pubkey: SystemProgram.programId, isSigner: false, isWritable: false},
     // For invoking - To create Mint & Mint Account
