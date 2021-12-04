@@ -155,20 +155,95 @@ import { connect } from 'socket.io-client';
 import BN from 'bn.js';
 import assert from 'assert';
 const SYSTEM_PROGRAM_ID = new PublicKey('11111111111111111111111111111111')
-const VisionProgramId = new PublicKey('2jB8qMmfpgmmhzUUDrF4y6uNU7ipsjg57rVeBs3jGXWh')
+const VisionProgramId = new PublicKey('97F2CxbQfAiLdF14dWt24KjiG1nUzsfQPcxvqLTF2s6p')
 
 import * as BufferLayout from "buffer-layout";
 
 const uint64Layout = (property = "uint64") => { 
   return BufferLayout.blob(8, property);
 };
+const publicKey = (property = 'publicKey') => {
+  return BufferLayout.blob(32, property);
+};
+
+const AmmLayout = BufferLayout.struct(
+  [
+    BufferLayout.u8('isInitialized'),
+    BufferLayout.u8('bumpSeed'),
+    BufferLayout.u8('bumpSeedSol'),
+    BufferLayout.u16('fee'),
+    publicKey('fee_collector_pubkey')
+  ]
+)
+
+
+const price = async(tokenMint, isBuy, lamportsAmt, tokenAmt, walletPublicKey) => {
+  const connection = new Connection('http://localhost:8899', 'confirmed')
+  const mint = new Token(connection, tokenMint, TOKEN_PROGRAM_ID, walletPublicKey)
+  const [pda, bump_seed] = await PublicKey.findProgramAddress(
+    [tokenMint.toBuffer()],
+    VisionProgramId,
+  );
+  const [pda_associatedSolAddress, __bump_seed] = await PublicKey.findProgramAddress(
+    [pda.toBuffer()],
+    VisionProgramId,
+  )
+  console.log("Rent payed", connection.getMinimumBalanceForRentExemption(0))
+  let collateral = (await connection.getBalance(pda_associatedSolAddress)) - (await connection.getMinimumBalanceForRentExemption(0))
+  let supply = ((await mint.getMintInfo()).supply.toNumber()) + 1000000000
+  let lamports = null
+  let token = null
+
+  if(isBuy){
+    if(lamportsAmt){
+      lamports = lamportsAmt
+      // AMT * (1 - 1% Provider - x% Page)
+      let providerFee = Math.round(lamportsAmt * 0.01)
+      let pageFee = Math.round(lamportsAmt * ((await getAmmInfo(pda)).fee / 100000))
+      let adjustedLamportsAfterFee  = lamportsAmt - (providerFee + pageFee)
+      token = Math.round(supply * (Math.pow((1 + adjustedLamportsAfterFee / collateral), 0.60976) - 1))
+      console.log(token)
+    }else if(tokenAmt){
+      token = tokenAmt
+      lamports = Math.round((Math.pow((tokenAmt/ supply + 1), (1/0.60976))* 36) - 36) / (1 - 0.01 - ((await getAmmInfo(pda)).fee / 100000))
+      console.log(lamports)
+    }else{
+      
+    }
+  }
+
+  return {
+    lamports: lamports,
+    token: token
+  }
+}
+
+const getAmmInfo = async(pubKey, commitment) => {
+  const connection = new Connection('http://localhost:8899', 'confirmed')
+  const info = await connection.getAccountInfo(pubKey, commitment)
+  if (info == null){
+    throw new Error("Failed to find account");
+  }
+  if (!info.owner.equals(VisionProgramId)) {
+    throw new Error('Invalid account owner');
+  }
+  if (info.data.length != AmmLayout.span) {
+    throw new Error(`Invalid account size`);
+  }
+
+  const data = Buffer.from(info.data)
+  const accountInfo = AmmLayout.decode(data)
+  console.log(accountInfo)
+  return accountInfo
+
+}
 
 const fundPageToken = async(walletPublicKey, signTransaction) => {
   const connection = new Connection('http://localhost:8899', 'confirmed')
   const tx = new Transaction()
 
 //! Fetch Fee collector from DB, for now random pubkey:
-  const feeCollector = walletPublicKey
+  const feeCollector = new PublicKey('G1tUHWDaR1Jerzz9MdwPfxoXVMmwT6kU4DmncZmke5gb')
 
   const new_mint_keypair = Keypair.generate();
 
@@ -235,9 +310,11 @@ const fundPageToken = async(walletPublicKey, signTransaction) => {
   }
 
   try{
-    await changeFee(walletPublicKey, signTransaction, new_mint_keypair.publicKey)
-    await buy(walletPublicKey, signTransaction, new_mint_keypair.publicKey)
-    await sell(walletPublicKey, signTransaction, new_mint_keypair.publicKey)
+    await price(new_mint_keypair.publicKey, true, 30000000000, null, walletPublicKey)
+    await price(new_mint_keypair.publicKey, true, null, 269229227589142, walletPublicKey)
+    //await changeFee(walletPublicKey, signTransaction, new_mint_keypair.publicKey)
+    //await buy(walletPublicKey, signTransaction, new_mint_keypair.publicKey)
+    //await sell(walletPublicKey, signTransaction, new_mint_keypair.publicKey)
   }catch(err) {
     throw err;
   }

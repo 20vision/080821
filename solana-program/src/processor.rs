@@ -53,7 +53,6 @@ impl Processor {
         // Minimum Collateral(Sol) needed for AMM to Mint the first Token to the Associated Token Account
         let collateral = 36 as u64;
         let collateral_rent = collateral.checked_add((Rent::get()?).minimum_balance(0 as usize)).ok_or(VisionError::Overflow)?;
-        msg!("collateral_rent {:?}", collateral_rent);
 
     // Checks
 
@@ -210,7 +209,6 @@ impl Processor {
 
         // AMM state
         let swap_state = PageTokenSwap::unpack(&pda_info.data.borrow())?;
-        msg!("swapstatefee: {:?} fee_collector_pubkey {:?}", swap_state.fee, swap_state.fee_collector_pubkey);
         // FEES
         let page_fee = ((amount_in as f64) * ((swap_state.fee as f64) / (100000f64))).round() as u64;
         let provider_fee = ((amount_in as f64) * 0.01f64).round() as u64;
@@ -224,7 +222,7 @@ impl Processor {
             let reserve_balance = (pda_associated_sol_info.lamports().checked_sub((((Rent::get()?).minimum_balance(0 as usize)) as u64)).ok_or(VisionError::Overflow)?) as f64;
             // Tokens received if input is amount_in
             let token_amt_from_sol_input = (token_supply * (((1f64 + adjusted_amount_in / reserve_balance).powf(0.60976f64)) - 1f64)).round() as u64;
-
+            msg!("AMT {:?}",token_amt_from_sol_input);
     // Checks
 
         // Check slippage
@@ -395,7 +393,6 @@ impl Processor {
             let reserve_balance = (pda_associated_sol_info.lamports().checked_sub((((Rent::get()?).minimum_balance(0 as usize)) as u64)).ok_or(VisionError::Overflow)?) as f64;
             // sol received if input is amount_in
             let sol_amt_from_token_input = (reserve_balance * (1f64 - (1f64 - (amount_in as f64) / token_supply).powf(1f64 / 0.60976f64))).round() as u64;
-
         // FEES
             let provider_fee = ((sol_amt_from_token_input as f64) * 0.01f64).round() as u64;
 
