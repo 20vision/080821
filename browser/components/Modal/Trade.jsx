@@ -202,13 +202,26 @@ const price = async(tokenMint, isBuy, lamportsAmt, tokenAmt, walletPublicKey) =>
       let pageFee = Math.round(lamportsAmt * ((await getAmmInfo(pda)).fee / 100000))
       let adjustedLamportsAfterFee  = lamportsAmt - (providerFee + pageFee)
       token = Math.round(supply * (Math.pow((1 + adjustedLamportsAfterFee / collateral), 0.60976) - 1))
-      console.log(token)
+      //console.log(token)
     }else if(tokenAmt){
       token = tokenAmt
       lamports = Math.round((Math.pow((tokenAmt/ supply + 1), (1/0.60976))* 36) - 36) / (1 - 0.01 - ((await getAmmInfo(pda)).fee / 100000))
-      console.log(lamports)
+      //console.log(lamports)
     }else{
+      token = tokenAmt
+      lamports = Math.round((Math.pow((1000000000/ supply + 1), (1/0.60976))* 36) - 36) / (1 - 0.01 - ((await getAmmInfo(pda)).fee / 100000))
+      //console.log(lamports)
+    }
+  }else{
+    if(lamportsAmt){
       
+    }else if(tokenAmt){
+      token = tokenAmt
+      let amtWithoutFee = collateral * (1 - Math.pow((1 - tokenAmt / supply), (1/0.60976)))
+      lamports = amtWithoutFee - (amtWithoutFee * 0.01)
+    }else{
+      lamports = lamportsAmt
+      token = ((Math.pow((lamportsAmt / collateral - 1 ), 0.60976)) + 1 ) * supply
     }
   }
 
