@@ -13,9 +13,12 @@ import NumberFormat from 'react-number-format';
 export default function Trade() {
   const [selectedRoute, setSelectedRoute] = useState(1)
   const [buy, setBuy] = useState(true) // true -> Sol to Page // false -> Page to Sol
+  const [sol, setSol] = useState()
+  const [token, setToken] = useState()
   const setModal = useModalStore(state => state.setModal)
   const [profile, isLoading, setUser] = useUserProfile()
   const page = usePageSelectedStore(state => state.page)
+
   const {
     wallet,
     connected,
@@ -40,6 +43,8 @@ export default function Trade() {
     // signAllTransactions,
     // signMessage 
   } = useWallet();
+
+
   const connectThisWallet = async() => {
     try{
       await connect()
@@ -63,13 +68,13 @@ export default function Trade() {
       </div>
 
       <div className={styles.selectionParent}>
-        {buy?<SelectionSol/>:<SelectionPageToken page={page}/>}
+        {buy?<SelectionSol sol={sol} setToken={setToken} walletPublicKey={publicKey} buy={buy} setSol={setSol}/>:<SelectionPageToken token={token} walletPublicKey={publicKey} setSol={setSol}  buy={buy} setToken={setToken} page={page}/>}
           <div className={styles.tradeDirectionArrowParent}>
             <div className={styles.tradeDirectionArrowChild}>
               <a onClick={() => setBuy(!buy)}><Arrow strokeWidth='3'/></a>
             </div>
           </div>
-        {buy?<SelectionPageToken page={page}/>:<SelectionSol/>}
+        {buy?<SelectionPageToken token={token} setSol={setSol} walletPublicKey={publicKey} buy={buy} setToken={setToken} page={page}/>:<SelectionSol walletPublicKey={publicKey}  buy={buy} sol={sol} setToken={setToken} setSol={setSol}/>}
       </div>
 
       <div className={`smalltext ${styles.priceInDollar}`}>
@@ -107,7 +112,7 @@ export default function Trade() {
   )
 }
 
-const SelectionSol = () => {
+const SelectionSol = ({setSol, setToken, walletPublicKey, buy, sol}) => {
   return(
     <div className={styles.tradePageInfoParent}>
 
@@ -120,13 +125,19 @@ const SelectionSol = () => {
         <span className="smalltext">0&nbsp;</span><span className="smalltext">($0)</span>
       </div>
 
-      <NumberFormat allowedDecimalSeparators={','} placeholder="0" thousandSeparator=" " allowNegative={false} decimalSeparator="." type="text"/>
+      <NumberFormat value={sol} onValueChange={async(values, sourceInfo) => {
+        console.log(sourceInfo)
+        if(sourceInfo.source == 'event'){
+          setSol(values.floatValue)
+          setToken((Math.round(((await price(new PublicKey('2LDgsi2s8J42hfXwa5fdZXsGGn6VHtjYZG5SQ95VDSRg'), buy, (values.floatValue*1000000000), null, walletPublicKey)).token)/100000))/10000)
+        }
+      }} allowedDecimalSeparators={','} placeholder="0" thousandSeparator=" " allowNegative={false} decimalSeparator="."/>
 
     </div>
   )
 }
 
-const SelectionPageToken = ({page}) => {
+const SelectionPageToken = ({page, token, buy, walletPublicKey, setToken, setSol}) => {
   return(
     <div className={styles.tradePageInfoParent}>
 
@@ -143,7 +154,12 @@ const SelectionPageToken = ({page}) => {
         <span className="smalltext">0&nbsp;</span><span className="smalltext">($0)</span>
       </div>
 
-      <NumberFormat allowedDecimalSeparators={','} placeholder="0" thousandSeparator=" " allowNegative={false} decimalSeparator="." type="text"/>
+      <NumberFormat value={token} onValueChange={async(values, sourceInfo) => {
+        if(sourceInfo.source == 'event'){
+          setToken(values.floatValue)
+          setSol(((Math.round(((await price(new PublicKey('2LDgsi2s8J42hfXwa5fdZXsGGn6VHtjYZG5SQ95VDSRg'), buy, null, values.floatValue*1000000000, walletPublicKey)).lamports)/100000))/10000))
+        }
+      }} allowedDecimalSeparators={','} placeholder="0" thousandSeparator=" " allowNegative={false} decimalSeparator="."/>
 
     </div>
   )
@@ -188,7 +204,6 @@ const price = async(tokenMint, isBuy, lamportsAmt, tokenAmt, walletPublicKey) =>
     [pda.toBuffer()],
     VisionProgramId,
   )
-  console.log("Rent payed", connection.getMinimumBalanceForRentExemption(0))
   let collateral = (await connection.getBalance(pda_associatedSolAddress)) - (await connection.getMinimumBalanceForRentExemption(0))
   let supply = ((await mint.getMintInfo()).supply.toNumber()) + 1000000000
   let lamports = null
@@ -207,21 +222,15 @@ const price = async(tokenMint, isBuy, lamportsAmt, tokenAmt, walletPublicKey) =>
       token = tokenAmt
       lamports = Math.round((Math.pow((tokenAmt/ supply + 1), (1/0.60976))* 36) - 36) / (1 - 0.01 - ((await getAmmInfo(pda)).fee / 100000))
       //console.log(lamports)
-    }else{
-      token = tokenAmt
-      lamports = Math.round((Math.pow((1000000000/ supply + 1), (1/0.60976))* 36) - 36) / (1 - 0.01 - ((await getAmmInfo(pda)).fee / 100000))
-      //console.log(lamports)
     }
   }else{
     if(lamportsAmt){
-      
+      lamports = lamportsAmt
+      token = ((Math.pow((lamportsAmt / collateral - 1 ), 0.60976)) + 1 ) * supply
     }else if(tokenAmt){
       token = tokenAmt
       let amtWithoutFee = collateral * (1 - Math.pow((1 - tokenAmt / supply), (1/0.60976)))
       lamports = amtWithoutFee - (amtWithoutFee * 0.01)
-    }else{
-      lamports = lamportsAmt
-      token = ((Math.pow((lamportsAmt / collateral - 1 ), 0.60976)) + 1 ) * supply
     }
   }
 
