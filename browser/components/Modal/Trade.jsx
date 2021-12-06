@@ -9,6 +9,8 @@ import {usePageSelectedStore} from '../../store/pageSelected'
 import PageIcon from '../../assets/PageIcon/PageIcon'
 import SolanaIcon from '../../assets/SolanaIcon'
 import NumberFormat from 'react-number-format';
+import axios from 'axios'
+import { useRouter } from 'next/router';
 
 export default function Trade() {
   const [selectedRoute, setSelectedRoute] = useState(1)
@@ -18,7 +20,7 @@ export default function Trade() {
   const setModal = useModalStore(state => state.setModal)
   const [profile, isLoading, setUser] = useUserProfile()
   const page = usePageSelectedStore(state => state.page)
-
+  const router = useRouter()
   const {
     wallet,
     connected,
@@ -95,7 +97,7 @@ export default function Trade() {
         </a>
       :
         <>
-          <a onClick={() => fundPageToken(publicKey, signTransaction)}>
+          <a onClick={() => fundPageToken(publicKey, signTransaction, router)}>
             <div className={styles.connectWallet}>
               <h2>Fund</h2>
             </div>
@@ -260,16 +262,30 @@ const getAmmInfo = async(pubKey, commitment) => {
 
 }
 
-const fundPageToken = async(walletPublicKey, signTransaction) => {
+const fundPageToken = async(walletPublicKey, signTransaction, router) => {
   const connection = new Connection('http://localhost:8899', 'confirmed')
   const tx = new Transaction()
-
+  let feeCollector = null
 //! Fetch Fee collector from DB, for now random pubkey:
-  const feeCollector = new PublicKey('G1tUHWDaR1Jerzz9MdwPfxoXVMmwT6kU4DmncZmke5gb')
+  try{
+    await axios.get(`http://localhost:4000/get/page/${router.query.page}/admin`,{
+      withCredentials: true
+    }
+    ).then(async response => {
+      feeCollector= new PublicKey(response.data.public_key)
+    })
+    .catch(error =>{
+      if(error.response) toast.error(`${error.response.status}: ${error.response.data}`)
+      return
+    })
+  }catch(err){
+    if(error.response) toast.error(`${error.response.status?error.response.status:'400'}: ${error.response.data?error.response.data:'An error occurred'}`)
+    return
+  }
 
   const new_mint_keypair = Keypair.generate();
 
-  console.log('print the mint: ',new_mint_keypair.publicKey.toString())
+  //console.log('fee Collector: ',feeCollector)
 
   // PDA
   const [pda, bump_seed] = await PublicKey.findProgramAddress(
@@ -326,14 +342,26 @@ const fundPageToken = async(walletPublicKey, signTransaction) => {
     tx.feePayer = walletPublicKey
     tx.partialSign(new_mint_keypair);
     const signedTx = await signTransaction(tx)
-    await sendAndConfirmRawTransaction(connection, signedTx.serialize())
+    console.log(signedTx)
+    axios.post('http://localhost:4000/post/fundPageToken',{tx: signedTx.serialize(), unique_pagename: router.query.page},{
+      withCredentials: true
+    }
+    ).then(async response => {
+      //console.log(response)
+    })
+    .catch(error =>{
+      if(error.response) toast.error(`${error.response.status?error.response.status:'400'}: ${error.response.data?error.response.data:'An error occurred'}`)
+      return
+    })
+
+    //await sendAndConfirmRawTransaction(connection, signedTx.serialize())
   }catch(e){
     console.log("error:",e)
   }
 
   try{
-    await price(new_mint_keypair.publicKey, true, 30000000000, null, walletPublicKey)
-    await price(new_mint_keypair.publicKey, true, null, 269229227589142, walletPublicKey)
+    //await price(new_mint_keypair.publicKey, true, 30000000000, null, walletPublicKey)
+    //await price(new_mint_keypair.publicKey, true, null, 269229227589142, walletPublicKey)
     //await changeFee(walletPublicKey, signTransaction, new_mint_keypair.publicKey)
     //await buy(walletPublicKey, signTransaction, new_mint_keypair.publicKey)
     //await sell(walletPublicKey, signTransaction, new_mint_keypair.publicKey)

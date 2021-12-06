@@ -1,6 +1,8 @@
 let pool = require('../config/db');
 var keys = require('../config/keys');
 const jwt = require('jsonwebtoken');
+const { PublicKey, Transaction, SystemProgram } = require('@solana/web3.js');
+const bs58 = require('bs58')
 
 exports.AuthOptional = function(req, res, next) {
     if(req.cookies['auth_token']){
@@ -132,4 +134,82 @@ exports.paperAuth = function(req, res, next) {
     }else{
         res.status(400).send('no parent')
     }
+}
+
+
+exports.fundTransaction = function(req, res, next) {
+    let tx = Transaction.from(req.body.tx.data)
+
+    let txSignatures = tx.signatures
+
+    let txInstructionData = tx.instructions[0].data
+    let txInstructionKeys = tx.instructions[0].keys
+    let txInstructionProgramId = tx.instructions[0].programId
+
+    if(txInstructionData[0] != 0){
+        res.status(422).send('Invalid Instruction Data');
+        return
+    }
+    if (txInstructionProgramId.toString() != '97F2CxbQfAiLdF14dWt24KjiG1nUzsfQPcxvqLTF2s6p'){
+        res.status(422).send('Invalid Program Id');
+        return
+    }
+
+
+    // PubKeys
+        let payer = txInstructionKeys[0].pubkey.toString()
+        let new_mint = txInstructionKeys[1].pubkey.toString()
+        let pda = txInstructionKeys[2].pubkey.toString()
+        let pda_associated_sol = txInstructionKeys[3].pubkey.toString()
+        let fee_collector = txInstructionKeys[4].pubkey.toString()
+        let system_program = txInstructionKeys[5].pubkey.toString()
+        let token_program = txInstructionKeys[6].pubkey.toString()
+        let rent_sysvar = txInstructionKeys[7].pubkey.toString()
+
+    let payerSignature = txSignatures[0].publicKey.toString()
+    let mintSignature = txSignatures[1].publicKey.toString()
+
+    if((tx.feePayer.toString() != payerSignature) && (payerSignature != payer)){
+        console.log(tx.feePayer.toString())
+        console.log(payerSignature)
+        console.log(payer)
+        res.status(422).send('Invalid Payer Info')
+        return
+    }
+    if(mintSignature != new_mint){
+        res.status(422).send('Invalid Mint Info')
+        return
+    }
+    if(system_program.toString()!= '11111111111111111111111111111111'){
+        res.status(422).send('Invalid System Program Id')
+        return
+    }
+    if(token_program.toString()!= 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'){
+        res.status(422).send('Invalid Token Program Id')
+        return
+    }
+    if(rent_sysvar.toString()!= 'SysvarRent111111111111111111111111111111111'){
+        res.status(422).send('Invalid Rent Sysvar Id')
+        return
+    }
+
+    pool.query(
+        'SELECT pu.role from PageUser pu join Page p on p.page_id=pu.page_id and p.unique_pagename = ? and p.token_mint_address IS NULL join User u on pu.user_id=u.user_id and public_key = ?;',
+        [req.body.unique_pagename, fee_collector],
+        function(err, results) {
+            if (err){
+                res.status(500).send('An Error Occurred')
+                console.log(err)
+                return
+            }else{
+                if(results && results[0] && results[0].role && results[0].role == 1){
+                    req.mint = new_mint;
+                    next();
+                }else{
+                    res.status(422).send('Invalid Fee Collector')
+                    return
+                }
+            }
+        }
+    );
 }
