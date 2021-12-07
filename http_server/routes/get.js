@@ -121,24 +121,32 @@ router.get("/page/:page_name", check.AuthOptional, check.role, async (req, res) 
     })
 })
 
-router.get("/page/:page_name/admin", check.AuthOptional, check.role, async (req, res) => {
-    pool.query(
-        'SELECT u.public_key from User u join PageUser pu on pu.user_id = u.user_id and pu.role = 1 join Page p on p.unique_pagename = ? and p.page_id = pu.page_id;',
-        [req.params.page_name],
-        function(err, result) {
-            if (err){
-                res.status(500).send('An error occurred')
-                console.log(err)
-                return
-            }else{
-                if(result && result[0] && result[0].public_key){
-                    res.json({
-                        public_key: result[0].public_key,
-                    })
+router.get("/page/:page_name/trade_info", check.AuthOptional, check.role, async (req, res) => {
+    pool.getConnection(async function(err, conn) {
+        if (err){
+            res.status(500).send('An error occurred')
+            console.log(err)
+        }else{
+            conn.query(
+                'SELECT u.public_key, p.token_mint_address from User u join PageUser pu on pu.user_id = u.user_id and pu.role = 1 join Page p on p.unique_pagename = ? and p.page_id = pu.page_id;',
+                [req.params.page_name],
+                function(err, result) {
+                    if (err){
+                        res.status(500).send('An error occurred')
+                        console.log(err)
+                    }else{
+                        if(result && result[0] && result[0].public_key){
+                            res.json({
+                                public_key: result[0].public_key,
+                                token_mint_address: result[0].token_mint_address,
+                            })
+                        }
+                    }
                 }
-            }
+            );
         }
-    );
+        pool.releaseConnection(conn);
+    })
 })
 
 module.exports = router;

@@ -150,7 +150,7 @@ exports.fundTransaction = function(req, res, next) {
         res.status(422).send('Invalid Instruction Data');
         return
     }
-    if (txInstructionProgramId.toString() != '97F2CxbQfAiLdF14dWt24KjiG1nUzsfQPcxvqLTF2s6p'){
+    if (txInstructionProgramId.toString() != '8rb6GeD8i2g3hcfN73xnc9kRbnwepeNjHJyXK5DtyUm8'){
         res.status(422).send('Invalid Program Id');
         return
     }
@@ -170,9 +170,6 @@ exports.fundTransaction = function(req, res, next) {
     let mintSignature = txSignatures[1].publicKey.toString()
 
     if((tx.feePayer.toString() != payerSignature) && (payerSignature != payer)){
-        console.log(tx.feePayer.toString())
-        console.log(payerSignature)
-        console.log(payer)
         res.status(422).send('Invalid Payer Info')
         return
     }
@@ -194,7 +191,7 @@ exports.fundTransaction = function(req, res, next) {
     }
 
     pool.query(
-        'SELECT pu.role from PageUser pu join Page p on p.page_id=pu.page_id and p.unique_pagename = ? and p.token_mint_address IS NULL join User u on pu.user_id=u.user_id and public_key = ?;',
+        'SELECT p.token_mint_address, pu.role from PageUser pu join Page p on p.page_id=pu.page_id and p.unique_pagename = ? join User u on pu.user_id=u.user_id and public_key = ?;',
         [req.body.unique_pagename, fee_collector],
         function(err, results) {
             if (err){
@@ -202,13 +199,21 @@ exports.fundTransaction = function(req, res, next) {
                 console.log(err)
                 return
             }else{
-                if(results && results[0] && results[0].role && results[0].role == 1){
-                    req.mint = new_mint;
-                    next();
-                }else{
+                console.log(results)
+                if(!results || !results[0]){
+                    res.status(404).send('Page Not Found')
+                    return
+                }
+                if(results[0].role != 1){
                     res.status(422).send('Invalid Fee Collector')
                     return
                 }
+                if(results[0].token_mint_address != null){
+                    res.status(422).send('Token has already been funded')
+                    return
+                }
+                req.mint = new_mint;
+                next()
             }
         }
     );

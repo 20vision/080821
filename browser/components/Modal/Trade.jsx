@@ -14,13 +14,41 @@ import { useRouter } from 'next/router';
 
 export default function Trade() {
   const [selectedRoute, setSelectedRoute] = useState(1)
-  const [buy, setBuy] = useState(true) // true -> Sol to Page // false -> Page to Sol
-  const [sol, setSol] = useState()
+  const [isBuy, setIsBuy] = useState(true) // true -> Sol to Page // false -> Page to Sol
+  const [lamport, setLamport] = useState()
   const [token, setToken] = useState()
+  const [mint, setMint] = useState()
+  const [feeCollector, setFeeCollector] = useState()
   const setModal = useModalStore(state => state.setModal)
   const [profile, isLoading, setUser] = useUserProfile()
   const page = usePageSelectedStore(state => state.page)
   const router = useRouter()
+
+  useEffect(async() => {
+    if(router.query.page){
+      try{
+        await axios.get(`http://localhost:4000/get/page/${router.query.page}/trade_info`,{
+          withCredentials: true
+        }
+        ).then(async response => {
+          if(response.data.public_key){
+            setFeeCollector(new PublicKey(response.data.public_key))
+          }
+          if(response.data.token_mint_address){
+            setMint(new PublicKey(response.data.token_mint_address))
+          }
+        })
+        .catch(error =>{
+          if(error.response) toast.error(`${error.response.status}: ${error.response.data}`)
+          return
+        })
+      }catch(err){
+        if(error.response) toast.error(`${error.response.status?error.response.status:'400'}: ${error.response.data?error.response.data:'An error occurred'}`)
+        return
+      }
+    }
+  }, [router.query.page])
+
   const {
     wallet,
     connected,
@@ -70,13 +98,22 @@ export default function Trade() {
       </div>
 
       <div className={styles.selectionParent}>
-        {buy?<SelectionSol sol={sol} setToken={setToken} walletPublicKey={publicKey} buy={buy} setSol={setSol}/>:<SelectionPageToken token={token} walletPublicKey={publicKey} setSol={setSol}  buy={buy} setToken={setToken} page={page}/>}
+        {isBuy?<SelectionSol tokenMint={mint} lamport={lamport} setToken={setToken} walletPublicKey={publicKey} buy={isBuy} setLamport={setLamport}/>:<SelectionPageToken tokenMint={mint} token={token} walletPublicKey={publicKey} setLamport={setLamport}  buy={isBuy} setToken={setToken} page={page}/>}
           <div className={styles.tradeDirectionArrowParent}>
             <div className={styles.tradeDirectionArrowChild}>
-              <a onClick={() => setBuy(!buy)}><Arrow strokeWidth='3'/></a>
+              <a onClick={async() => {
+                setIsBuy(!isBuy);
+                try{
+                  let priceIs = await price(mint, isBuy, isBuy?lamport:null, !isBuy?token:null, publicKey)
+                  setToken(isBuy?priceIs.token:token)
+                  setLamport(!isBuy?priceIs.lamports:lamport)
+                }catch(err){
+                  console.error(err)
+                }
+              }}><Arrow strokeWidth='3'/></a>
             </div>
           </div>
-        {buy?<SelectionPageToken token={token} setSol={setSol} walletPublicKey={publicKey} buy={buy} setToken={setToken} page={page}/>:<SelectionSol walletPublicKey={publicKey}  buy={buy} sol={sol} setToken={setToken} setSol={setSol}/>}
+        {isBuy?<SelectionPageToken token={token} tokenMint={mint} setLamport={setLamport} walletPublicKey={publicKey} buy={isBuy} setToken={setToken} page={page}/>:<SelectionSol tokenMint={mint} walletPublicKey={publicKey}  buy={isBuy} lamport={lamport} setToken={setToken} setLamport={setLamport}/>}
       </div>
 
       <div className={`smalltext ${styles.priceInDollar}`}>
@@ -95,26 +132,26 @@ export default function Trade() {
             <h2>Connect Wallet</h2>
           </div>
         </a>
+      :!mint?
+        <a onClick={() => fundPageToken(publicKey, signTransaction, router, feeCollector, setMint)}>
+          <div className={styles.connectWallet}>
+            <h2>Fund</h2>
+          </div>
+        </a>
       :
-        <>
-          <a onClick={() => fundPageToken(publicKey, signTransaction, router)}>
-            <div className={styles.connectWallet}>
-              <h2>Fund</h2>
-            </div>
-          </a>
-
-          {/* <a onClick={() => swap(publicKey, signTransaction)}>
-            <div className={styles.connectWallet}>
-              <h2>Swap</h2>
-            </div>
-          </a> */}
-        </>
+        <a onClick={() => isBuy?buy(publicKey, signTransaction, feeCollector, mint, lamport, token):sell(publicKey, signTransaction, mint, token, lamport)}>
+          <div className={styles.connectWallet}>
+            <h2>Swap</h2>
+            SOL: {lamport}
+            TOKEN: {token}
+          </div>
+        </a>
       }
     </div>
   )
 }
 
-const SelectionSol = ({setSol, setToken, walletPublicKey, buy, sol}) => {
+const SelectionSol = ({setLamport, setToken, walletPublicKey, buy, lamport, tokenMint}) => {
   return(
     <div className={styles.tradePageInfoParent}>
 
@@ -127,11 +164,11 @@ const SelectionSol = ({setSol, setToken, walletPublicKey, buy, sol}) => {
         <span className="smalltext">0&nbsp;</span><span className="smalltext">($0)</span>
       </div>
 
-      <NumberFormat value={sol} onValueChange={async(values, sourceInfo) => {
-        console.log(sourceInfo)
+      <NumberFormat value={Math.floor(lamport/100000)/10000} onValueChange={async(values, sourceInfo) => {
+        //console.log(sourceInfo)
         if(sourceInfo.source == 'event'){
-          setSol(values.floatValue)
-          setToken((Math.round(((await price(new PublicKey('2LDgsi2s8J42hfXwa5fdZXsGGn6VHtjYZG5SQ95VDSRg'), buy, (values.floatValue*1000000000), null, walletPublicKey)).token)/100000))/10000)
+          setLamport(values.floatValue*1000000000)
+          setToken((await price(tokenMint, buy, (values.floatValue*1000000000), null, walletPublicKey)).token)
         }
       }} allowedDecimalSeparators={','} placeholder="0" thousandSeparator=" " allowNegative={false} decimalSeparator="."/>
 
@@ -139,7 +176,7 @@ const SelectionSol = ({setSol, setToken, walletPublicKey, buy, sol}) => {
   )
 }
 
-const SelectionPageToken = ({page, token, buy, walletPublicKey, setToken, setSol}) => {
+const SelectionPageToken = ({page, token, buy, walletPublicKey, setToken, setLamport, tokenMint}) => {
   return(
     <div className={styles.tradePageInfoParent}>
 
@@ -156,10 +193,10 @@ const SelectionPageToken = ({page, token, buy, walletPublicKey, setToken, setSol
         <span className="smalltext">0&nbsp;</span><span className="smalltext">($0)</span>
       </div>
 
-      <NumberFormat value={token} onValueChange={async(values, sourceInfo) => {
+      <NumberFormat value={Math.floor(token/100000)/10000} onValueChange={async(values, sourceInfo) => {
         if(sourceInfo.source == 'event'){
-          setToken(values.floatValue)
-          setSol(((Math.round(((await price(new PublicKey('2LDgsi2s8J42hfXwa5fdZXsGGn6VHtjYZG5SQ95VDSRg'), buy, null, values.floatValue*1000000000, walletPublicKey)).lamports)/100000))/10000))
+          setToken(values.floatValue*1000000000)
+          setLamport((await price(tokenMint, buy, null, values.floatValue*1000000000, walletPublicKey)).lamports)
         }
       }} allowedDecimalSeparators={','} placeholder="0" thousandSeparator=" " allowNegative={false} decimalSeparator="."/>
 
@@ -173,7 +210,7 @@ import { connect } from 'socket.io-client';
 import BN from 'bn.js';
 import assert from 'assert';
 const SYSTEM_PROGRAM_ID = new PublicKey('11111111111111111111111111111111')
-const VisionProgramId = new PublicKey('97F2CxbQfAiLdF14dWt24KjiG1nUzsfQPcxvqLTF2s6p')
+const VisionProgramId = new PublicKey('8rb6GeD8i2g3hcfN73xnc9kRbnwepeNjHJyXK5DtyUm8')
 
 import * as BufferLayout from "buffer-layout";
 
@@ -193,7 +230,6 @@ const AmmLayout = BufferLayout.struct(
     publicKey('fee_collector_pubkey')
   ]
 )
-
 
 const price = async(tokenMint, isBuy, lamportsAmt, tokenAmt, walletPublicKey) => {
   const connection = new Connection('http://localhost:8899', 'confirmed')
@@ -262,26 +298,10 @@ const getAmmInfo = async(pubKey, commitment) => {
 
 }
 
-const fundPageToken = async(walletPublicKey, signTransaction, router) => {
+const fundPageToken = async(walletPublicKey, signTransaction, router, feeCollector, setMint) => {
   const connection = new Connection('http://localhost:8899', 'confirmed')
   const tx = new Transaction()
-  let feeCollector = null
 //! Fetch Fee collector from DB, for now random pubkey:
-  try{
-    await axios.get(`http://localhost:4000/get/page/${router.query.page}/admin`,{
-      withCredentials: true
-    }
-    ).then(async response => {
-      feeCollector= new PublicKey(response.data.public_key)
-    })
-    .catch(error =>{
-      if(error.response) toast.error(`${error.response.status}: ${error.response.data}`)
-      return
-    })
-  }catch(err){
-    if(error.response) toast.error(`${error.response.status?error.response.status:'400'}: ${error.response.data?error.response.data:'An error occurred'}`)
-    return
-  }
 
   const new_mint_keypair = Keypair.generate();
 
@@ -348,30 +368,21 @@ const fundPageToken = async(walletPublicKey, signTransaction, router) => {
     }
     ).then(async response => {
       //console.log(response)
+      setMint(new_mint_keypair.publicKey)
     })
     .catch(error =>{
       if(error.response) toast.error(`${error.response.status?error.response.status:'400'}: ${error.response.data?error.response.data:'An error occurred'}`)
       return
     })
-
-    //await sendAndConfirmRawTransaction(connection, signedTx.serialize())
   }catch(e){
     console.log("error:",e)
   }
-
-  try{
-    //await price(new_mint_keypair.publicKey, true, 30000000000, null, walletPublicKey)
-    //await price(new_mint_keypair.publicKey, true, null, 269229227589142, walletPublicKey)
-    //await changeFee(walletPublicKey, signTransaction, new_mint_keypair.publicKey)
-    //await buy(walletPublicKey, signTransaction, new_mint_keypair.publicKey)
-    //await sell(walletPublicKey, signTransaction, new_mint_keypair.publicKey)
-  }catch(err) {
-    throw err;
-  }
 }
 
-const buy = async(walletPublicKey, signTransaction, tokenMint) => {
-  const feeCollectorPage = new PublicKey('G1tUHWDaR1Jerzz9MdwPfxoXVMmwT6kU4DmncZmke5gb')
+const buy = async(walletPublicKey, signTransaction, feeCollector, tokenMint, amountIn, minimumAmountOut) => {
+  console.log(amountIn)
+  console.log(minimumAmountOut)
+  const feeCollectorPage = feeCollector
   const feeCollectorProvider = new PublicKey('CohZhJhnHkdutc7iktrrGVUX4oUM3VctSX7DybSzRN4f')
   const connection = new Connection('http://localhost:8899', 'confirmed')
   const tx = new Transaction()
@@ -415,14 +426,6 @@ const buy = async(walletPublicKey, signTransaction, tokenMint) => {
       throw err;
     }
   }
-  console.log(tx)
-
-  // const user_associatedTokenAddress = await manualGetOrCreateAssociatedAccountInfo(
-  //   walletPublicKey,
-  //   tx,
-  //   connection,
-  //   tokenMint,
-  // )
 
   // Accounts sent to Contract
   const keys = [
@@ -456,8 +459,8 @@ const buy = async(walletPublicKey, signTransaction, tokenMint) => {
   dataLayout.encode(
     {
       instruction: 1,
-      amountIn: new Numberu64(30000000000).toBuffer(),
-      minimumAmountOut: new Numberu64(1).toBuffer(),
+      amountIn: new Numberu64(amountIn).toBuffer(),
+      minimumAmountOut: new Numberu64((minimumAmountOut * 0.98)).toBuffer(),
     },
     data
   );
@@ -470,7 +473,6 @@ const buy = async(walletPublicKey, signTransaction, tokenMint) => {
 
 
   tx.add(txInst);
-
   // Send Transaction
   try{
     tx.recentBlockhash = (await connection.getRecentBlockhash("confirmed")).blockhash
@@ -485,7 +487,7 @@ const buy = async(walletPublicKey, signTransaction, tokenMint) => {
 }
 
 
-const sell = async(walletPublicKey, signTransaction, tokenMint) => {
+const sell = async(walletPublicKey, signTransaction, tokenMint, amountIn, minimumAmountOut) => {
   const feeCollectorProvider = new PublicKey('CohZhJhnHkdutc7iktrrGVUX4oUM3VctSX7DybSzRN4f')
   const connection = new Connection('http://localhost:8899', 'confirmed')
   const tx = new Transaction()
@@ -552,8 +554,8 @@ const sell = async(walletPublicKey, signTransaction, tokenMint) => {
   dataLayout.encode(
     {
       instruction: 2,
-      amountIn: new Numberu64(269229227589142).toBuffer(),
-      minimumAmountOut: new Numberu64(1).toBuffer(),
+      amountIn: new Numberu64(amountIn).toBuffer(),
+      minimumAmountOut: new Numberu64((minimumAmountOut*0.98)).toBuffer(),
     },
     data
   );

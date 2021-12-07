@@ -226,11 +226,11 @@ impl Processor {
     // Checks
 
         // Check slippage
-            if token_amt_from_sol_input < minimum_amount_out {
-                return Err(VisionError::ExceededSlippage.into());
-            }
             if amount_in > payer_info.lamports() {
                 return Err(VisionError::InvalidInput.into());
+            }
+            if token_amt_from_sol_input < minimum_amount_out {
+                return Err(VisionError::ExceededSlippage.into());
             }
 
         // Accounts
@@ -402,14 +402,14 @@ impl Processor {
     // Checks
 
         // Check output
+            if amount_in > (spl_token::state::Account::unpack(&payer_associated_token_address_info.data.borrow())?).amount {
+                return Err(VisionError::InvalidInput.into());
+            }
             if sol_amt_from_token_input > ((reserve_balance as u64).checked_sub(36u64).ok_or(VisionError::Overflow)?){
                 return Err(VisionError::ReserveError.into());
             }
             if adjusted_sol_amt_from_token_input < minimum_amount_out {
                 return Err(VisionError::ExceededSlippage.into());
-            }
-            if amount_in > (spl_token::state::Account::unpack(&payer_associated_token_address_info.data.borrow())?).amount {
-                return Err(VisionError::InvalidInput.into());
             }
         // Accounts
             if !payer_info.is_signer {

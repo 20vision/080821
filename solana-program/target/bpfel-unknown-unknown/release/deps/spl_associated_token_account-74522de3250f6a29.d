@@ -1,0 +1,9 @@
+/home/alexander/Desktop/20Vision/080821/solana-program/target/bpfel-unknown-unknown/release/deps/spl_associated_token_account-74522de3250f6a29.so: /home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/spl-associated-token-account-1.0.3/src/lib.rs /home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/spl-associated-token-account-1.0.3/src/entrypoint.rs /home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/spl-associated-token-account-1.0.3/src/processor.rs
+
+/home/alexander/Desktop/20Vision/080821/solana-program/target/bpfel-unknown-unknown/release/deps/libspl_associated_token_account-74522de3250f6a29.rlib: /home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/spl-associated-token-account-1.0.3/src/lib.rs /home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/spl-associated-token-account-1.0.3/src/entrypoint.rs /home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/spl-associated-token-account-1.0.3/src/processor.rs
+
+/home/alexander/Desktop/20Vision/080821/solana-program/target/bpfel-unknown-unknown/release/deps/spl_associated_token_account-74522de3250f6a29.d: /home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/spl-associated-token-account-1.0.3/src/lib.rs /home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/spl-associated-token-account-1.0.3/src/entrypoint.rs /home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/spl-associated-token-account-1.0.3/src/processor.rs
+
+/home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/spl-associated-token-account-1.0.3/src/lib.rs:
+/home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/spl-associated-token-account-1.0.3/src/entrypoint.rs:
+/home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/spl-associated-token-account-1.0.3/src/processor.rs:

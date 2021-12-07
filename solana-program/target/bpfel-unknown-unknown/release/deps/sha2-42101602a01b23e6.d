@@ -1,0 +1,12 @@
+/home/alexander/Desktop/20Vision/080821/solana-program/target/bpfel-unknown-unknown/release/deps/sha2-42101602a01b23e6.rmeta: /home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/sha2-0.9.8/src/lib.rs /home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/sha2-0.9.8/src/consts.rs /home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/sha2-0.9.8/src/sha256.rs /home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/sha2-0.9.8/src/sha512.rs /home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/sha2-0.9.8/src/sha256/soft.rs /home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/sha2-0.9.8/src/sha512/soft.rs
+
+/home/alexander/Desktop/20Vision/080821/solana-program/target/bpfel-unknown-unknown/release/deps/libsha2-42101602a01b23e6.rlib: /home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/sha2-0.9.8/src/lib.rs /home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/sha2-0.9.8/src/consts.rs /home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/sha2-0.9.8/src/sha256.rs /home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/sha2-0.9.8/src/sha512.rs /home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/sha2-0.9.8/src/sha256/soft.rs /home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/sha2-0.9.8/src/sha512/soft.rs
+
+/home/alexander/Desktop/20Vision/080821/solana-program/target/bpfel-unknown-unknown/release/deps/sha2-42101602a01b23e6.d: /home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/sha2-0.9.8/src/lib.rs /home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/sha2-0.9.8/src/consts.rs /home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/sha2-0.9.8/src/sha256.rs /home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/sha2-0.9.8/src/sha512.rs /home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/sha2-0.9.8/src/sha256/soft.rs /home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/sha2-0.9.8/src/sha512/soft.rs
+
+/home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/sha2-0.9.8/src/lib.rs:
+/home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/sha2-0.9.8/src/consts.rs:
+/home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/sha2-0.9.8/src/sha256.rs:
+/home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/sha2-0.9.8/src/sha512.rs:
+/home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/sha2-0.9.8/src/sha256/soft.rs:
+/home/alexander/.cargo/registry/src/github.com-1ecc6299db9ec823/sha2-0.9.8/src/sha512/soft.rs:
