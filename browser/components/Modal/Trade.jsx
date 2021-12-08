@@ -11,18 +11,152 @@ import SolanaIcon from '../../assets/SolanaIcon'
 import NumberFormat from 'react-number-format';
 import axios from 'axios'
 import { useRouter } from 'next/router';
+import assert from 'assert';
+import { Connection, SYSVAR_RENT_PUBKEY, Account, SystemProgram, PublicKey, Keypair, Transaction,TransactionInstruction,FeeCalculator, sendAndConfirmTransaction, sendAndConfirmRawTransaction } from "@solana/web3.js";
+import { AccountLayout, Token, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, MintLayout } from "@solana/spl-token"
+import BN from 'bn.js';
+import * as BufferLayout from "buffer-layout";
+const SYSTEM_PROGRAM_ID = new PublicKey('11111111111111111111111111111111')
+const VisionProgramId = new PublicKey('8rb6GeD8i2g3hcfN73xnc9kRbnwepeNjHJyXK5DtyUm8')
+const connection = new Connection('http://localhost:8899', 'confirmed')
+
+const uint64Layout = (property = "uint64") => { 
+  return BufferLayout.blob(8, property);
+};
+const publicKey = (property = 'publicKey') => {
+  return BufferLayout.blob(32, property);
+};
+
+const AmmLayout = BufferLayout.struct(
+  [
+    BufferLayout.u8('isInitialized'),
+    BufferLayout.u8('bumpSeed'),
+    BufferLayout.u8('bumpSeedSol'),
+    BufferLayout.u16('fee'),
+    publicKey('fee_collector_pubkey')
+  ]
+)
+
 
 export default function Trade() {
   const [selectedRoute, setSelectedRoute] = useState(1)
-  const [isBuy, setIsBuy] = useState(true) // true -> Sol to Page // false -> Page to Sol
-  const [lamport, setLamport] = useState()
-  const [token, setToken] = useState()
   const [mint, setMint] = useState()
-  const [feeCollector, setFeeCollector] = useState()
-  const setModal = useModalStore(state => state.setModal)
+  const [tokenAmt, setTokenAmt] = useState()
+  const [lamportsAmt, setLamportsAmt] = useState()
+  const [amtOut, setAmtOut] = useState()
+  const [isBuy, setIsBuy] = useState(true) // true -> Sol to Page // false -> Page to Sol
   const [profile, isLoading, setUser] = useUserProfile()
-  const page = usePageSelectedStore(state => state.page)
+  const {wallet, connected, connect, publicKey, signTransaction} = useWallet();
+  const setModal = useModalStore(state => state.setModal)
+  const [pageFee, setPageFee] = useState(0.2)
+  const [feeCollector, setFeeCollector] = useState()
+  const [collateral, setCollateral] = useState()
+  const [tokenSupply, setTokenSupply] = useState()
   const router = useRouter()
+
+  const connectThisWallet = async() => {
+    try{
+      await connect()
+    }catch(err){
+      toast.error(err.name)
+    }
+  }
+
+  useEffect(async() => {
+    if(mint){
+      // Get Mint Supply / Add listener
+      connection.onAccountChange(
+        mint, 
+        async info => {
+          setTokenSupply(u64.fromBuffer((MintLayout.decode(Buffer.from(info.data))).supply).toNumber() + 1000000000)
+        },
+      );
+      const mintInfo = await connection.getAccountInfo(mint)
+      if (mintInfo === null) {
+        throw new Error('Failed to find mint account');
+      }
+      if (!mintInfo.owner.equals(TOKEN_PROGRAM_ID)) {
+        throw new Error(`Invalid mint owner: ${JSON.stringify(mintInfo.owner)}`);
+      }
+      if (mintInfo.data.length != MintLayout.span) {
+        throw new Error(`Invalid mint size`);
+      }
+      setTokenSupply(u64.fromBuffer((MintLayout.decode(Buffer.from(mintInfo.data))).supply).toNumber() + 1000000000)
+
+      // Get Fee / Add listener
+      
+      const [pda, bump_seed] = await PublicKey.findProgramAddress(
+        [mint.toBuffer()],
+        VisionProgramId,
+      );
+      setPageFee(getAmmInfo(await connection.getAccountInfo(pda)).fee)
+
+      connection.onAccountChange(
+        pda, 
+        async info => {
+          setPageFee(getAmmInfo(info).fee)
+        },
+      );
+      
+      const [pda_associatedSolAddress, __bump_seed] = await PublicKey.findProgramAddress(
+        [pda.toBuffer()],
+        VisionProgramId,
+      )
+      setCollateral(((await connection.getBalance(pda_associatedSolAddress)) - (await connection.getMinimumBalanceForRentExemption(0))))
+      connection.onAccountChange(
+        pda_associatedSolAddress, 
+        async info => {
+          setCollateral((info.lamports - (await connection.getMinimumBalanceForRentExemption(0))))
+        },
+      );
+    }
+  }, [mint])
+
+  useEffect(async() => {
+    if(lamportsAmt){
+      setTokenAmt(null)
+      setPrice()
+    }
+  }, [lamportsAmt])
+
+  useEffect(async() => {
+    if(tokenAmt){
+      setLamportsAmt(null)
+      setPrice()
+    }
+  }, [tokenAmt])
+
+  useEffect(async() => {
+    if(tokenAmt || lamportsAmt){
+      setPrice()
+    }
+  }, [isBuy, tokenSupply, pageFee, collateral])
+
+  const setPrice = () => {
+    if(isBuy){
+      if(lamportsAmt){
+        setAmtOut(tokenSupply*(Math.pow((collateral + lamportsAmt * (1 - pageFee/100000 - 0.01)), 0.60976) / Math.pow(collateral, 0.60976) - 1))
+      }else if(tokenAmt){
+        setAmtOut((Math.pow((tokenAmt / tokenSupply + 1), (1/0.60976)) - 1 )* collateral)
+      }else{
+        setAmtOut(null)
+      }
+    }else if(!isBuy){
+      if(lamportsAmt){
+        if(collateral > (lamportsAmt*(1-0.01))){
+          setAmtOut(-( Math.pow((collateral*(1-0.01)-lamportsAmt), 0.60976) / Math.pow((collateral*(1-0.01)), 0.60976) - 1) * tokenSupply)
+        }else{
+          setAmtOut((Math.pow((lamportsAmt - collateral*(1 - 0.01)), 0.60976) / Math.pow((collateral*(1-0.01)), 0.60976) + 1) * tokenSupply)
+        }
+      }else if(tokenAmt){
+        setAmtOut(collateral*(1 - Math.pow((tokenSupply - tokenAmt), (1/0.60976)) / Math.pow(tokenSupply, (1/0.60976))) *(1-0.01))
+      }else{
+        setAmtOut(null)
+      }
+    }
+
+    //setAmtOut(price)
+  }
 
   useEffect(async() => {
     if(router.query.page){
@@ -49,40 +183,341 @@ export default function Trade() {
     }
   }, [router.query.page])
 
-  const {
-    wallet,
-    connected,
-    connect,
-    publicKey,
-    signTransaction
-    // connecting,
-    // wallets,
-    // autoConnect,
-    // wallet,
-    // adapter,
-    // publicKey,
-    // ready,
-    // connected,
-    // connecting,
-    // disconnecting,
-    // select,
-    // connect,
-    // disconnect,
-    // sendTransaction,
-    // signTransaction,
-    // signAllTransactions,
-    // signMessage 
-  } = useWallet();
+  const getAmmInfo = (info) => {
+    //const info = await connection.getAccountInfo(pubKey, commitment)
+    if (info == null){
+      throw new Error("Failed to find account");
+    }
+    if (!info.owner.equals(VisionProgramId)) {
+      throw new Error('Invalid account owner');
+    }
+    if (info.data.length != AmmLayout.span) {
+      throw new Error(`Invalid account size`);
+    }
 
+    const data = Buffer.from(info.data)
+    const accountInfo = AmmLayout.decode(data)
+    return accountInfo
+  }
 
-  const connectThisWallet = async() => {
+  const fundPageToken = async() => {
+    const connection = new Connection('http://localhost:8899', 'confirmed')
+    const tx = new Transaction()
+  //! Fetch Fee collector from DB, for now random pubkey:
+  
+    const new_mint_keypair = Keypair.generate();
+  
+    // PDA
+    const [pda, bump_seed] = await PublicKey.findProgramAddress(
+      [new_mint_keypair.publicKey.toBuffer()],
+      VisionProgramId,
+    );
+  
+    const [pda_associatedSolAddress, __bump_seed] = await PublicKey.findProgramAddress(
+      [pda.toBuffer()],
+      VisionProgramId,
+    )
+    
+    // Accounts sent to Contract
+    const keys = [
+      // Funder - Pays for funding and first swap
+      {pubkey: publicKey, isSigner: true, isWritable: true},
+      // Mint PubKey
+      {pubkey: new_mint_keypair.publicKey, isSigner: true, isWritable: true},
+      // Pda where the Swap state is stored to(is_initialized, bump_seed, fee(0-50000), fee_collector)
+      {pubkey: pda, isSigner: false, isWritable: true},
+      // Pda bump seed for program derived address of Sol account
+      {pubkey: pda_associatedSolAddress, isSigner: false, isWritable: true},
+      // Page Fee collector Pub Key
+      {pubkey: feeCollector, isSigner: false, isWritable: false},
+      // For invoke_signed - To create Accounts
+      {pubkey: SystemProgram.programId, isSigner: false, isWritable: false},
+      // For invoking - To create Mint & Mint Account
+      {pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false},
+      // Rent Sysvar for Token Program (e.g. Initializing mint)
+      {pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false},
+    ]
+  
+    // Data sent to Contract as Buffer
+    const dataLayout = BufferLayout.struct([BufferLayout.u8('instruction')])
+    const data = Buffer.alloc(dataLayout.span);
+    dataLayout.encode(
+      {
+        instruction: 0
+      },
+      data
+    );
+  
+    const txInst = new TransactionInstruction({
+      keys,
+      programId: VisionProgramId,
+      data,
+    });
+  
+    tx.add(txInst);
+  
+    // Send Transaction
     try{
-      await connect()
-    }catch(err){
-      toast.error(err.name)
+      tx.recentBlockhash = (await connection.getRecentBlockhash("confirmed")).blockhash
+      tx.feePayer = publicKey
+      tx.partialSign(new_mint_keypair);
+      const signedTx = await signTransaction(tx)
+      axios.post('http://localhost:4000/post/fundPageToken',{tx: signedTx.serialize(), unique_pagename: router.query.page},{
+        withCredentials: true
+      }
+      ).then(async response => {
+        setMint(new_mint_keypair.publicKey)
+      })
+      .catch(error =>{
+        if(error.response) toast.error(`${error.response.status?error.response.status:'400'}: ${error.response.data?error.response.data:'An error occurred'}`)
+        return
+      })
+    }catch(e){
+      console.log("error:",e)
     }
   }
 
+  const buy = async(amountIn, minimumAmountOut) => {
+    const feeCollectorProvider = new PublicKey('CohZhJhnHkdutc7iktrrGVUX4oUM3VctSX7DybSzRN4f')
+    const tx = new Transaction()
+  
+    // PDA
+    const [pda, bump_seed] = await PublicKey.findProgramAddress(
+      [mint.toBuffer()],
+      VisionProgramId,
+    );
+  
+    const [pda_associatedSolAddress, __bump_seed] = await PublicKey.findProgramAddress(
+      [pda.toBuffer()],
+      VisionProgramId,
+    )
+  
+  
+    let pageToken = new Token(connection, mint, TOKEN_PROGRAM_ID, publicKey)
+  
+    const user_associatedTokenAddress = await Token.getAssociatedTokenAddress(
+      ASSOCIATED_TOKEN_PROGRAM_ID,
+      TOKEN_PROGRAM_ID,
+      mint,
+      publicKey
+    )
+  
+    try {
+      await pageToken.getAccountInfo(user_associatedTokenAddress)
+    }catch(err){
+      if (err.message === 'Failed to find account' || err.message === 'Invalid account owner'){
+        tx.add(
+          Token.createAssociatedTokenAccountInstruction(
+            ASSOCIATED_TOKEN_PROGRAM_ID,
+            TOKEN_PROGRAM_ID,
+            mint,
+            user_associatedTokenAddress,
+            publicKey,
+            publicKey,
+          )
+        )
+      }else {
+        throw err;
+      }
+    }
+  
+    // Accounts sent to Contract
+    const keys = [
+      // Funder - Pays for funding and first swap
+      {pubkey: publicKey, isSigner: true, isWritable: true},
+      // Funder - Associated Token Address
+      {pubkey: user_associatedTokenAddress, isSigner: false, isWritable: true},
+      // Funder - Pays for funding and first swap
+      {pubkey: pda, isSigner: false, isWritable: true},
+      // Pda bump seed for program derived address of Sol account
+      {pubkey: pda_associatedSolAddress, isSigner: false, isWritable: true},
+      // Funder - Pays for funding and first swap
+      {pubkey: mint, isSigner: false, isWritable: true},
+      // Page Fee Collector
+      {pubkey: feeCollector, isSigner: false, isWritable: true},
+      // Provider Fee Collector
+      {pubkey: feeCollectorProvider, isSigner: false, isWritable: true},
+      // For invoke_signed - To create Accounts
+      {pubkey: SystemProgram.programId, isSigner: false, isWritable: false},
+      // For invoking - To create Mint & Mint Account
+      {pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false},
+    ]
+    
+    // Data sent to Contract as Buffer
+    const dataLayout = BufferLayout.struct([
+      BufferLayout.u8('instruction'),
+      uint64Layout('amountIn'),
+      uint64Layout('minimumAmountOut'),
+    ])
+    const data = Buffer.alloc(dataLayout.span);
+    dataLayout.encode(
+      {
+        instruction: 1,
+        amountIn: new Numberu64(amountIn).toBuffer(),
+        minimumAmountOut: new Numberu64((minimumAmountOut * 0.98)).toBuffer(),
+      },
+      data
+    );
+  
+    const txInst = new TransactionInstruction({
+      keys,
+      programId: VisionProgramId,
+      data,
+    });
+  
+  
+    tx.add(txInst);
+    // Send Transaction
+    try{
+      tx.recentBlockhash = (await connection.getRecentBlockhash("confirmed")).blockhash
+      tx.feePayer = publicKey
+      const signedTx = await signTransaction(tx)
+      await sendAndConfirmRawTransaction(connection, signedTx.serialize())
+    }catch(e){
+      console.log("error:",e)
+    }
+    
+  
+  }
+  
+  
+  const sell = async(amountIn, minimumAmountOut) => {
+    const feeCollectorProvider = new PublicKey('CohZhJhnHkdutc7iktrrGVUX4oUM3VctSX7DybSzRN4f')
+    const tx = new Transaction()
+  
+    // PDA
+    const [pda, bump_seed] = await PublicKey.findProgramAddress(
+      [mint.toBuffer()],
+      VisionProgramId,
+    );
+    const [pda_associatedSolAddress, __bump_seed] = await PublicKey.findProgramAddress(
+      [pda.toBuffer()],
+      VisionProgramId,
+    )
+
+    const user_associatedTokenAddress = await Token.getAssociatedTokenAddress(
+      ASSOCIATED_TOKEN_PROGRAM_ID,
+      TOKEN_PROGRAM_ID,
+      mint,
+      publicKey
+    )
+  
+    // Accounts sent to Contract
+    const keys = [
+      // Funder - Pays for funding and first swap
+      {pubkey: publicKey, isSigner: true, isWritable: true},
+      // Funder - Associated Token Address
+      {pubkey: user_associatedTokenAddress, isSigner: false, isWritable: true},
+      // Funder - Pays for funding and first swap
+      {pubkey: pda, isSigner: false, isWritable: true},
+      // Pda bump seed for program derived address of Sol account
+      {pubkey: pda_associatedSolAddress, isSigner: false, isWritable: true},
+      // Funder - Pays for funding and first swap
+      {pubkey: mint, isSigner: false, isWritable: true},
+      // Provider Fee Collector
+      {pubkey: feeCollectorProvider, isSigner: false, isWritable: true},
+      // For invoke_signed - To create Accounts
+      {pubkey: SystemProgram.programId, isSigner: false, isWritable: false},
+      // For invoking - To create Mint & Mint Account
+      {pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false},
+    ]
+    
+    // Data sent to Contract as Buffer
+    const dataLayout = BufferLayout.struct([
+      BufferLayout.u8('instruction'),
+      uint64Layout('amountIn'),
+      uint64Layout('minimumAmountOut'),
+    ])
+    const data = Buffer.alloc(dataLayout.span);
+    dataLayout.encode(
+      {
+        instruction: 2,
+        amountIn: new Numberu64(amountIn).toBuffer(),
+        minimumAmountOut: new Numberu64((minimumAmountOut*0.98)).toBuffer(),
+      },
+      data
+    );
+  
+    const txInst = new TransactionInstruction({
+      keys,
+      programId: VisionProgramId,
+      data,
+    });
+  
+    tx.add(txInst);
+    // Send Transaction
+    try{
+      tx.recentBlockhash = (await connection.getRecentBlockhash("confirmed")).blockhash
+      tx.feePayer = publicKey
+      const signedTx = await signTransaction(tx)
+      await sendAndConfirmRawTransaction(connection, signedTx.serialize())
+    }catch(e){
+      console.log("error:",e)
+    }
+    
+  
+  }
+  
+  
+  const changeFee = async() => {
+    const feeCollectorPage = publicKey
+    const newfeeCollectorPage = new PublicKey('G1tUHWDaR1Jerzz9MdwPfxoXVMmwT6kU4DmncZmke5gb')
+  
+    const tx = new Transaction()
+  
+    // PDA
+    const [pda, bump_seed] = await PublicKey.findProgramAddress(
+      [mint.toBuffer()],
+      VisionProgramId,
+    );
+  
+    // Accounts sent to Contract
+    const keys = [
+      // Previous fee collector
+      {pubkey: feeCollectorPage, isSigner: true, isWritable: true},
+      // New fee collector
+      {pubkey: newfeeCollectorPage, isSigner: false, isWritable: true},
+      // pda for data
+      {pubkey: pda, isSigner: false, isWritable: true},
+      // tokenmint to derive pda
+      {pubkey: mint, isSigner: false, isWritable: true},
+      // Systemprogram for Transaction if new accout has not been initialized
+      {pubkey: SystemProgram.programId, isSigner: false, isWritable: false},
+    ]
+    
+    // Data sent to Contract as Buffer
+    const dataLayout = BufferLayout.struct([
+      BufferLayout.u8('instruction'),
+      BufferLayout.u16('fee'),
+    ])
+    const data = Buffer.alloc(dataLayout.span);
+    dataLayout.encode(
+      {
+        instruction: 3,
+        fee: 50000,
+      },
+      data
+    );
+  
+    const txInst = new TransactionInstruction({
+      keys,
+      programId: VisionProgramId,
+      data,
+    });
+  
+    tx.add(txInst);
+    // Send Transaction
+    try{
+      tx.recentBlockhash = (await connection.getRecentBlockhash("confirmed")).blockhash
+      tx.feePayer = publicKey
+      const signedTx = await signTransaction(tx)
+      await sendAndConfirmRawTransaction(connection, signedTx.serialize())
+    }catch(e){
+      console.log("error:",e)
+    }
+  }
+  
+// HTML
   return (
     <div className={styles.container}>
       <div className={`noselect ${styles.header}`}>
@@ -96,24 +531,14 @@ export default function Trade() {
             %
           </h1>
       </div>
-
       <div className={styles.selectionParent}>
-        {isBuy?<SelectionSol tokenMint={mint} lamport={lamport} setToken={setToken} walletPublicKey={publicKey} buy={isBuy} setLamport={setLamport}/>:<SelectionPageToken tokenMint={mint} token={token} walletPublicKey={publicKey} setLamport={setLamport}  buy={isBuy} setToken={setToken} page={page}/>}
+        {isBuy?<SelectionSol value={(!lamportsAmt && tokenAmt)?amtOut:lamportsAmt} setLamportsAmt={setLamportsAmt}/>:<SelectionPageToken value={(!tokenAmt && lamportsAmt)?amtOut:tokenAmt} setTokenAmt={setTokenAmt}/>}
           <div className={styles.tradeDirectionArrowParent}>
             <div className={styles.tradeDirectionArrowChild}>
-              <a onClick={async() => {
-                setIsBuy(!isBuy);
-                try{
-                  let priceIs = await price(mint, isBuy, isBuy?lamport:null, !isBuy?token:null, publicKey)
-                  setToken(isBuy?priceIs.token:token)
-                  setLamport(!isBuy?priceIs.lamports:lamport)
-                }catch(err){
-                  console.error(err)
-                }
-              }}><Arrow strokeWidth='3'/></a>
+              <a onClick={() => setIsBuy(!isBuy)}><Arrow strokeWidth='3'/></a>
             </div>
           </div>
-        {isBuy?<SelectionPageToken token={token} tokenMint={mint} setLamport={setLamport} walletPublicKey={publicKey} buy={isBuy} setToken={setToken} page={page}/>:<SelectionSol tokenMint={mint} walletPublicKey={publicKey}  buy={isBuy} lamport={lamport} setToken={setToken} setLamport={setLamport}/>}
+        {isBuy?<SelectionPageToken value={(!tokenAmt && lamportsAmt)?amtOut:tokenAmt} setTokenAmt={setTokenAmt}/>:<SelectionSol value={(!lamportsAmt && tokenAmt)?amtOut:lamportsAmt} setLamportsAmt={setLamportsAmt}/>}
       </div>
 
       <div className={`smalltext ${styles.priceInDollar}`}>
@@ -133,28 +558,31 @@ export default function Trade() {
           </div>
         </a>
       :!mint?
-        <a onClick={() => fundPageToken(publicKey, signTransaction, router, feeCollector, setMint)}>
+        <a onClick={() => fundPageToken()}>
           <div className={styles.connectWallet}>
             <h2>Fund</h2>
           </div>
         </a>
       :
-        <a onClick={() => isBuy?buy(publicKey, signTransaction, feeCollector, mint, lamport, token):sell(publicKey, signTransaction, mint, token, lamport)}>
+        <a onClick={() => {
+          isBuy?
+            buy(lamportsAmt?lamportsAmt:amtOut, (tokenAmt?tokenAmt:amtOut * 0.98))
+          :
+            sell(lamportsAmt?lamportsAmt:amtOut, (tokenAmt?tokenAmt:amtOut * 0.98))
+          }}>
           <div className={styles.connectWallet}>
             <h2>Swap</h2>
-            SOL: {lamport}
-            TOKEN: {token}
           </div>
         </a>
       }
     </div>
   )
+  
 }
 
-const SelectionSol = ({setLamport, setToken, walletPublicKey, buy, lamport, tokenMint}) => {
+const SelectionSol = ({setLamportsAmt, value}) => {
   return(
     <div className={styles.tradePageInfoParent}>
-
       <SolanaIcon/>
 
       <div className={styles.tradePageInfoChild}>
@@ -164,11 +592,9 @@ const SelectionSol = ({setLamport, setToken, walletPublicKey, buy, lamport, toke
         <span className="smalltext">0&nbsp;</span><span className="smalltext">($0)</span>
       </div>
 
-      <NumberFormat value={Math.floor(lamport/100000)/10000} onValueChange={async(values, sourceInfo) => {
-        //console.log(sourceInfo)
+      <NumberFormat value={(Math.floor(value/100000)/10000)} onValueChange={async(values, sourceInfo) => {
         if(sourceInfo.source == 'event'){
-          setLamport(values.floatValue*1000000000)
-          setToken((await price(tokenMint, buy, (values.floatValue*1000000000), null, walletPublicKey)).token)
+          setLamportsAmt(values.floatValue*1000000000)
         }
       }} allowedDecimalSeparators={','} placeholder="0" thousandSeparator=" " allowNegative={false} decimalSeparator="."/>
 
@@ -176,7 +602,9 @@ const SelectionSol = ({setLamport, setToken, walletPublicKey, buy, lamport, toke
   )
 }
 
-const SelectionPageToken = ({page, token, buy, walletPublicKey, setToken, setLamport, tokenMint}) => {
+const SelectionPageToken = ({setTokenAmt, value}) => {
+  const page = usePageSelectedStore(state => state.page)
+
   return(
     <div className={styles.tradePageInfoParent}>
 
@@ -193,10 +621,9 @@ const SelectionPageToken = ({page, token, buy, walletPublicKey, setToken, setLam
         <span className="smalltext">0&nbsp;</span><span className="smalltext">($0)</span>
       </div>
 
-      <NumberFormat value={Math.floor(token/100000)/10000} onValueChange={async(values, sourceInfo) => {
+      <NumberFormat value={(Math.floor(value/100000)/10000)} onValueChange={async(values, sourceInfo) => {
         if(sourceInfo.source == 'event'){
-          setToken(values.floatValue*1000000000)
-          setLamport((await price(tokenMint, buy, null, values.floatValue*1000000000, walletPublicKey)).lamports)
+          setTokenAmt(values.floatValue*1000000000)
         }
       }} allowedDecimalSeparators={','} placeholder="0" thousandSeparator=" " allowNegative={false} decimalSeparator="."/>
 
@@ -204,444 +631,6 @@ const SelectionPageToken = ({page, token, buy, walletPublicKey, setToken, setLam
   )
 }
 
-import { Connection, SYSVAR_RENT_PUBKEY, Account, SystemProgram, PublicKey, Keypair, Transaction,TransactionInstruction,FeeCalculator, sendAndConfirmTransaction, sendAndConfirmRawTransaction } from "@solana/web3.js";
-import { AccountLayout, Token, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/spl-token"
-import { connect } from 'socket.io-client';
-import BN from 'bn.js';
-import assert from 'assert';
-const SYSTEM_PROGRAM_ID = new PublicKey('11111111111111111111111111111111')
-const VisionProgramId = new PublicKey('8rb6GeD8i2g3hcfN73xnc9kRbnwepeNjHJyXK5DtyUm8')
-
-import * as BufferLayout from "buffer-layout";
-
-const uint64Layout = (property = "uint64") => { 
-  return BufferLayout.blob(8, property);
-};
-const publicKey = (property = 'publicKey') => {
-  return BufferLayout.blob(32, property);
-};
-
-const AmmLayout = BufferLayout.struct(
-  [
-    BufferLayout.u8('isInitialized'),
-    BufferLayout.u8('bumpSeed'),
-    BufferLayout.u8('bumpSeedSol'),
-    BufferLayout.u16('fee'),
-    publicKey('fee_collector_pubkey')
-  ]
-)
-
-const price = async(tokenMint, isBuy, lamportsAmt, tokenAmt, walletPublicKey) => {
-  const connection = new Connection('http://localhost:8899', 'confirmed')
-  const mint = new Token(connection, tokenMint, TOKEN_PROGRAM_ID, walletPublicKey)
-  const [pda, bump_seed] = await PublicKey.findProgramAddress(
-    [tokenMint.toBuffer()],
-    VisionProgramId,
-  );
-  const [pda_associatedSolAddress, __bump_seed] = await PublicKey.findProgramAddress(
-    [pda.toBuffer()],
-    VisionProgramId,
-  )
-  let collateral = (await connection.getBalance(pda_associatedSolAddress)) - (await connection.getMinimumBalanceForRentExemption(0))
-  let supply = ((await mint.getMintInfo()).supply.toNumber()) + 1000000000
-  let lamports = null
-  let token = null
-
-  if(isBuy){
-    if(lamportsAmt){
-      lamports = lamportsAmt
-      // AMT * (1 - 1% Provider - x% Page)
-      let providerFee = Math.round(lamportsAmt * 0.01)
-      let pageFee = Math.round(lamportsAmt * ((await getAmmInfo(pda)).fee / 100000))
-      let adjustedLamportsAfterFee  = lamportsAmt - (providerFee + pageFee)
-      token = Math.round(supply * (Math.pow((1 + adjustedLamportsAfterFee / collateral), 0.60976) - 1))
-      //console.log(token)
-    }else if(tokenAmt){
-      token = tokenAmt
-      lamports = Math.round((Math.pow((tokenAmt/ supply + 1), (1/0.60976))* 36) - 36) / (1 - 0.01 - ((await getAmmInfo(pda)).fee / 100000))
-      //console.log(lamports)
-    }
-  }else{
-    if(lamportsAmt){
-      lamports = lamportsAmt
-      token = ((Math.pow((lamportsAmt / collateral - 1 ), 0.60976)) + 1 ) * supply
-    }else if(tokenAmt){
-      token = tokenAmt
-      let amtWithoutFee = collateral * (1 - Math.pow((1 - tokenAmt / supply), (1/0.60976)))
-      lamports = amtWithoutFee - (amtWithoutFee * 0.01)
-    }
-  }
-
-  return {
-    lamports: lamports,
-    token: token
-  }
-}
-
-const getAmmInfo = async(pubKey, commitment) => {
-  const connection = new Connection('http://localhost:8899', 'confirmed')
-  const info = await connection.getAccountInfo(pubKey, commitment)
-  if (info == null){
-    throw new Error("Failed to find account");
-  }
-  if (!info.owner.equals(VisionProgramId)) {
-    throw new Error('Invalid account owner');
-  }
-  if (info.data.length != AmmLayout.span) {
-    throw new Error(`Invalid account size`);
-  }
-
-  const data = Buffer.from(info.data)
-  const accountInfo = AmmLayout.decode(data)
-  console.log(accountInfo)
-  return accountInfo
-
-}
-
-const fundPageToken = async(walletPublicKey, signTransaction, router, feeCollector, setMint) => {
-  const connection = new Connection('http://localhost:8899', 'confirmed')
-  const tx = new Transaction()
-//! Fetch Fee collector from DB, for now random pubkey:
-
-  const new_mint_keypair = Keypair.generate();
-
-  //console.log('fee Collector: ',feeCollector)
-
-  // PDA
-  const [pda, bump_seed] = await PublicKey.findProgramAddress(
-    [new_mint_keypair.publicKey.toBuffer()],
-    VisionProgramId,
-  );
-
-  const [pda_associatedSolAddress, __bump_seed] = await PublicKey.findProgramAddress(
-    [pda.toBuffer()],
-    VisionProgramId,
-  )
-  
-  // Accounts sent to Contract
-  const keys = [
-    // Funder - Pays for funding and first swap
-    {pubkey: walletPublicKey, isSigner: true, isWritable: true},
-    // Mint PubKey
-    {pubkey: new_mint_keypair.publicKey, isSigner: true, isWritable: true},
-    // Pda where the Swap state is stored to(is_initialized, bump_seed, fee(0-50000), fee_collector)
-    {pubkey: pda, isSigner: false, isWritable: true},
-    // Pda bump seed for program derived address of Sol account
-    {pubkey: pda_associatedSolAddress, isSigner: false, isWritable: true},
-    // Page Fee collector Pub Key
-    {pubkey: feeCollector, isSigner: false, isWritable: false},
-    // For invoke_signed - To create Accounts
-    {pubkey: SystemProgram.programId, isSigner: false, isWritable: false},
-    // For invoking - To create Mint & Mint Account
-    {pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false},
-    // Rent Sysvar for Token Program (e.g. Initializing mint)
-    {pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false},
-  ]
-
-  // Data sent to Contract as Buffer
-  const dataLayout = BufferLayout.struct([BufferLayout.u8('instruction')])
-  const data = Buffer.alloc(dataLayout.span);
-  dataLayout.encode(
-    {
-      instruction: 0
-    },
-    data
-  );
-
-  const txInst = new TransactionInstruction({
-    keys,
-    programId: VisionProgramId,
-    data,
-  });
-
-  tx.add(txInst);
-
-  // Send Transaction
-  try{
-    tx.recentBlockhash = (await connection.getRecentBlockhash("confirmed")).blockhash
-    tx.feePayer = walletPublicKey
-    tx.partialSign(new_mint_keypair);
-    const signedTx = await signTransaction(tx)
-    console.log(signedTx)
-    axios.post('http://localhost:4000/post/fundPageToken',{tx: signedTx.serialize(), unique_pagename: router.query.page},{
-      withCredentials: true
-    }
-    ).then(async response => {
-      //console.log(response)
-      setMint(new_mint_keypair.publicKey)
-    })
-    .catch(error =>{
-      if(error.response) toast.error(`${error.response.status?error.response.status:'400'}: ${error.response.data?error.response.data:'An error occurred'}`)
-      return
-    })
-  }catch(e){
-    console.log("error:",e)
-  }
-}
-
-const buy = async(walletPublicKey, signTransaction, feeCollector, tokenMint, amountIn, minimumAmountOut) => {
-  console.log(amountIn)
-  console.log(minimumAmountOut)
-  const feeCollectorPage = feeCollector
-  const feeCollectorProvider = new PublicKey('CohZhJhnHkdutc7iktrrGVUX4oUM3VctSX7DybSzRN4f')
-  const connection = new Connection('http://localhost:8899', 'confirmed')
-  const tx = new Transaction()
-
-  // PDA
-  const [pda, bump_seed] = await PublicKey.findProgramAddress(
-    [tokenMint.toBuffer()],
-    VisionProgramId,
-  );
-
-  const [pda_associatedSolAddress, __bump_seed] = await PublicKey.findProgramAddress(
-    [pda.toBuffer()],
-    VisionProgramId,
-  )
-
-
-  let pageToken = new Token(connection, tokenMint, TOKEN_PROGRAM_ID, walletPublicKey)
-
-  const user_associatedTokenAddress = await Token.getAssociatedTokenAddress(
-    ASSOCIATED_TOKEN_PROGRAM_ID,
-    TOKEN_PROGRAM_ID,
-    tokenMint,
-    walletPublicKey
-  )
-
-  try {
-    await pageToken.getAccountInfo(user_associatedTokenAddress)
-  }catch(err){
-    if (err.message === 'Failed to find account' || err.message === 'Invalid account owner'){
-      tx.add(
-        Token.createAssociatedTokenAccountInstruction(
-          ASSOCIATED_TOKEN_PROGRAM_ID,
-          TOKEN_PROGRAM_ID,
-          tokenMint,
-          user_associatedTokenAddress,
-          walletPublicKey,
-          walletPublicKey,
-        )
-      )
-    }else {
-      throw err;
-    }
-  }
-
-  // Accounts sent to Contract
-  const keys = [
-    // Funder - Pays for funding and first swap
-    {pubkey: walletPublicKey, isSigner: true, isWritable: true},
-    // Funder - Associated Token Address
-    {pubkey: user_associatedTokenAddress, isSigner: false, isWritable: true},
-    // Funder - Pays for funding and first swap
-    {pubkey: pda, isSigner: false, isWritable: true},
-    // Pda bump seed for program derived address of Sol account
-    {pubkey: pda_associatedSolAddress, isSigner: false, isWritable: true},
-    // Funder - Pays for funding and first swap
-    {pubkey: tokenMint, isSigner: false, isWritable: true},
-    // Page Fee Collector
-    {pubkey: feeCollectorPage, isSigner: false, isWritable: true},
-    // Provider Fee Collector
-    {pubkey: feeCollectorProvider, isSigner: false, isWritable: true},
-    // For invoke_signed - To create Accounts
-    {pubkey: SystemProgram.programId, isSigner: false, isWritable: false},
-    // For invoking - To create Mint & Mint Account
-    {pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false},
-  ]
-  
-  // Data sent to Contract as Buffer
-  const dataLayout = BufferLayout.struct([
-    BufferLayout.u8('instruction'),
-    uint64Layout('amountIn'),
-    uint64Layout('minimumAmountOut'),
-  ])
-  const data = Buffer.alloc(dataLayout.span);
-  dataLayout.encode(
-    {
-      instruction: 1,
-      amountIn: new Numberu64(amountIn).toBuffer(),
-      minimumAmountOut: new Numberu64((minimumAmountOut * 0.98)).toBuffer(),
-    },
-    data
-  );
-
-  const txInst = new TransactionInstruction({
-    keys,
-    programId: VisionProgramId,
-    data,
-  });
-
-
-  tx.add(txInst);
-  // Send Transaction
-  try{
-    tx.recentBlockhash = (await connection.getRecentBlockhash("confirmed")).blockhash
-    tx.feePayer = walletPublicKey
-    const signedTx = await signTransaction(tx)
-    await sendAndConfirmRawTransaction(connection, signedTx.serialize())
-  }catch(e){
-    console.log("error:",e)
-  }
-  
-
-}
-
-
-const sell = async(walletPublicKey, signTransaction, tokenMint, amountIn, minimumAmountOut) => {
-  const feeCollectorProvider = new PublicKey('CohZhJhnHkdutc7iktrrGVUX4oUM3VctSX7DybSzRN4f')
-  const connection = new Connection('http://localhost:8899', 'confirmed')
-  const tx = new Transaction()
-
-  // PDA
-  const [pda, bump_seed] = await PublicKey.findProgramAddress(
-    [tokenMint.toBuffer()],
-    VisionProgramId,
-  );
-
-  // const [pda_associatedTokenAddress, _bump_seed] = await PublicKey.findProgramAddress(
-  //   [pda.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), tokenMint.toBuffer()],
-  //   ASSOCIATED_TOKEN_PROGRAM_ID,
-  // )
-  const [pda_associatedSolAddress, __bump_seed] = await PublicKey.findProgramAddress(
-    [pda.toBuffer()],
-    VisionProgramId,
-  )
-
-  // const [user_associatedTokenAddress, _bump_seed] = await PublicKey.findProgramAddress(
-  //   [walletPublicKey.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), tokenMint.toBuffer()],
-  //   ASSOCIATED_TOKEN_PROGRAM_ID,
-  // )
-  const user_associatedTokenAddress = await Token.getAssociatedTokenAddress(
-    ASSOCIATED_TOKEN_PROGRAM_ID,
-    TOKEN_PROGRAM_ID,
-    tokenMint,
-    walletPublicKey
-  )
-  // const user_associatedTokenAddress = await manualGetOrCreateAssociatedAccountInfo(
-  //   walletPublicKey,
-  //   tx,
-  //   connection,
-  //   tokenMint,
-  // )
-
-  // Accounts sent to Contract
-  const keys = [
-    // Funder - Pays for funding and first swap
-    {pubkey: walletPublicKey, isSigner: true, isWritable: true},
-    // Funder - Associated Token Address
-    {pubkey: user_associatedTokenAddress, isSigner: false, isWritable: true},
-    // Funder - Pays for funding and first swap
-    {pubkey: pda, isSigner: false, isWritable: true},
-    // Pda bump seed for program derived address of Sol account
-    {pubkey: pda_associatedSolAddress, isSigner: false, isWritable: true},
-    // Funder - Pays for funding and first swap
-    {pubkey: tokenMint, isSigner: false, isWritable: true},
-    // Provider Fee Collector
-    {pubkey: feeCollectorProvider, isSigner: false, isWritable: true},
-    // For invoke_signed - To create Accounts
-    {pubkey: SystemProgram.programId, isSigner: false, isWritable: false},
-    // For invoking - To create Mint & Mint Account
-    {pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false},
-  ]
-  
-  // Data sent to Contract as Buffer
-  const dataLayout = BufferLayout.struct([
-    BufferLayout.u8('instruction'),
-    uint64Layout('amountIn'),
-    uint64Layout('minimumAmountOut'),
-  ])
-  const data = Buffer.alloc(dataLayout.span);
-  dataLayout.encode(
-    {
-      instruction: 2,
-      amountIn: new Numberu64(amountIn).toBuffer(),
-      minimumAmountOut: new Numberu64((minimumAmountOut*0.98)).toBuffer(),
-    },
-    data
-  );
-
-  const txInst = new TransactionInstruction({
-    keys,
-    programId: VisionProgramId,
-    data,
-  });
-
-  tx.add(txInst);
-  // Send Transaction
-  try{
-    tx.recentBlockhash = (await connection.getRecentBlockhash("confirmed")).blockhash
-    tx.feePayer = walletPublicKey
-    const signedTx = await signTransaction(tx)
-    await sendAndConfirmRawTransaction(connection, signedTx.serialize())
-  }catch(e){
-    console.log("error:",e)
-  }
-  
-
-}
-
-
-const changeFee = async(walletPublicKey, signTransaction, tokenMint) => {
-
-  const feeCollectorPage = walletPublicKey
-  const newfeeCollectorPage = new PublicKey('G1tUHWDaR1Jerzz9MdwPfxoXVMmwT6kU4DmncZmke5gb')
-
-  const connection = new Connection('http://localhost:8899', 'confirmed')
-  const tx = new Transaction()
-
-  // PDA
-  const [pda, bump_seed] = await PublicKey.findProgramAddress(
-    [tokenMint.toBuffer()],
-    VisionProgramId,
-  );
-
-  // Accounts sent to Contract
-  const keys = [
-    // Previous fee collector
-    {pubkey: feeCollectorPage, isSigner: true, isWritable: true},
-    // New fee collector
-    {pubkey: newfeeCollectorPage, isSigner: false, isWritable: true},
-    // pda for data
-    {pubkey: pda, isSigner: false, isWritable: true},
-    // tokenmint to derive pda
-    {pubkey: tokenMint, isSigner: false, isWritable: true},
-    // Systemprogram for Transaction if new accout has not been initialized
-    {pubkey: SystemProgram.programId, isSigner: false, isWritable: false},
-  ]
-  
-  // Data sent to Contract as Buffer
-  const dataLayout = BufferLayout.struct([
-    BufferLayout.u8('instruction'),
-    BufferLayout.u16('fee'),
-  ])
-  const data = Buffer.alloc(dataLayout.span);
-  dataLayout.encode(
-    {
-      instruction: 3,
-      fee: 50000,
-    },
-    data
-  );
-
-  const txInst = new TransactionInstruction({
-    keys,
-    programId: VisionProgramId,
-    data,
-  });
-
-  tx.add(txInst);
-  // Send Transaction
-  try{
-    tx.recentBlockhash = (await connection.getRecentBlockhash("confirmed")).blockhash
-    tx.feePayer = walletPublicKey
-    const signedTx = await signTransaction(tx)
-    await sendAndConfirmRawTransaction(connection, signedTx.serialize())
-  }catch(e){
-    console.log("error:",e)
-  }
-  
-
-}
 
 export class Numberu64 extends BN {
   /**
@@ -675,75 +664,34 @@ export class Numberu64 extends BN {
   }
 }
 
-// Layout
-// import * as BufferLayout from "buffer-layout";
-// const uint64Layout = (property = "uint64") => { 
-//   return BufferLayout.blob(8, property);
-// };
-// const publicKeyLayout = (property = "publicKey") => {
-//   return BufferLayout.blob(32, property);
-// };
+export class u64 extends BN {
+  /**
+   * Convert to Buffer representation
+   */
+  toBuffer(){
+    const a = super.toArray().reverse();
+    const b = Buffer.from(a);
+    if (b.length === 8) {
+      return b;
+    }
+    assert(b.length < 8, 'u64 too large');
 
-// On Chain Token Funding
-// const fundPageToken = async(walletPublicKey, signTransaction) => {
-//   const connection = new Connection('http://localhost:8899', 'confirmed')
-//   const tx = new Transaction()
+    const zeroPad = Buffer.alloc(8);
+    b.copy(zeroPad);
+    return zeroPad;
+  }
 
-//   // Token Minting
-//   const MintLayout = BufferLayout.struct([
-//     BufferLayout.u32('mintAuthorityOption'),
-//     publicKeyLayout('mintAuthority'),
-//     uint64Layout('supply'),
-//     BufferLayout.u8('decimals'),
-//     BufferLayout.u8('isInitialized'),
-//     BufferLayout.u32('freezeAuthorityOption'),
-//     publicKeyLayout('freezeAuthority'),
-//   ]);
-  
-//   const balanceNeeded = await connection.getMinimumBalanceForRentExemption(MintLayout.span)
-//   const new_mint_account = Keypair.generate();
-//   const mint_hodler_account = Keypair.generate();
-//   tx.add(systemProgram_createAccount(walletPublicKey, new_mint_account, mint_hodler_account))
-//   try{
-//     tx.recentBlockhash = (await connection.getRecentBlockhash("confirmed")).blockhash
-//     tx.feePayer = walletPublicKey
-//     tx.partialSign(new_mint_account);
-//     tx.partialSign(mint_hodler_account);
-//     const signedTx = await signTransaction(tx)
-//     await sendAndConfirmRawTransaction(connection, signedTx.serialize())
-//   }catch(e){
-//     console.log("error:",e)
-//   }
-// }
-
-// const systemProgram_createAccount = (walletPublicKey, new_mint_account, mint_hodler_account) => {
-
-//   const dataLayout = BufferLayout.struct([
-//     BufferLayout.u32('instruction'),
-//     BufferLayout.ns64('amount'),
-//   ])
-
-//   const data = Buffer.alloc(dataLayout.span)
-  
-//   dataLayout.encode(
-//     {
-//       instruction: 0, // Initialize Page Token
-//     },
-//     data,
-//   );
-
-//   return new TransactionInstruction({
-//     keys: [
-//       {pubkey: walletPublicKey, isSigner: true, isWritable: true},
-//       {pubkey: new_mint_account.publicKey, isSigner: true, isWritable: true},
-//       {pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false},
-//       {pubkey: mint_hodler_account.publicKey, isSigner: true, isWritable: true},
-//       {pubkey: SYSTEM_PROGRAM_ID, isSigner: false, isWritable: false},
-//       {pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false},
-//     ],
-//     programId: VisionProgramId,
-//     data,
-//   });
-
-
-// }
+  /**
+   * Construct a u64 from Buffer representation
+   */
+  static fromBuffer(buffer) {
+    assert(buffer.length === 8, `Invalid buffer length: ${buffer.length}`);
+    return new u64(
+      [...buffer]
+        .reverse()
+        .map(i => `00${i.toString(16)}`.slice(-2))
+        .join(''),
+      16,
+    );
+  }
+}

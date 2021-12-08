@@ -210,19 +210,19 @@ impl Processor {
         // AMM state
         let swap_state = PageTokenSwap::unpack(&pda_info.data.borrow())?;
         // FEES
-        let page_fee = ((amount_in as f64) * ((swap_state.fee as f64) / (100000f64))).round() as u64;
-        let provider_fee = ((amount_in as f64) * 0.01f64).round() as u64;
+        let page_fee = ((amount_in as f64) * ((swap_state.fee as f64) / (100000f64))) as u64;
+        let provider_fee = ((amount_in as f64) * 0.01f64) as u64;
 
         // Bancor formula "purchaseTargetAmount"
             // Token supply in circulation + initial 1(*10^9) token.
             let token_supply = (((spl_token::state::Mint::unpack(&mint_info.data.borrow())?).supply as u64).checked_add(1000000000u64).ok_or(VisionError::Overflow)?) as f64;
             // Amount In - Fees
-            let adjusted_amount_in = (amount_in.checked_sub((page_fee.checked_add(provider_fee).ok_or(VisionError::Overflow)?)).ok_or(VisionError::Overflow)?) as f64;
+            let adjusted_amount_in = (amount_in as f64) * (1f64 - 0.01f64 - ((swap_state.fee as f64) / (100000f64)));
             // Reserve Balance - Rent payed for Rent exemption
             let reserve_balance = (pda_associated_sol_info.lamports().checked_sub((((Rent::get()?).minimum_balance(0 as usize)) as u64)).ok_or(VisionError::Overflow)?) as f64;
             // Tokens received if input is amount_in
-            let token_amt_from_sol_input = (token_supply * (((1f64 + adjusted_amount_in / reserve_balance).powf(0.60976f64)) - 1f64)).round() as u64;
-            msg!("AMT {:?}",token_amt_from_sol_input);
+            let token_amt_from_sol_input = (token_supply * (((1f64 + (adjusted_amount_in) / reserve_balance).powf(0.60976f64)) - 1f64)) as u64;
+            msg!("token_amt_from_sol_input {:?}",token_amt_from_sol_input);
     // Checks
 
         // Check slippage
@@ -392,11 +392,13 @@ impl Processor {
             // Reserve Balance - Rent payed for Rent exemption
             let reserve_balance = (pda_associated_sol_info.lamports().checked_sub((((Rent::get()?).minimum_balance(0 as usize)) as u64)).ok_or(VisionError::Overflow)?) as f64;
             // sol received if input is amount_in
-            let sol_amt_from_token_input = (reserve_balance * (1f64 - (1f64 - (amount_in as f64) / token_supply).powf(1f64 / 0.60976f64))).round() as u64;
+            let sol_amt_from_token_input = (reserve_balance * (1f64 - (1f64 - (amount_in as f64) / token_supply).powf(1f64 / 0.60976f64)));
+            msg!("sol_amt_from_token_input {:?}",sol_amt_from_token_input);
         // FEES
-            let provider_fee = ((sol_amt_from_token_input as f64) * 0.01f64).round() as u64;
+            let provider_fee = ((sol_amt_from_token_input as f64) * 0.01f64);
 
-        let adjusted_sol_amt_from_token_input = sol_amt_from_token_input.checked_sub(provider_fee).ok_or(VisionError::Overflow)?;
+        let adjusted_sol_amt_from_token_input = (sol_amt_from_token_input - provider_fee) as u64;
+        msg!("adjusted_sol_amt_from_token_input {:?}",adjusted_sol_amt_from_token_input);
     
     
     // Checks
@@ -405,7 +407,7 @@ impl Processor {
             if amount_in > (spl_token::state::Account::unpack(&payer_associated_token_address_info.data.borrow())?).amount {
                 return Err(VisionError::InvalidInput.into());
             }
-            if sol_amt_from_token_input > ((reserve_balance as u64).checked_sub(36u64).ok_or(VisionError::Overflow)?){
+            if (sol_amt_from_token_input as u64) > ((reserve_balance as u64).checked_sub(36u64).ok_or(VisionError::Overflow)?){
                 return Err(VisionError::ReserveError.into());
             }
             if adjusted_sol_amt_from_token_input < minimum_amount_out {
