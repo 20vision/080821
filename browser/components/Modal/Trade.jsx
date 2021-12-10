@@ -13,16 +13,17 @@ import axios from 'axios'
 import { useRouter } from 'next/router';
 import assert from 'assert';
 import { Connection, SYSVAR_RENT_PUBKEY, Account, SystemProgram, PublicKey, Keypair, Transaction,TransactionInstruction,FeeCalculator, sendAndConfirmTransaction, sendAndConfirmRawTransaction } from "@solana/web3.js";
-import { AccountLayout, Token, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, MintLayout } from "@solana/spl-token"
+import { Token, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/spl-token"
+import { MINT_LAYOUT, getBigNumber } from '../../hooks/web3/Layouts';
 import BN from 'bn.js';
 import * as BufferLayout from "buffer-layout";
 const SYSTEM_PROGRAM_ID = new PublicKey('11111111111111111111111111111111')
 const VisionProgramId = new PublicKey('8rb6GeD8i2g3hcfN73xnc9kRbnwepeNjHJyXK5DtyUm8')
 const connection = new Connection('http://localhost:8899', 'confirmed')
 
-const uint64Layout = (property = "uint64") => { 
-  return BufferLayout.blob(8, property);
-};
+// const BufferLayout.nu64 = (property = "uint64") => { 
+//   return BufferLayout.blob(8, property);
+// };
 const publicKey = (property = 'publicKey') => {
   return BufferLayout.blob(32, property);
 };
@@ -66,9 +67,9 @@ export default function Trade() {
     if(mint){
       // Get Mint Supply / Add listener
       connection.onAccountChange(
-        mint, 
+        mint,
         async info => {
-          setTokenSupply(u64.fromBuffer((MintLayout.decode(Buffer.from(info.data))).supply).toNumber() + 1000000000)
+          setTokenSupply(getBigNumber((MINT_LAYOUT.decode(Buffer.from(info.data))).supply) + 1000000000)
         },
       );
       const mintInfo = await connection.getAccountInfo(mint)
@@ -78,10 +79,10 @@ export default function Trade() {
       if (!mintInfo.owner.equals(TOKEN_PROGRAM_ID)) {
         throw new Error(`Invalid mint owner: ${JSON.stringify(mintInfo.owner)}`);
       }
-      if (mintInfo.data.length != MintLayout.span) {
+      if (mintInfo.data.length != MINT_LAYOUT.span) {
         throw new Error(`Invalid mint size`);
       }
-      setTokenSupply(u64.fromBuffer((MintLayout.decode(Buffer.from(mintInfo.data))).supply).toNumber() + 1000000000)
+      setTokenSupply(getBigNumber((MINT_LAYOUT.decode(Buffer.from(mintInfo.data))).supply) + 1000000000)
 
       // Get Fee / Add listener
       
@@ -102,11 +103,11 @@ export default function Trade() {
         [pda.toBuffer()],
         VisionProgramId,
       )
-      setCollateral(((await connection.getBalance(pda_associatedSolAddress)) - (await connection.getMinimumBalanceForRentExemption(0))))
+      setCollateral((getBigNumber(await connection.getBalance(pda_associatedSolAddress)) - getBigNumber(await connection.getMinimumBalanceForRentExemption(0))))
       connection.onAccountChange(
         pda_associatedSolAddress, 
         async info => {
-          setCollateral((info.lamports - (await connection.getMinimumBalanceForRentExemption(0))))
+          setCollateral((getBigNumber(info.lamports) - getBigNumber(await connection.getMinimumBalanceForRentExemption(0))))
         },
       );
     }
@@ -135,21 +136,17 @@ export default function Trade() {
   const setPrice = () => {
     if(isBuy){
       if(lamportsAmt){
-        setAmtOut(tokenSupply*(Math.pow((collateral + lamportsAmt * (1 - pageFee/100000 - 0.01)), 0.60976) / Math.pow(collateral, 0.60976) - 1))
+        setAmtOut(tokenSupply * (Math.pow((1 + (lamportsAmt * (1 - 0.01 - pageFee/100000)) / collateral), 0.60976) - 1))
       }else if(tokenAmt){
-        setAmtOut((Math.pow((tokenAmt / tokenSupply + 1), (1/0.60976)) - 1 )* collateral)
+        setAmtOut(((Math.pow((tokenAmt / tokenSupply + 1), (1/0.60976)) - 1) * collateral) / (1 - 0.01 - pageFee/100000))
       }else{
         setAmtOut(null)
       }
     }else if(!isBuy){
       if(lamportsAmt){
-        if(collateral > (lamportsAmt*(1-0.01))){
-          setAmtOut(-( Math.pow((collateral*(1-0.01)-lamportsAmt), 0.60976) / Math.pow((collateral*(1-0.01)), 0.60976) - 1) * tokenSupply)
-        }else{
-          setAmtOut((Math.pow((lamportsAmt - collateral*(1 - 0.01)), 0.60976) / Math.pow((collateral*(1-0.01)), 0.60976) + 1) * tokenSupply)
-        }
+        setAmtOut((-Math.pow(( collateral * (1 - 0.01) - lamportsAmt ), 0.60976) / Math.pow((collateral * (1-0.01)), 0.60976) + 1) * tokenSupply)
       }else if(tokenAmt){
-        setAmtOut(collateral*(1 - Math.pow((tokenSupply - tokenAmt), (1/0.60976)) / Math.pow(tokenSupply, (1/0.60976))) *(1-0.01))
+        setAmtOut(collateral * (1 - Math.pow((1 - tokenAmt / tokenSupply), (1/0.60976))) * (1 - 0.01))
       }else{
         setAmtOut(null)
       }
@@ -346,15 +343,16 @@ export default function Trade() {
     // Data sent to Contract as Buffer
     const dataLayout = BufferLayout.struct([
       BufferLayout.u8('instruction'),
-      uint64Layout('amountIn'),
-      uint64Layout('minimumAmountOut'),
+      BufferLayout.nu64('amountIn'),
+      BufferLayout.nu64('minimumAmountOut'),
     ])
     const data = Buffer.alloc(dataLayout.span);
     dataLayout.encode(
       {
         instruction: 1,
-        amountIn: new Numberu64(amountIn).toBuffer(),
-        minimumAmountOut: new Numberu64((minimumAmountOut * 0.98)).toBuffer(),
+        //amountIn: new Numberu64(amountIn).toBuffer(),
+        amountIn: getBigNumber(amountIn),
+        minimumAmountOut: (getBigNumber(minimumAmountOut) * 0.98),
       },
       data
     );
@@ -425,15 +423,15 @@ export default function Trade() {
     // Data sent to Contract as Buffer
     const dataLayout = BufferLayout.struct([
       BufferLayout.u8('instruction'),
-      uint64Layout('amountIn'),
-      uint64Layout('minimumAmountOut'),
+      BufferLayout.nu64('amountIn'),
+      BufferLayout.nu64('minimumAmountOut'),
     ])
     const data = Buffer.alloc(dataLayout.span);
     dataLayout.encode(
       {
         instruction: 2,
-        amountIn: new Numberu64(amountIn).toBuffer(),
-        minimumAmountOut: new Numberu64((minimumAmountOut*0.98)).toBuffer(),
+        amountIn: getBigNumber(amountIn),
+        minimumAmountOut: getBigNumber(minimumAmountOut)*0.98,
       },
       data
     );
@@ -566,9 +564,9 @@ export default function Trade() {
       :
         <a onClick={() => {
           isBuy?
-            buy(lamportsAmt?lamportsAmt:amtOut, (tokenAmt?tokenAmt:amtOut * 0.98))
+            buy(lamportsAmt?lamportsAmt:amtOut, tokenAmt?tokenAmt:amtOut)
           :
-            sell(lamportsAmt?lamportsAmt:amtOut, (tokenAmt?tokenAmt:amtOut * 0.98))
+            sell(tokenAmt?tokenAmt:amtOut, lamportsAmt?lamportsAmt:amtOut)
           }}>
           <div className={styles.connectWallet}>
             <h2>Swap</h2>
@@ -592,9 +590,9 @@ const SelectionSol = ({setLamportsAmt, value}) => {
         <span className="smalltext">0&nbsp;</span><span className="smalltext">($0)</span>
       </div>
 
-      <NumberFormat value={(Math.floor(value/100000)/10000)} onValueChange={async(values, sourceInfo) => {
+      <NumberFormat value={getBigNumber(value)?(Math.floor(getBigNumber(value)/100000)/10000):''} isNumericString={true} onValueChange={async(values, sourceInfo) => {
         if(sourceInfo.source == 'event'){
-          setLamportsAmt(values.floatValue*1000000000)
+          setLamportsAmt(getBigNumber(values.floatValue*1000000000))
         }
       }} allowedDecimalSeparators={','} placeholder="0" thousandSeparator=" " allowNegative={false} decimalSeparator="."/>
 
@@ -620,10 +618,9 @@ const SelectionPageToken = ({setTokenAmt, value}) => {
         </h3>
         <span className="smalltext">0&nbsp;</span><span className="smalltext">($0)</span>
       </div>
-
-      <NumberFormat value={(Math.floor(value/100000)/10000)} onValueChange={async(values, sourceInfo) => {
+      <NumberFormat value={getBigNumber(value)?(Math.floor(getBigNumber(value)/100000)/10000):''} isNumericString={true} onValueChange={async(values, sourceInfo) => {
         if(sourceInfo.source == 'event'){
-          setTokenAmt(values.floatValue*1000000000)
+          setTokenAmt(getBigNumber(values.floatValue*1000000000))
         }
       }} allowedDecimalSeparators={','} placeholder="0" thousandSeparator=" " allowNegative={false} decimalSeparator="."/>
 
@@ -631,67 +628,34 @@ const SelectionPageToken = ({setTokenAmt, value}) => {
   )
 }
 
+// export class Numberu64 extends BN {
+//   /**
+//    * Convert to Buffer representation
+//    */
+//   toBuffer() {
+//     const a = super.toArray().reverse();
+//     const b = Buffer.from(a);
+//     if (b.length === 8) {
+//       return b;
+//     }
+//     assert(b.length < 8, 'Numberu64 too large');
 
-export class Numberu64 extends BN {
-  /**
-   * Convert to Buffer representation
-   */
-  toBuffer() {
-    const a = super.toArray().reverse();
-    const b = Buffer.from(a);
-    if (b.length === 8) {
-      return b;
-    }
-    assert(b.length < 8, 'Numberu64 too large');
+//     const zeroPad = Buffer.alloc(8);
+//     b.copy(zeroPad);
+//     return zeroPad;
+//   }
 
-    const zeroPad = Buffer.alloc(8);
-    b.copy(zeroPad);
-    return zeroPad;
-  }
-
-  /**
-   * Construct a Numberu64 from Buffer representation
-   */
-  static fromBuffer(buffer) {
-    assert(buffer.length === 8, `Invalid buffer length: ${buffer.length}`);
-    return new Numberu64(
-      [...buffer]
-        .reverse()
-        .map(i => `00${i.toString(16)}`.slice(-2))
-        .join(''),
-      16,
-    );
-  }
-}
-
-export class u64 extends BN {
-  /**
-   * Convert to Buffer representation
-   */
-  toBuffer(){
-    const a = super.toArray().reverse();
-    const b = Buffer.from(a);
-    if (b.length === 8) {
-      return b;
-    }
-    assert(b.length < 8, 'u64 too large');
-
-    const zeroPad = Buffer.alloc(8);
-    b.copy(zeroPad);
-    return zeroPad;
-  }
-
-  /**
-   * Construct a u64 from Buffer representation
-   */
-  static fromBuffer(buffer) {
-    assert(buffer.length === 8, `Invalid buffer length: ${buffer.length}`);
-    return new u64(
-      [...buffer]
-        .reverse()
-        .map(i => `00${i.toString(16)}`.slice(-2))
-        .join(''),
-      16,
-    );
-  }
-}
+//   /**
+//    * Construct a Numberu64 from Buffer representation
+//    */
+//   static fromBuffer(buffer) {
+//     assert(buffer.length === 8, `Invalid buffer length: ${buffer.length}`);
+//     return new Numberu64(
+//       [...buffer]
+//         .reverse()
+//         .map(i => `00${i.toString(16)}`.slice(-2))
+//         .join(''),
+//       16,
+//     );
+//   }
+// }
