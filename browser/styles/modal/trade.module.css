@@ -40,13 +40,19 @@
     cursor: default;
 }
 
-.connectWallet{
+.button{
     background-color: var(--red);
     padding: 15px 25px;
     border-radius: 15px;
     display: flex;
     justify-content: center;
     color: var(--white)
+}
+
+.buttonInvalid{
+    pointer-events: none;
+    cursor: default;
+    opacity: 0.3;
 }
 
 .selectionParent{

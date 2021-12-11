@@ -14,7 +14,7 @@ import { useRouter } from 'next/router';
 import assert from 'assert';
 import { Connection, SYSVAR_RENT_PUBKEY, Account, SystemProgram, PublicKey, Keypair, Transaction,TransactionInstruction,FeeCalculator, sendAndConfirmTransaction, sendAndConfirmRawTransaction } from "@solana/web3.js";
 import { Token, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/spl-token"
-import { MINT_LAYOUT, getBigNumber } from '../../hooks/web3/Layouts';
+import { MINT_LAYOUT, getBigNumber, ACCOUNT_LAYOUT } from '../../hooks/web3/Layouts';
 import BN from 'bn.js';
 import * as BufferLayout from "buffer-layout";
 const SYSTEM_PROGRAM_ID = new PublicKey('11111111111111111111111111111111')
@@ -43,7 +43,7 @@ export default function Trade() {
   const [selectedRoute, setSelectedRoute] = useState(1)
   const [mint, setMint] = useState()
   const [tokenAmt, setTokenAmt] = useState()
-  const [lamportsAmt, setLamportsAmt] = useState()
+  const [solAmt, setsolAmt] = useState()
   const [amtOut, setAmtOut] = useState()
   const [isBuy, setIsBuy] = useState(true) // true -> Sol to Page // false -> Page to Sol
   const [profile, isLoading, setUser] = useUserProfile()
@@ -53,6 +53,9 @@ export default function Trade() {
   const [feeCollector, setFeeCollector] = useState()
   const [collateral, setCollateral] = useState()
   const [tokenSupply, setTokenSupply] = useState()
+  const [lamportsBalance, setLamportsBalance] = useState()
+  const [tokenBalance, setTokenBalance] = useState()
+  const [tokenAccountListenerId, setTokenAccountListenerId] = useState()
   const router = useRouter()
 
   const connectThisWallet = async() => {
@@ -63,10 +66,53 @@ export default function Trade() {
     }
   }
 
+  const checkAndGetTokenAccountInfo = async(listenBool) => {
+    if(!mint || !publicKey) throw new Error('An error occurred')
+    const associatedUserPubKey = await Token.getAssociatedTokenAddress(ASSOCIATED_TOKEN_PROGRAM_ID,TOKEN_PROGRAM_ID,mint,publicKey)
+    const associatedUserAccoutInfo = await connection.getAccountInfo(associatedUserPubKey)
+    if ((listenBool == false) || (associatedUserAccoutInfo === null) || (!associatedUserAccoutInfo.owner.equals(TOKEN_PROGRAM_ID)) || (associatedUserAccoutInfo.data.length != ACCOUNT_LAYOUT.span)) {
+      setTokenBalance(null)
+      if(tokenAccountListenerId){
+        await connection.removeAccountChangeListener(tokenAccountListenerId)
+      }
+    }else{
+      console.log('looooo')
+      setTokenBalance(getBigNumber(ACCOUNT_LAYOUT.decode(Buffer.from(associatedUserAccoutInfo.data)).amount))
+      if(!tokenAccountListenerId && listenBool){
+        setTokenAccountListenerId(connection.onAccountChange(
+          associatedUserPubKey,
+          async info => {
+            if ((info === null) || (!info.owner.equals(TOKEN_PROGRAM_ID)) || (indo.data.length != ACCOUNT_LAYOUT.span)) {
+              setTokenBalance(null)
+            }else{
+              setTokenBalance(getBigNumber(ACCOUNT_LAYOUT.decode(Buffer.from(info.data)).amount))
+            }
+          },
+        ))
+      }
+    }
+  }
+
+  useEffect(async() => {
+    if(publicKey){
+      setLamportsBalance(getBigNumber(await connection.getBalance(publicKey)))
+      let lamportsBalanceSocketId = connection.onAccountChange(
+        publicKey,
+        async info => {
+          setLamportsBalance(getBigNumber(info.lamports))
+        },
+      );
+
+      if(mint){
+        await checkAndGetTokenAccountInfo(true)
+      }
+    }
+  }, [mint, publicKey])
+
   useEffect(async() => {
     if(mint){
       // Get Mint Supply / Add listener
-      connection.onAccountChange(
+      let mintSocketId = connection.onAccountChange(
         mint,
         async info => {
           setTokenSupply(getBigNumber((MINT_LAYOUT.decode(Buffer.from(info.data))).supply) + 1000000000)
@@ -84,6 +130,7 @@ export default function Trade() {
       }
       setTokenSupply(getBigNumber((MINT_LAYOUT.decode(Buffer.from(mintInfo.data))).supply) + 1000000000)
 
+      
       // Get Fee / Add listener
       
       const [pda, bump_seed] = await PublicKey.findProgramAddress(
@@ -92,7 +139,7 @@ export default function Trade() {
       );
       setPageFee(getAmmInfo(await connection.getAccountInfo(pda)).fee)
 
-      connection.onAccountChange(
+      let pdaSocketId = connection.onAccountChange(
         pda, 
         async info => {
           setPageFee(getAmmInfo(info).fee)
@@ -104,49 +151,51 @@ export default function Trade() {
         VisionProgramId,
       )
       setCollateral((getBigNumber(await connection.getBalance(pda_associatedSolAddress)) - getBigNumber(await connection.getMinimumBalanceForRentExemption(0))))
-      connection.onAccountChange(
+      let pdaAssociatedSolSocketId = connection.onAccountChange(
         pda_associatedSolAddress, 
         async info => {
           setCollateral((getBigNumber(info.lamports) - getBigNumber(await connection.getMinimumBalanceForRentExemption(0))))
         },
       );
+
+      
     }
   }, [mint])
 
   useEffect(async() => {
-    if(lamportsAmt){
+    if(solAmt){
       setTokenAmt(null)
       setPrice()
     }
-  }, [lamportsAmt])
+  }, [solAmt])
 
   useEffect(async() => {
     if(tokenAmt){
-      setLamportsAmt(null)
+      setsolAmt(null)
       setPrice()
     }
   }, [tokenAmt])
 
   useEffect(async() => {
-    if(tokenAmt || lamportsAmt){
+    if(tokenAmt || solAmt){
       setPrice()
     }
   }, [isBuy, tokenSupply, pageFee, collateral])
 
   const setPrice = () => {
     if(isBuy){
-      if(lamportsAmt){
-        setAmtOut(tokenSupply * (Math.pow((1 + (lamportsAmt * (1 - 0.01 - pageFee/100000)) / collateral), 0.60976) - 1))
+      if(solAmt){
+        setAmtOut(tokenSupply * (Math.pow((1 + ((solAmt * 1000000000) * (1 - 0.01 - pageFee/100000)) / collateral), 0.60976) - 1))
       }else if(tokenAmt){
-        setAmtOut(((Math.pow((tokenAmt / tokenSupply + 1), (1/0.60976)) - 1) * collateral) / (1 - 0.01 - pageFee/100000))
+        setAmtOut(((Math.pow(((tokenAmt * 1000000000) / tokenSupply + 1), (1/0.60976)) - 1) * collateral) / (1 - 0.01 - pageFee/100000))
       }else{
         setAmtOut(null)
       }
     }else if(!isBuy){
-      if(lamportsAmt){
-        setAmtOut((-Math.pow(( collateral * (1 - 0.01) - lamportsAmt ), 0.60976) / Math.pow((collateral * (1-0.01)), 0.60976) + 1) * tokenSupply)
+      if(solAmt){
+        setAmtOut((-Math.pow(( collateral * (1 - 0.01) - (solAmt * 1000000000) ), 0.60976) / Math.pow((collateral * (1-0.01)), 0.60976) + 1) * tokenSupply)
       }else if(tokenAmt){
-        setAmtOut(collateral * (1 - Math.pow((1 - tokenAmt / tokenSupply), (1/0.60976))) * (1 - 0.01))
+        setAmtOut(collateral * (1 - Math.pow((1 - (tokenAmt * 1000000000) / tokenSupply), (1/0.60976))) * (1 - 0.01))
       }else{
         setAmtOut(null)
       }
@@ -298,11 +347,12 @@ export default function Trade() {
       mint,
       publicKey
     )
-  
+    var tokenAccountInitialization = false
     try {
       await pageToken.getAccountInfo(user_associatedTokenAddress)
     }catch(err){
       if (err.message === 'Failed to find account' || err.message === 'Invalid account owner'){
+        tokenAccountInitialization = true
         tx.add(
           Token.createAssociatedTokenAccountInstruction(
             ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -371,6 +421,12 @@ export default function Trade() {
       tx.feePayer = publicKey
       const signedTx = await signTransaction(tx)
       await sendAndConfirmRawTransaction(connection, signedTx.serialize())
+      setAmtOut(null)
+      setTokenAmt(null)
+      setsolAmt(null)
+      if(tokenAccountInitialization){
+        await checkAndGetTokenAccountInfo(true)
+      }
     }catch(e){
       console.log("error:",e)
     }
@@ -443,13 +499,37 @@ export default function Trade() {
     });
   
     tx.add(txInst);
+    var closingAccount = false
+    if(amountIn == tokenBalance){
+      closingAccount = true
+      tx.add(
+        Token.createCloseAccountInstruction(
+          TOKEN_PROGRAM_ID,
+          user_associatedTokenAddress,
+          publicKey,
+          publicKey,
+          [],
+        ),
+      )
+    }
+
     // Send Transaction
     try{
+      if(closingAccount == true){
+        await checkAndGetTokenAccountInfo(false)
+        setTokenBalance(null)
+      }
       tx.recentBlockhash = (await connection.getRecentBlockhash("confirmed")).blockhash
       tx.feePayer = publicKey
       const signedTx = await signTransaction(tx)
       await sendAndConfirmRawTransaction(connection, signedTx.serialize())
+      setAmtOut(null)
+      setTokenAmt(null)
+      setsolAmt(null)
     }catch(e){
+      if(closingAccount == true){
+        await checkAndGetTokenAccountInfo(true)
+      }
       console.log("error:",e)
     }
     
@@ -530,13 +610,13 @@ export default function Trade() {
           </h1>
       </div>
       <div className={styles.selectionParent}>
-        {isBuy?<SelectionSol value={(!lamportsAmt && tokenAmt)?amtOut:lamportsAmt} setLamportsAmt={setLamportsAmt}/>:<SelectionPageToken value={(!tokenAmt && lamportsAmt)?amtOut:tokenAmt} setTokenAmt={setTokenAmt}/>}
+        {isBuy?<SelectionSol lamportsBalance={lamportsBalance} solAmt={solAmt} amtOut={(!solAmt && tokenAmt)?amtOut:null} setsolAmt={setsolAmt}/>:<SelectionPageToken tokenBalance={tokenBalance} tokenAmt={tokenAmt} amtOut={(solAmt && !tokenAmt)?amtOut:null} setTokenAmt={setTokenAmt}/>}
           <div className={styles.tradeDirectionArrowParent}>
             <div className={styles.tradeDirectionArrowChild}>
               <a onClick={() => setIsBuy(!isBuy)}><Arrow strokeWidth='3'/></a>
             </div>
           </div>
-        {isBuy?<SelectionPageToken value={(!tokenAmt && lamportsAmt)?amtOut:tokenAmt} setTokenAmt={setTokenAmt}/>:<SelectionSol value={(!lamportsAmt && tokenAmt)?amtOut:lamportsAmt} setLamportsAmt={setLamportsAmt}/>}
+        {isBuy?<SelectionPageToken tokenBalance={tokenBalance} tokenAmt={tokenAmt} amtOut={(solAmt && !tokenAmt)?amtOut:null} setTokenAmt={setTokenAmt}/>:<SelectionSol lamportsBalance={lamportsBalance} solAmt={solAmt} amtOut={(!solAmt && tokenAmt)?amtOut:null} setsolAmt={setsolAmt}/>}
       </div>
 
       <div className={`smalltext ${styles.priceInDollar}`}>
@@ -545,30 +625,35 @@ export default function Trade() {
 
       {!profile.username || !wallet?
         <a onClick={() => setModal(1)}>
-          <div className={styles.connectWallet}>
+          <div className={styles.button}>
             <h2>Connect Wallet</h2>
           </div>
         </a>
       :!connected && wallet?
         <a onClick={() => connectThisWallet()}>
-          <div className={styles.connectWallet}>
+          <div className={styles.button}>
             <h2>Connect Wallet</h2>
           </div>
         </a>
       :!mint?
         <a onClick={() => fundPageToken()}>
-          <div className={styles.connectWallet}>
+          <div className={styles.button}>
             <h2>Fund</h2>
           </div>
         </a>
       :
         <a onClick={() => {
           isBuy?
-            buy(lamportsAmt?lamportsAmt:amtOut, tokenAmt?tokenAmt:amtOut)
+            buy(solAmt?(solAmt * 1000000000):amtOut, tokenAmt?(tokenAmt * 1000000000):amtOut)
           :
-            sell(tokenAmt?tokenAmt:amtOut, lamportsAmt?lamportsAmt:amtOut)
+            sell(tokenAmt?(tokenAmt * 1000000000):amtOut, solAmt?(solAmt * 1000000000):amtOut)
           }}>
-          <div className={styles.connectWallet}>
+          <div className={`${
+          (((lamportsBalance == null) && isBuy) || ((tokenBalance == null) && !isBuy) || (isBuy && ((solAmt * 1000000000) > lamportsBalance)) || (!isBuy && ((tokenAmt * 1000000000) > tokenBalance)) || !amtOut || (!solAmt && !tokenAmt) || ((solAmt * 1000000000 < 0)) || ((tokenAmt * 1000000000 < 0)))?
+            styles.buttonInvalid
+          :
+            null
+          } ${styles.button}`}>
             <h2>Swap</h2>
           </div>
         </a>
@@ -578,7 +663,7 @@ export default function Trade() {
   
 }
 
-const SelectionSol = ({setLamportsAmt, value}) => {
+const SelectionSol = ({setsolAmt, solAmt, amtOut, lamportsBalance}) => {
   return(
     <div className={styles.tradePageInfoParent}>
       <SolanaIcon/>
@@ -587,12 +672,28 @@ const SelectionSol = ({setLamportsAmt, value}) => {
         <h3>
           Solana
         </h3>
-        <span className="smalltext">0&nbsp;</span><span className="smalltext">($0)</span>
+        <span className="smalltext">{
+        (lamportsBalance != null) && (lamportsBalance/1000000000 < 1)?
+          (lamportsBalance/1000000000)
+        :(lamportsBalance != null)?
+          (Math.floor(lamportsBalance/100000)/10000)
+        :
+          '?'
+        }&nbsp;</span><span className="smalltext">($0)</span>
       </div>
 
-      <NumberFormat value={getBigNumber(value)?(Math.floor(getBigNumber(value)/100000)/10000):''} isNumericString={true} onValueChange={async(values, sourceInfo) => {
+      <NumberFormat value={
+        (solAmt != null)?
+          solAmt
+        : (amtOut != null) && (amtOut>1000000000)?
+          (Math.floor(amtOut/100000)/10000)
+        : (amtOut != null)?
+          (Math.floor(amtOut/1000)/1000000)
+        :
+          ''
+        } onValueChange={async(values, sourceInfo) => {
         if(sourceInfo.source == 'event'){
-          setLamportsAmt(getBigNumber(values.floatValue*1000000000))
+          setsolAmt(values.floatValue)
         }
       }} allowedDecimalSeparators={','} placeholder="0" thousandSeparator=" " allowNegative={false} decimalSeparator="."/>
 
@@ -600,9 +701,8 @@ const SelectionSol = ({setLamportsAmt, value}) => {
   )
 }
 
-const SelectionPageToken = ({setTokenAmt, value}) => {
+const SelectionPageToken = ({setTokenAmt, tokenAmt, amtOut, tokenBalance}) => {
   const page = usePageSelectedStore(state => state.page)
-
   return(
     <div className={styles.tradePageInfoParent}>
 
@@ -616,46 +716,30 @@ const SelectionPageToken = ({setTokenAmt, value}) => {
         <h3>
           /{page.unique_pagename}
         </h3>
-        <span className="smalltext">0&nbsp;</span><span className="smalltext">($0)</span>
+        <span className="smalltext">{
+        (tokenBalance != null) && (tokenBalance/1000000000 < 1)?
+          (tokenBalance/1000000000)
+        :(tokenBalance != null)?
+          (Math.floor(tokenBalance/100000)/10000)
+        :
+          '?'
+        }&nbsp;</span><span className="smalltext">($0)</span>
       </div>
-      <NumberFormat value={getBigNumber(value)?(Math.floor(getBigNumber(value)/100000)/10000):''} isNumericString={true} onValueChange={async(values, sourceInfo) => {
+      <NumberFormat value={
+        (tokenAmt != null)?
+          tokenAmt
+        : (amtOut != null) && (amtOut>1000000000)?
+          (Math.floor(amtOut/100000)/10000)
+        : (amtOut != null)?
+          (Math.floor(amtOut/1000)/1000000)
+        :
+          ''
+        } onValueChange={async(values, sourceInfo) => {
         if(sourceInfo.source == 'event'){
-          setTokenAmt(getBigNumber(values.floatValue*1000000000))
+          setTokenAmt(values.floatValue)
         }
       }} allowedDecimalSeparators={','} placeholder="0" thousandSeparator=" " allowNegative={false} decimalSeparator="."/>
 
     </div>
   )
 }
-
-// export class Numberu64 extends BN {
-//   /**
-//    * Convert to Buffer representation
-//    */
-//   toBuffer() {
-//     const a = super.toArray().reverse();
-//     const b = Buffer.from(a);
-//     if (b.length === 8) {
-//       return b;
-//     }
-//     assert(b.length < 8, 'Numberu64 too large');
-
-//     const zeroPad = Buffer.alloc(8);
-//     b.copy(zeroPad);
-//     return zeroPad;
-//   }
-
-//   /**
-//    * Construct a Numberu64 from Buffer representation
-//    */
-//   static fromBuffer(buffer) {
-//     assert(buffer.length === 8, `Invalid buffer length: ${buffer.length}`);
-//     return new Numberu64(
-//       [...buffer]
-//         .reverse()
-//         .map(i => `00${i.toString(16)}`.slice(-2))
-//         .join(''),
-//       16,
-//     );
-//   }
-// }
