@@ -17,10 +17,10 @@ import { Token, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/sp
 import { MINT_LAYOUT, getBigNumber, ACCOUNT_LAYOUT } from '../../hooks/web3/Layouts';
 import BN from 'bn.js';
 import * as BufferLayout from "buffer-layout";
+import useSolPrice from '../../hooks/web3/useSolPrice';
 const SYSTEM_PROGRAM_ID = new PublicKey('11111111111111111111111111111111')
 const VisionProgramId = new PublicKey('8rb6GeD8i2g3hcfN73xnc9kRbnwepeNjHJyXK5DtyUm8')
 const connection = new Connection('http://localhost:8899', 'confirmed')
-
 // const BufferLayout.nu64 = (property = "uint64") => { 
 //   return BufferLayout.blob(8, property);
 // };
@@ -57,6 +57,7 @@ export default function Trade() {
   const [tokenBalance, setTokenBalance] = useState()
   const [tokenAccountListenerId, setTokenAccountListenerId] = useState()
   const router = useRouter()
+  const solPrice = useSolPrice()
 
   const connectThisWallet = async() => {
     try{
@@ -76,13 +77,12 @@ export default function Trade() {
         await connection.removeAccountChangeListener(tokenAccountListenerId)
       }
     }else{
-      console.log('looooo')
       setTokenBalance(getBigNumber(ACCOUNT_LAYOUT.decode(Buffer.from(associatedUserAccoutInfo.data)).amount))
       if(!tokenAccountListenerId && listenBool){
         setTokenAccountListenerId(connection.onAccountChange(
           associatedUserPubKey,
           async info => {
-            if ((info === null) || (!info.owner.equals(TOKEN_PROGRAM_ID)) || (indo.data.length != ACCOUNT_LAYOUT.span)) {
+            if ((info === null) || (!info.owner.equals(TOKEN_PROGRAM_ID)) || (info.data.length != ACCOUNT_LAYOUT.span)) {
               setTokenBalance(null)
             }else{
               setTokenBalance(getBigNumber(ACCOUNT_LAYOUT.decode(Buffer.from(info.data)).amount))
@@ -610,13 +610,13 @@ export default function Trade() {
           </h1>
       </div>
       <div className={styles.selectionParent}>
-        {isBuy?<SelectionSol lamportsBalance={lamportsBalance} solAmt={solAmt} amtOut={(!solAmt && tokenAmt)?amtOut:null} setsolAmt={setsolAmt}/>:<SelectionPageToken tokenBalance={tokenBalance} tokenAmt={tokenAmt} amtOut={(solAmt && !tokenAmt)?amtOut:null} setTokenAmt={setTokenAmt}/>}
+        {isBuy?<SelectionSol solPrice={solPrice} lamportsBalance={lamportsBalance} solAmt={solAmt} amtOut={(!solAmt && tokenAmt)?amtOut:null} setsolAmt={setsolAmt}/>:<SelectionPageToken tokenBalance={tokenBalance} tokenAmt={tokenAmt} amtOut={(solAmt && !tokenAmt)?amtOut:null} setTokenAmt={setTokenAmt}/>}
           <div className={styles.tradeDirectionArrowParent}>
             <div className={styles.tradeDirectionArrowChild}>
               <a onClick={() => setIsBuy(!isBuy)}><Arrow strokeWidth='3'/></a>
             </div>
           </div>
-        {isBuy?<SelectionPageToken tokenBalance={tokenBalance} tokenAmt={tokenAmt} amtOut={(solAmt && !tokenAmt)?amtOut:null} setTokenAmt={setTokenAmt}/>:<SelectionSol lamportsBalance={lamportsBalance} solAmt={solAmt} amtOut={(!solAmt && tokenAmt)?amtOut:null} setsolAmt={setsolAmt}/>}
+        {isBuy?<SelectionPageToken tokenBalance={tokenBalance} tokenAmt={tokenAmt} amtOut={(solAmt && !tokenAmt)?amtOut:null} setTokenAmt={setTokenAmt}/>:<SelectionSol solPrice={solPrice} lamportsBalance={lamportsBalance} solAmt={solAmt} amtOut={(!solAmt && tokenAmt)?amtOut:null} setsolAmt={setsolAmt}/>}
       </div>
 
       <div className={`smalltext ${styles.priceInDollar}`}>
@@ -663,7 +663,7 @@ export default function Trade() {
   
 }
 
-const SelectionSol = ({setsolAmt, solAmt, amtOut, lamportsBalance}) => {
+const SelectionSol = ({setsolAmt, solAmt, amtOut, lamportsBalance, solPrice}) => {
   return(
     <div className={styles.tradePageInfoParent}>
       <SolanaIcon/>
@@ -679,7 +679,7 @@ const SelectionSol = ({setsolAmt, solAmt, amtOut, lamportsBalance}) => {
           (Math.floor(lamportsBalance/100000)/10000)
         :
           '?'
-        }&nbsp;</span><span className="smalltext">($0)</span>
+        }&nbsp;</span><span className="smalltext">(${(solPrice && (solPrice.status == 'success'))?Math.round(solPrice.price * (lamportsBalance/10000000))/100:'?'})</span>
       </div>
 
       <NumberFormat value={

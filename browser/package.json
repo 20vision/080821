@@ -20,6 +20,7 @@
     "bn.js": "^5.2.0",
     "bs58": "^4.0.1",
     "buffer-layout": "^1.2.2",
+    "coingecko-api": "^1.0.10",
     "filepond-plugin-file-poster": "^2.4.4",
     "filepond-plugin-file-validate-type": "^1.2.6",
     "filepond-plugin-image-editor": "file:local_modules/filepond-plugin-image-editor",
