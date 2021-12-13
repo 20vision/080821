@@ -96,7 +96,7 @@ router.post("/paper_image/process", check.AuthRequired, check.paperAuth, cloudSt
 });
 
 router.post("/fundPageToken", check.AuthRequired, check.fundTransaction, async (req, res) => {
-    const connection = new Connection('http://localhost:8899', 'confirmed')
+    const connection = new Connection('https://api.devnet.solana.com', 'confirmed')
     try{
         await sendAndConfirmRawTransaction(connection, req.body.tx.data)
         pool.query(

@@ -19,8 +19,8 @@ import BN from 'bn.js';
 import * as BufferLayout from "buffer-layout";
 import useSolPrice from '../../hooks/web3/useSolPrice';
 const SYSTEM_PROGRAM_ID = new PublicKey('11111111111111111111111111111111')
-const VisionProgramId = new PublicKey('8rb6GeD8i2g3hcfN73xnc9kRbnwepeNjHJyXK5DtyUm8')
-const connection = new Connection('http://localhost:8899', 'confirmed')
+const VisionProgramId = new PublicKey('969cdvMTsXAs2QfCFvGb2TmaR9gbFvMjRfG8u5v1if3d')
+const connection = new Connection('https://api.devnet.solana.com', 'confirmed')
 // const BufferLayout.nu64 = (property = "uint64") => { 
 //   return BufferLayout.blob(8, property);
 // };
@@ -247,7 +247,6 @@ export default function Trade() {
   }
 
   const fundPageToken = async() => {
-    const connection = new Connection('http://localhost:8899', 'confirmed')
     const tx = new Transaction()
   //! Fetch Fee collector from DB, for now random pubkey:
   

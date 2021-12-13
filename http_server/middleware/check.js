@@ -150,7 +150,7 @@ exports.fundTransaction = function(req, res, next) {
         res.status(422).send('Invalid Instruction Data');
         return
     }
-    if (txInstructionProgramId.toString() != '8rb6GeD8i2g3hcfN73xnc9kRbnwepeNjHJyXK5DtyUm8'){
+    if (txInstructionProgramId.toString() != '969cdvMTsXAs2QfCFvGb2TmaR9gbFvMjRfG8u5v1if3d'){
         res.status(422).send('Invalid Program Id');
         return
     }
