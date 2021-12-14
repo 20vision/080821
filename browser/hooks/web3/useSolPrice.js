@@ -7,7 +7,7 @@ export default function useSolPrice(){
     const [solPrice, setSolPrice] = useState()
  
     useEffect(() => {
-        let interval = null;
+        var interval;
         const getSolPrice = (refresh = false) => {
             if (!refresh){
                 setSolPrice({

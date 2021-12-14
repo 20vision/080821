@@ -7,6 +7,7 @@ const nacl = require('tweetnacl');
 const solanaWeb3 = require('@solana/web3.js');
 const {create_user, login_user} = require('../utils/walletActions.js')
 const bs58 = require('bs58')
+const { TextEncoder, TextDecoder } = require("util");
 
 router.post("/connect", async (req, res) => {
     if(req.body.publicKey && req.body.signature){
