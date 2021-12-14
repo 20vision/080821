@@ -1,4 +1,8 @@
 import { bool, publicKey, struct, u32, u64, u8 } from '@project-serum/borsh'
+import {Connection, PublicKey} from "@solana/web3.js"
+export const connection = new Connection('https://api.devnet.solana.com', 'confirmed')
+
+export const VISION_PROGRAM_ID = new PublicKey('969cdvMTsXAs2QfCFvGb2TmaR9gbFvMjRfG8u5v1if3d')
 
 export const ACCOUNT_LAYOUT = struct([
   publicKey('mint'),

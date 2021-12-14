@@ -1,3 +1,7 @@
+.container{
+    min-width: 1px;
+}
+
 .header{
     width: 100%;
     display: flex;
@@ -85,11 +89,20 @@
     margin-left: auto;
     margin-top:auto;
     margin-bottom: auto;
-    width: 200px;
+    flex-basis: 200;
+    flex-shrink: 1;
     font-size:20px;
     line-height: 20px;
     font-weight: 400;
     text-align: end;
+    min-width: 1px;
+}
+
+.tradePageInfoParent svg{
+    flex-shrink: 0;
+}
+.tradePageInfoParent .pageIcon{
+    flex-shrink: 0;
 }
 
 .tradePageInfoChild{

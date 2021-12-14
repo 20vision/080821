@@ -227,7 +227,7 @@ impl Processor {
 
         // Check slippage
             if amount_in > payer_info.lamports() {
-                return Err(VisionError::InvalidInput.into());
+                return Err(VisionError::BalanceTooSmall.into());
             }
             if token_amt_from_sol_input < minimum_amount_out {
                 return Err(VisionError::ExceededSlippage.into());
@@ -405,7 +405,7 @@ impl Processor {
 
         // Check output
             if amount_in > (spl_token::state::Account::unpack(&payer_associated_token_address_info.data.borrow())?).amount {
-                return Err(VisionError::InvalidInput.into());
+                return Err(VisionError::BalanceTooSmall.into());
             }
             if (sol_amt_from_token_input as u64) > ((reserve_balance as u64).checked_sub(36u64).ok_or(VisionError::Overflow)?){
                 return Err(VisionError::ReserveError.into());
@@ -659,37 +659,7 @@ impl PrintProgramError for VisionError {
             },
             VisionError::InvalidInput => msg!("Error: Invalid User Input"),
             VisionError::ReserveError => msg!("Error: Reserve error"),
-            
-
-
-            VisionError::InvalidInstruction => msg!("Error: InvalidInstruction"),
-            VisionError::InvalidFeeAccount => msg!("Error: Invalid fee account"),
-            VisionError::InvalidAssociatedPdaTokenAddress => {
-                msg!("Error: Invalid pda associated token address")
-            },
-            VisionError::InvalidAssociatedSwapperTokenAddress => {
-                msg!("Error: Invalid swapper associated token address")
-            },
-            VisionError::InvalidTokenAmount => {
-                msg!("Error: Invalid Token Amount - Contract would hold less than 1 Token")
-            },
-            VisionError::InvalidSolAmount => {
-                msg!("Error: Invalid Token Amount - Contract would hold less than 1 Token(36sol)")
-            },
-            VisionError::IncorrectSwapAccount => {
-                msg!("Error: Address of the provided swap token account is incorrect")
-            },
-            VisionError::ZeroTradingTokens => {
-                msg!("Error: Given pool token amount results in zero trading tokens")
-            },
-            VisionError::ExceededSlippage => {
-                msg!("Error: Swap instruction exceeds desired slippage limit")
-            },
-            VisionError::InvalidFee => {
-                msg!("Error: Invalid Fee provided")
-            },
-            VisionError::ConversionFailure => msg!("Error: Conversion to or from u64 failed."),
-            VisionError::Overflow => msg!("Error: Operation overflowed.")
+            VisionError::BalanceTooSmall => msg!("Error: Balance too small")
         }
     }
 }

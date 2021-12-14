@@ -43,53 +43,9 @@ pub enum VisionError {
     #[error("Reserve Error")]
     ReserveError,
 
-
-
-
-       
-    // Invalid instruction number passed in.
-    #[error("Invalid instruction")]
-    InvalidInstruction,
-
-    // Invalid pda associated token address
-    #[error("Invalid pda associated token address")]
-    InvalidAssociatedPdaTokenAddress,
-
-    // Invalid pda associated token address
-    #[error("Invalid swapper associated token address")]
-    InvalidAssociatedSwapperTokenAddress,
-
-    // User provided invalid fee account for swap
-    #[error("InvalidFeeAccount")]
-    InvalidFeeAccount,
-
-    // User changed Fee to invalid amount. valid:(0 - 50000)
-    #[error("InvalidFee")]
-    InvalidFee,
-
-    // Invalid Token Amount - Contract would hold less than 1 Token
-    #[error("InvalidTokenAmount")]
-    InvalidTokenAmount,
-
-    // Invalid Token Amount - Contract would hold less than 36 sol - The equivalent of the last Token
-    #[error("InvalidSolAmount")]
-    InvalidSolAmount,
-
-    /// Address of the provided swap token account is incorrect.
-    #[error("Address of the provided swap token account is incorrect")]
-    IncorrectSwapAccount,
-
-    /// Given pool token amount results in zero trading tokens
-    #[error("Given pool token amount results in zero trading tokens")]
-    ZeroTradingTokens,
-    
-    /// ConversionFailure
-    #[error("Conversion to u64 failed with an overflow or underflow")]
-    ConversionFailure,
-
-    /// Operation overflowed
-    #[error("Operation overflowed")]
-    Overflow,
+    /// Balance too Small
+    #[error("Balance too small")]
+    BalanceTooSmall,
 }
 impl From<VisionError> for ProgramError {
     fn from(e: VisionError) -> Self {

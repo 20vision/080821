@@ -12,18 +12,14 @@ import NumberFormat from 'react-number-format';
 import axios from 'axios'
 import { useRouter } from 'next/router';
 import assert from 'assert';
-import { Connection, SYSVAR_RENT_PUBKEY, Account, SystemProgram, PublicKey, Keypair, Transaction,TransactionInstruction,FeeCalculator, sendAndConfirmTransaction, sendAndConfirmRawTransaction } from "@solana/web3.js";
+import Loading from '../../assets/Loading/Loading'
+import { SYSVAR_RENT_PUBKEY, SystemProgram, PublicKey, Keypair, Transaction,TransactionInstruction,FeeCalculator, sendAndConfirmTransaction, sendAndConfirmRawTransaction, SendTransactionError } from "@solana/web3.js";
 import { Token, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/spl-token"
-import { MINT_LAYOUT, getBigNumber, ACCOUNT_LAYOUT } from '../../hooks/web3/Layouts';
+import { getBigNumber, connection, MINT_LAYOUT, ACCOUNT_LAYOUT, VISION_PROGRAM_ID } from '../../hooks/web3/useContract';
 import BN from 'bn.js';
 import * as BufferLayout from "buffer-layout";
 import useSolPrice from '../../hooks/web3/useSolPrice';
-const SYSTEM_PROGRAM_ID = new PublicKey('11111111111111111111111111111111')
-const VisionProgramId = new PublicKey('969cdvMTsXAs2QfCFvGb2TmaR9gbFvMjRfG8u5v1if3d')
-const connection = new Connection('https://api.devnet.solana.com', 'confirmed')
-// const BufferLayout.nu64 = (property = "uint64") => { 
-//   return BufferLayout.blob(8, property);
-// };
+
 const publicKey = (property = 'publicKey') => {
   return BufferLayout.blob(32, property);
 };
@@ -55,7 +51,7 @@ export default function Trade() {
   const [tokenSupply, setTokenSupply] = useState()
   const [lamportsBalance, setLamportsBalance] = useState()
   const [tokenBalance, setTokenBalance] = useState()
-  const [tokenAccountListenerId, setTokenAccountListenerId] = useState()
+  const [loading, setLoading] = useState(false)
   const router = useRouter()
   const solPrice = useSolPrice()
 
@@ -67,57 +63,106 @@ export default function Trade() {
     }
   }
 
-  const checkAndGetTokenAccountInfo = async(listenBool) => {
-    if(!mint || !publicKey) throw new Error('An error occurred')
-    const associatedUserPubKey = await Token.getAssociatedTokenAddress(ASSOCIATED_TOKEN_PROGRAM_ID,TOKEN_PROGRAM_ID,mint,publicKey)
-    const associatedUserAccoutInfo = await connection.getAccountInfo(associatedUserPubKey)
-    if ((listenBool == false) || (associatedUserAccoutInfo === null) || (!associatedUserAccoutInfo.owner.equals(TOKEN_PROGRAM_ID)) || (associatedUserAccoutInfo.data.length != ACCOUNT_LAYOUT.span)) {
-      setTokenBalance(null)
-      if(tokenAccountListenerId){
-        await connection.removeAccountChangeListener(tokenAccountListenerId)
+  // const checkAndGetTokenAccountInfo = async(listenBool) => {
+  //   if(!mint || !publicKey) throw new Error('An error occurred')
+  //   const associatedUserPubKey = await Token.getAssociatedTokenAddress(ASSOCIATED_TOKEN_PROGRAM_ID,TOKEN_PROGRAM_ID,mint,publicKey)
+  //   const associatedUserAccoutInfo = await connection.getAccountInfo(associatedUserPubKey)
+  //   if ((listenBool == false) || (associatedUserAccoutInfo === null) || (!associatedUserAccoutInfo.owner.equals(TOKEN_PROGRAM_ID)) || (associatedUserAccoutInfo.data.length != ACCOUNT_LAYOUT.span)) {
+  //     setTokenBalance(null)
+  //     if(tokenAccountListenerId){
+  //       await connection.removeAccountChangeListener(tokenAccountListenerId)
+  //       setTokenAccountListenerId(null)
+  //     }
+  //   }else{
+  //     setTokenBalance(getBigNumber(ACCOUNT_LAYOUT.decode(Buffer.from(associatedUserAccoutInfo.data)).amount))
+  //     if(!tokenAccountListenerId && listenBool){
+  //       setTokenAccountListenerId(connection.onAccountChange(
+  //         associatedUserPubKey,
+  //         async info => {
+  //           if ((info != null) && (info.owner.equals(TOKEN_PROGRAM_ID)) && (info.data.length == ACCOUNT_LAYOUT.span)) {
+  //             setTokenBalance(getBigNumber(ACCOUNT_LAYOUT.decode(Buffer.from(info.data)).amount))
+  //           }else if(tokenBalance){
+  //             setTokenBalance(null)
+  //           }
+  //         },
+  //       ))
+  //     }
+  //   }
+  // }
+
+  // useEffect(async() => {
+  //   if(){
+
+  //   }
+  //   return async() => {
+  //     if(tokenAccountListenerId){
+  //       await connection.removeAccountChangeListener(tokenAccountListenerId)
+  //       setTokenAccountListenerId(null)
+  //     }
+  //   }
+  // }, [])
+  const infoToTokenBalance = (info) =>{
+    if ((info === null) || (info.lamports == 0) || (!info.owner.equals(TOKEN_PROGRAM_ID)) || (info.data.length != ACCOUNT_LAYOUT.span)) {
+      if(tokenBalance){
+        setTokenBalance(null)
       }
     }else{
-      setTokenBalance(getBigNumber(ACCOUNT_LAYOUT.decode(Buffer.from(associatedUserAccoutInfo.data)).amount))
-      if(!tokenAccountListenerId && listenBool){
-        setTokenAccountListenerId(connection.onAccountChange(
-          associatedUserPubKey,
-          async info => {
-            if ((info === null) || (!info.owner.equals(TOKEN_PROGRAM_ID)) || (info.data.length != ACCOUNT_LAYOUT.span)) {
-              setTokenBalance(null)
-            }else{
-              setTokenBalance(getBigNumber(ACCOUNT_LAYOUT.decode(Buffer.from(info.data)).amount))
-            }
-          },
-        ))
-      }
+      setTokenBalance(getBigNumber(ACCOUNT_LAYOUT.decode(Buffer.from(info.data)).amount))
     }
   }
 
+  const [lamportsBalanceSocketId, setLamportsBalanceSocketId] = useState()
   useEffect(async() => {
     if(publicKey){
       setLamportsBalance(getBigNumber(await connection.getBalance(publicKey)))
-      let lamportsBalanceSocketId = connection.onAccountChange(
+      setLamportsBalanceSocketId(connection.onAccountChange(
         publicKey,
         async info => {
           setLamportsBalance(getBigNumber(info.lamports))
         },
-      );
-
-      if(mint){
-        await checkAndGetTokenAccountInfo(true)
+      ))
+    }
+    return async() => {
+      if(lamportsBalanceSocketId){
+        await connection.removeAccountChangeListener(lamportsBalanceSocketId)
       }
     }
-  }, [mint, publicKey])
+  }, [publicKey])
 
+  const [tokenBalanceSocketId, setTokenBalanceSocketId] = useState()
   useEffect(async() => {
+    if(mint && publicKey){
+      const associatedUserPubKey = await Token.getAssociatedTokenAddress(ASSOCIATED_TOKEN_PROGRAM_ID,TOKEN_PROGRAM_ID,mint,publicKey)
+      const associatedUserAccoutInfo = await connection.getAccountInfo(associatedUserPubKey)
+      infoToTokenBalance(associatedUserAccoutInfo)
+      setTokenBalanceSocketId(connection.onAccountChange(
+        associatedUserPubKey,
+        async info => {
+          infoToTokenBalance(info)
+        },
+      ))
+      
+    }
+    return () => {
+      if(tokenBalanceSocketId){
+        connection.removeAccountChangeListener(tokenBalanceSocketId)
+      }
+    }
+  }, [mint,publicKey])
+
+  const [pdaSocketId, setPdaSocketId] = useState()
+  const [pdaAssociatedSolSocketId, setPdaAssociatedSolSocketId] = useState()
+  const [mintSocketId, setMintSocketId] = useState()
+  useEffect(async() => {
+
     if(mint){
       // Get Mint Supply / Add listener
-      let mintSocketId = connection.onAccountChange(
+      setMintSocketId(connection.onAccountChange(
         mint,
         async info => {
           setTokenSupply(getBigNumber((MINT_LAYOUT.decode(Buffer.from(info.data))).supply) + 1000000000)
         },
-      );
+      ))
       const mintInfo = await connection.getAccountInfo(mint)
       if (mintInfo === null) {
         throw new Error('Failed to find mint account');
@@ -135,30 +180,40 @@ export default function Trade() {
       
       const [pda, bump_seed] = await PublicKey.findProgramAddress(
         [mint.toBuffer()],
-        VisionProgramId,
+        VISION_PROGRAM_ID,
       );
       setPageFee(getAmmInfo(await connection.getAccountInfo(pda)).fee)
 
-      let pdaSocketId = connection.onAccountChange(
+      setPdaSocketId(connection.onAccountChange(
         pda, 
         async info => {
           setPageFee(getAmmInfo(info).fee)
         },
-      );
+      ))
       
       const [pda_associatedSolAddress, __bump_seed] = await PublicKey.findProgramAddress(
         [pda.toBuffer()],
-        VisionProgramId,
+        VISION_PROGRAM_ID,
       )
       setCollateral((getBigNumber(await connection.getBalance(pda_associatedSolAddress)) - getBigNumber(await connection.getMinimumBalanceForRentExemption(0))))
-      let pdaAssociatedSolSocketId = connection.onAccountChange(
+      setPdaAssociatedSolSocketId(connection.onAccountChange(
         pda_associatedSolAddress, 
         async info => {
           setCollateral((getBigNumber(info.lamports) - getBigNumber(await connection.getMinimumBalanceForRentExemption(0))))
         },
-      );
+      ))
+    }
 
-      
+    return async() => {
+      if(pdaSocketId){
+        await connection.removeAccountChangeListener(pdaSocketId)
+      }
+      if(pdaAssociatedSolSocketId){
+        await connection.removeAccountChangeListener(pdaAssociatedSolSocketId)
+      }
+      if(mintSocketId){
+        await connection.removeAccountChangeListener(mintSocketId)
+      }
     }
   }, [mint])
 
@@ -234,7 +289,7 @@ export default function Trade() {
     if (info == null){
       throw new Error("Failed to find account");
     }
-    if (!info.owner.equals(VisionProgramId)) {
+    if (!info.owner.equals(VISION_PROGRAM_ID)) {
       throw new Error('Invalid account owner');
     }
     if (info.data.length != AmmLayout.span) {
@@ -255,12 +310,12 @@ export default function Trade() {
     // PDA
     const [pda, bump_seed] = await PublicKey.findProgramAddress(
       [new_mint_keypair.publicKey.toBuffer()],
-      VisionProgramId,
+      VISION_PROGRAM_ID,
     );
   
     const [pda_associatedSolAddress, __bump_seed] = await PublicKey.findProgramAddress(
       [pda.toBuffer()],
-      VisionProgramId,
+      VISION_PROGRAM_ID,
     )
     
     // Accounts sent to Contract
@@ -295,7 +350,7 @@ export default function Trade() {
   
     const txInst = new TransactionInstruction({
       keys,
-      programId: VisionProgramId,
+      programId: VISION_PROGRAM_ID,
       data,
     });
   
@@ -319,22 +374,24 @@ export default function Trade() {
       })
     }catch(e){
       console.log("error:",e)
+      toast.error('Transaction failed')
     }
   }
 
   const buy = async(amountIn, minimumAmountOut) => {
+    setLoading(true)
     const feeCollectorProvider = new PublicKey('CohZhJhnHkdutc7iktrrGVUX4oUM3VctSX7DybSzRN4f')
     const tx = new Transaction()
   
     // PDA
     const [pda, bump_seed] = await PublicKey.findProgramAddress(
       [mint.toBuffer()],
-      VisionProgramId,
+      VISION_PROGRAM_ID,
     );
   
     const [pda_associatedSolAddress, __bump_seed] = await PublicKey.findProgramAddress(
       [pda.toBuffer()],
-      VisionProgramId,
+      VISION_PROGRAM_ID,
     )
   
   
@@ -346,12 +403,10 @@ export default function Trade() {
       mint,
       publicKey
     )
-    var tokenAccountInitialization = false
     try {
       await pageToken.getAccountInfo(user_associatedTokenAddress)
     }catch(err){
       if (err.message === 'Failed to find account' || err.message === 'Invalid account owner'){
-        tokenAccountInitialization = true
         tx.add(
           Token.createAssociatedTokenAccountInstruction(
             ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -408,7 +463,7 @@ export default function Trade() {
   
     const txInst = new TransactionInstruction({
       keys,
-      programId: VisionProgramId,
+      programId: VISION_PROGRAM_ID,
       data,
     });
   
@@ -423,11 +478,11 @@ export default function Trade() {
       setAmtOut(null)
       setTokenAmt(null)
       setsolAmt(null)
-      if(tokenAccountInitialization){
-        await checkAndGetTokenAccountInfo(true)
-      }
+      setLoading(false)
     }catch(e){
-      console.log("error:",e)
+      console.log(e)
+      toast.error('Transaction failed')
+      setLoading(false)
     }
     
   
@@ -435,17 +490,18 @@ export default function Trade() {
   
   
   const sell = async(amountIn, minimumAmountOut) => {
+    setLoading(true)
     const feeCollectorProvider = new PublicKey('CohZhJhnHkdutc7iktrrGVUX4oUM3VctSX7DybSzRN4f')
     const tx = new Transaction()
   
     // PDA
     const [pda, bump_seed] = await PublicKey.findProgramAddress(
       [mint.toBuffer()],
-      VisionProgramId,
+      VISION_PROGRAM_ID,
     );
     const [pda_associatedSolAddress, __bump_seed] = await PublicKey.findProgramAddress(
       [pda.toBuffer()],
-      VisionProgramId,
+      VISION_PROGRAM_ID,
     )
 
     const user_associatedTokenAddress = await Token.getAssociatedTokenAddress(
@@ -493,14 +549,12 @@ export default function Trade() {
   
     const txInst = new TransactionInstruction({
       keys,
-      programId: VisionProgramId,
+      programId: VISION_PROGRAM_ID,
       data,
     });
   
     tx.add(txInst);
-    var closingAccount = false
     if(amountIn == tokenBalance){
-      closingAccount = true
       tx.add(
         Token.createCloseAccountInstruction(
           TOKEN_PROGRAM_ID,
@@ -514,22 +568,22 @@ export default function Trade() {
 
     // Send Transaction
     try{
-      if(closingAccount == true){
-        await checkAndGetTokenAccountInfo(false)
-        setTokenBalance(null)
-      }
       tx.recentBlockhash = (await connection.getRecentBlockhash("confirmed")).blockhash
       tx.feePayer = publicKey
       const signedTx = await signTransaction(tx)
       await sendAndConfirmRawTransaction(connection, signedTx.serialize())
+      if(tokenBalance == amountIn){
+        setTokenBalance(null)
+        connection.removeAccountChangeListener(tokenBalanceSocketId)
+      }
       setAmtOut(null)
       setTokenAmt(null)
       setsolAmt(null)
+      setLoading(false)
     }catch(e){
-      if(closingAccount == true){
-        await checkAndGetTokenAccountInfo(true)
-      }
       console.log("error:",e)
+      toast.error('Transaction failed')
+      setLoading(false)
     }
     
   
@@ -537,6 +591,7 @@ export default function Trade() {
   
   
   const changeFee = async() => {
+    setLoading(true)
     const feeCollectorPage = publicKey
     const newfeeCollectorPage = new PublicKey('G1tUHWDaR1Jerzz9MdwPfxoXVMmwT6kU4DmncZmke5gb')
   
@@ -545,7 +600,7 @@ export default function Trade() {
     // PDA
     const [pda, bump_seed] = await PublicKey.findProgramAddress(
       [mint.toBuffer()],
-      VisionProgramId,
+      VISION_PROGRAM_ID,
     );
   
     // Accounts sent to Contract
@@ -578,7 +633,7 @@ export default function Trade() {
   
     const txInst = new TransactionInstruction({
       keys,
-      programId: VisionProgramId,
+      programId: VISION_PROGRAM_ID,
       data,
     });
   
@@ -589,9 +644,19 @@ export default function Trade() {
       tx.feePayer = publicKey
       const signedTx = await signTransaction(tx)
       await sendAndConfirmRawTransaction(connection, signedTx.serialize())
+      setLoading(false)
     }catch(e){
-      console.log("error:",e)
+      console.log(e)
+      toast.error('Transaction failed')
+      setLoading(false)
     }
+  }
+  
+  const tokenAmtDollar = (amt) => {
+    if(collateral && amt && tokenSupply && solPrice.status == 'success'){
+      return Math.round((collateral * (1 - Math.pow((1 - amt / tokenSupply), (1/0.60976)))) / 10000000*solPrice.price)/100
+    }
+    return null
   }
   
 // HTML
@@ -609,17 +674,25 @@ export default function Trade() {
           </h1>
       </div>
       <div className={styles.selectionParent}>
-        {isBuy?<SelectionSol solPrice={solPrice} lamportsBalance={lamportsBalance} solAmt={solAmt} amtOut={(!solAmt && tokenAmt)?amtOut:null} setsolAmt={setsolAmt}/>:<SelectionPageToken tokenBalance={tokenBalance} tokenAmt={tokenAmt} amtOut={(solAmt && !tokenAmt)?amtOut:null} setTokenAmt={setTokenAmt}/>}
+        {isBuy?<SelectionSol connected={connected} solPrice={solPrice} lamportsBalance={lamportsBalance} solAmt={solAmt} amtOut={(!solAmt && tokenAmt)?amtOut:null} setsolAmt={setsolAmt}/>:<SelectionPageToken connected={connected} tokenDollarAmt={tokenAmtDollar(tokenBalance)} tokenBalance={tokenBalance} tokenAmt={tokenAmt} amtOut={(solAmt && !tokenAmt)?amtOut:null} setTokenAmt={setTokenAmt}/>}
           <div className={styles.tradeDirectionArrowParent}>
             <div className={styles.tradeDirectionArrowChild}>
               <a onClick={() => setIsBuy(!isBuy)}><Arrow strokeWidth='3'/></a>
             </div>
           </div>
-        {isBuy?<SelectionPageToken tokenBalance={tokenBalance} tokenAmt={tokenAmt} amtOut={(solAmt && !tokenAmt)?amtOut:null} setTokenAmt={setTokenAmt}/>:<SelectionSol solPrice={solPrice} lamportsBalance={lamportsBalance} solAmt={solAmt} amtOut={(!solAmt && tokenAmt)?amtOut:null} setsolAmt={setsolAmt}/>}
+        {isBuy?<SelectionPageToken connected={connected} tokenDollarAmt={tokenAmtDollar(tokenBalance)} tokenBalance={tokenBalance} tokenAmt={tokenAmt} amtOut={(solAmt && !tokenAmt)?amtOut:null} setTokenAmt={setTokenAmt}/>:<SelectionSol connected={connected} solPrice={solPrice} lamportsBalance={lamportsBalance} solAmt={solAmt} amtOut={(!solAmt && tokenAmt)?amtOut:null} setsolAmt={setsolAmt}/>}
       </div>
 
       <div className={`smalltext ${styles.priceInDollar}`}>
-        ~$400USD
+        ~$
+        {tokenAmt && tokenAmtDollar(tokenAmt * 1000000000) > 0?
+          tokenAmtDollar(tokenAmt * 1000000000)
+        :
+        solAmt && (Math.round(solAmt * solPrice.price *100)/100) > 0?
+          Math.round(solAmt * solPrice.price *100)/100
+        :
+        0
+      }
       </div>
 
       {!profile.username || !wallet?
@@ -648,12 +721,16 @@ export default function Trade() {
             sell(tokenAmt?(tokenAmt * 1000000000):amtOut, solAmt?(solAmt * 1000000000):amtOut)
           }}>
           <div className={`${
-          (((lamportsBalance == null) && isBuy) || ((tokenBalance == null) && !isBuy) || (isBuy && ((solAmt * 1000000000) > lamportsBalance)) || (!isBuy && ((tokenAmt * 1000000000) > tokenBalance)) || !amtOut || (!solAmt && !tokenAmt) || ((solAmt * 1000000000 < 0)) || ((tokenAmt * 1000000000 < 0)))?
+          (loading || ((lamportsBalance == null) && isBuy) || ((tokenBalance == null) && !isBuy) || (isBuy && ((solAmt * 1000000000) > lamportsBalance)) || (!isBuy && ((tokenAmt * 1000000000) > tokenBalance)) || !amtOut || (!solAmt && !tokenAmt) || ((solAmt * 1000000000 < 0)) || ((tokenAmt * 1000000000 < 0)))?
             styles.buttonInvalid
           :
             null
           } ${styles.button}`}>
-            <h2>Swap</h2>
+            {loading?
+              <Loading/>
+            :
+              <h2>Swap</h2>
+            }
           </div>
         </a>
       }
@@ -662,7 +739,7 @@ export default function Trade() {
   
 }
 
-const SelectionSol = ({setsolAmt, solAmt, amtOut, lamportsBalance, solPrice}) => {
+const SelectionSol = ({setsolAmt, solAmt, amtOut, lamportsBalance, solPrice, connected}) => {
   return(
     <div className={styles.tradePageInfoParent}>
       <SolanaIcon/>
@@ -676,12 +753,14 @@ const SelectionSol = ({setsolAmt, solAmt, amtOut, lamportsBalance, solPrice}) =>
           (lamportsBalance/1000000000)
         :(lamportsBalance != null)?
           (Math.floor(lamportsBalance/100000)/10000)
+        :connected?
+        'Balance: 0'
         :
-          '?'
-        }&nbsp;</span><span className="smalltext">(${(solPrice && (solPrice.status == 'success'))?Math.round(solPrice.price * (lamportsBalance/10000000))/100:'?'})</span>
+          null
+        }&nbsp;</span><span className="smalltext">{(lamportsBalance && solPrice && (solPrice.status == 'success'))?('($'+Math.round(solPrice.price * (lamportsBalance/10000000))/100) + ')':null}</span>
       </div>
 
-      <NumberFormat value={
+      <NumberFormat className={styles.input} value={
         (solAmt != null)?
           solAmt
         : (amtOut != null) && (amtOut>1000000000)?
@@ -700,16 +779,18 @@ const SelectionSol = ({setsolAmt, solAmt, amtOut, lamportsBalance, solPrice}) =>
   )
 }
 
-const SelectionPageToken = ({setTokenAmt, tokenAmt, amtOut, tokenBalance}) => {
+const SelectionPageToken = ({setTokenAmt, tokenAmt, amtOut, tokenBalance, tokenDollarAmt, connected}) => {
   const page = usePageSelectedStore(state => state.page)
   return(
     <div className={styles.tradePageInfoParent}>
 
-      {page.page_icon.length > 6 ?
-          <img src={page.page_icon}/>
-      :
-          <PageIcon color={'#'+page.page_icon}/>
-      }
+      <div className={styles.pageIcon}>
+        {page.page_icon.length > 6 ?
+            <img src={page.page_icon}/>
+        :
+            <PageIcon color={'#'+page.page_icon}/>
+        }
+      </div>
 
       <div className={styles.tradePageInfoChild}>
         <h3>
@@ -720,11 +801,13 @@ const SelectionPageToken = ({setTokenAmt, tokenAmt, amtOut, tokenBalance}) => {
           (tokenBalance/1000000000)
         :(tokenBalance != null)?
           (Math.floor(tokenBalance/100000)/10000)
+        :connected?
+          'Balance: 0'
         :
-          '?'
-        }&nbsp;</span><span className="smalltext">($0)</span>
+          null
+        }&nbsp;</span><span className="smalltext">{(tokenBalance && tokenDollarAmt)?'($'+tokenDollarAmt+')':null}</span>
       </div>
-      <NumberFormat value={
+      <NumberFormat className={styles.input} value={
         (tokenAmt != null)?
           tokenAmt
         : (amtOut != null) && (amtOut>1000000000)?
