@@ -1,5 +1,5 @@
 /*!
- * Pintura Image Editor 8.6.0
+ * Pintura Image Editor 8.19.1
  * (c) 2018-2021 PQINA Inc. - All Rights Reserved
  * License: https://pqina.nl/pintura/license/
  */
@@ -306,11 +306,18 @@ const deepCopy = (src) => {
 
 var isString = (v) => typeof v === 'string';
 
-var imageToCanvas = (image, canvasMemoryLimit) => {
-    // if these are 0 it's possible that we're trying to convert an SVG that doesn't have width or height attributes
-    // https://bugzilla.mozilla.org/show_bug.cgi?id=1328124
-    let canvasWidth = image.naturalWidth;
-    let canvasHeight = image.naturalHeight;
+var isFunction = (v) => typeof v === 'function';
+
+var imageToCanvas = (image, { width, height, canvasMemoryLimit, }) => {
+    let canvasWidth = width || image.naturalWidth;
+    let canvasHeight = height || image.naturalHeight;
+    // if no width and no height use defaults
+    if (!canvasWidth && !canvasHeight) {
+        // if these are 0 it's possible that we're trying to convert an SVG that doesn't have width or height attributes
+        // https://bugzilla.mozilla.org/show_bug.cgi?id=1328124
+        canvasWidth = 300;
+        canvasHeight = 150;
+    }
     // determine if requires more memory than limit, if so limit target size
     const requiredCanvasMemory = canvasWidth * canvasHeight;
     if (canvasMemoryLimit && requiredCanvasMemory > canvasMemoryLimit) {
@@ -328,8 +335,8 @@ var imageToCanvas = (image, canvasMemoryLimit) => {
 };
 
 // turns image into canvas only after it's fully loaded
-var imageToCanvasSafe = (image, canvasMemoryLimit) => new Promise((resolve, reject) => {
-    const ready = () => resolve(imageToCanvas(image, canvasMemoryLimit));
+var imageToCanvasSafe = (image, options) => new Promise((resolve, reject) => {
+    const ready = () => resolve(imageToCanvas(image, options));
     if (image.complete && image.width) {
         // need to test for image.width, on ie11 it will be 0 for object urls
         ready();
@@ -341,8 +348,10 @@ var imageToCanvasSafe = (image, canvasMemoryLimit) => new Promise((resolve, reje
 });
 
 var blobToCanvas = async (imageBlob, canvasMemoryLimit) => {
-    const imageElement = h('img', { src: URL.createObjectURL(imageBlob) });
-    const canvas = await imageToCanvasSafe(imageElement, canvasMemoryLimit);
+    const imageElement = h('img', {
+        src: URL.createObjectURL(imageBlob),
+    });
+    const canvas = await imageToCanvasSafe(imageElement, { canvasMemoryLimit });
     URL.revokeObjectURL(imageElement.src);
     return canvas;
 };
@@ -368,7 +377,7 @@ const wrapFunction = (fn) => `function () {self.onmessage = function (message) {
 }]))}}`;
 const workerPool = new Map();
 var thread = (fn, args, transferList) => new Promise((resolve, reject) => {
-    let workerKey = fn.toString();
+    const workerKey = fn.toString();
     let pooledWorker = workerPool.get(workerKey);
     if (!pooledWorker) {
         // create worker for this function
@@ -382,15 +391,22 @@ var thread = (fn, args, transferList) => new Promise((resolve, reject) => {
             url,
             worker,
             messages,
+            terminationTimeout: undefined,
             terminate: () => {
+                clearTimeout(pooledWorker.terminationTimeout);
                 pooledWorker.worker.terminate();
                 URL.revokeObjectURL(url);
+                workerPool.delete(workerKey);
             },
         };
         // handle received messages
         worker.onmessage = function (e) {
             // should receive message id and message
             const { id, content, error } = e.data;
+            // automatically clean up workers after half a second
+            pooledWorker.terminationTimeout = setTimeout(() => {
+                pooledWorker.terminate();
+            }, 500);
             // message route no longer valid
             if (!messages.has(id))
                 return;
@@ -409,6 +425,8 @@ var thread = (fn, args, transferList) => new Promise((resolve, reject) => {
     pooledWorker.messages.set(messageId, { resolve, reject });
     // use pooled worker and await response
     pooledWorker.worker.postMessage({ id: messageId, content: args }, transferList);
+    // clear termination timeout when sending a message, will queue for termination on receiving response
+    clearTimeout(pooledWorker.terminationTimeout);
 });
 
 var blobToImageData = async (imageBlob, canvasMemoryLimit) => {
@@ -428,6 +446,7 @@ var blobToImageData = async (imageBlob, canvasMemoryLimit) => {
                         canvasWidth = Math.floor(canvasWidth * canvasScalar);
                         canvasHeight = Math.floor(canvasHeight * canvasScalar);
                     }
+                    // @ts-ignore OffscreenCanvas unkown to TypeScript
                     const canvas = new OffscreenCanvas(canvasWidth, canvasHeight);
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(bitmap, 0, 0, canvasWidth, canvasHeight);
@@ -466,15 +485,10 @@ var canvasToBlob = (canvas, mimeType = undefined, quality = undefined) => new Pr
 });
 
 var imageDataToBlob = async (imageData, mimeType, quality) => {
-    try {
-        const canvas = await imageDataToCanvas(imageData);
-        const blob = await canvasToBlob(canvas, mimeType, quality);
-        releaseCanvas(canvas);
-        return blob;
-    }
-    catch (err) {
-        throw err;
-    }
+    const canvas = await imageDataToCanvas(imageData);
+    const blob = await canvasToBlob(canvas, mimeType, quality);
+    releaseCanvas(canvas);
+    return blob;
 };
 
 var blobWriteSection = (blob, section, slice = [0, blob.size]) => {
@@ -570,6 +584,7 @@ const ellipseCreateFromRect = (rect) => ({
 const vectorCreateEmpty = () => vectorCreate(0, 0);
 const vectorCreate = (x, y) => ({ x, y });
 const vectorCreateFromSize = (size) => vectorCreate(size.width, size.height);
+const vectorCreateFromAny = (obj) => vectorCreate(obj.x, obj.y);
 const vectorCreateFromPointerEvent = (e) => vectorCreate(e.pageX, e.pageY);
 const vectorCreateFromPointerEventOffset = (e) => vectorCreate(e.offsetX, e.offsetY);
 const vectorClone = (v) => vectorCreate(v.x, v.y);
@@ -670,6 +685,12 @@ const sizeCreateFromAny = (obj) => toSize(obj.width, obj.height);
 const sizeCreateFromRect = (r) => toSize(r.width, r.height);
 const sizeCreateFromArray = (a) => toSize(a[0], a[1]);
 const sizeCreateFromImageNaturalSize = (image) => toSize(image.naturalWidth, image.naturalHeight);
+const sizeCreateFromElement = (element) => {
+    if (/img/i.test(element.nodeName)) {
+        return sizeCreateFromImageNaturalSize(element);
+    }
+    return sizeCreateFromAny(element);
+};
 const sizeCreate = (width, height) => toSize(width, height);
 const sizeEqual = (a, b, format = passthrough) => format(a.width) === format(b.width) && format(a.height) === format(b.height);
 const sizeScale = (size, scalar) => {
@@ -1056,6 +1077,41 @@ var getFilenameFromURL = (url) => url
     .split(/\?|\#/)
     .shift();
 
+// @ts-ignore
+const supportsReplaceChildren = isBrowser() && !!Node.prototype.replaceChildren;
+const fn$1 = supportsReplaceChildren
+    ? // @ts-ignore
+        (parent, newChildren) => parent.replaceChildren(newChildren)
+    : (parent, newChildren) => {
+        while (parent.lastChild) {
+            parent.removeChild(parent.lastChild);
+        }
+        if (newChildren !== undefined) {
+            parent.append(newChildren);
+        }
+    };
+
+const container = isBrowser() &&
+    h('div', {
+        class: 'PinturaMeasure',
+        style: 'pointer-events:none;left:0;top:0;width:0;height:0;contain:strict;overflow:hidden;position:absolute;',
+    });
+let timeoutId;
+var appendForMeasuring = (element) => {
+    // replace element children with this child
+    fn$1(container, element);
+    // append to DOM if not in it atm
+    if (!container.parentNode)
+        document.body.append(container);
+    // auto detach from DOM after it isn't used for a little while
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => {
+        container.remove();
+    }, 500);
+    // return added element for measuring
+    return element;
+};
+
 let isSafari = null;
 var isSafari$1 = () => {
     if (isSafari === null)
@@ -1070,7 +1126,7 @@ var getImageElementSize = (imageElement) => new Promise((resolve, reject) => {
         shouldAutoRemove = true;
         // has width 0 and height 0 to prevent rendering very big SVGs (without width and height) that will for one frame overflow the window and show a scrollbar
         imageElement.style.cssText = `position:absolute;visibility:hidden;pointer-events:none;left:0;top:0;width:0;height:0;`;
-        document.body.appendChild(imageElement);
+        appendForMeasuring(imageElement);
     }
     // start testing size
     const measure = () => {
@@ -1081,7 +1137,7 @@ var getImageElementSize = (imageElement) => new Promise((resolve, reject) => {
             return;
         // clean up image if was attached for measuring
         if (shouldAutoRemove)
-            imageElement.parentNode.removeChild(imageElement);
+            imageElement.remove();
         clearInterval(intervalId);
         resolve({ width, height });
     };
@@ -1144,7 +1200,7 @@ var createProgressEvent = (loaded = 0, lengthComputable = true) => new (getNativ
 
 var isImage = (file) => /^image/.test(file.type);
 
-var dataURIToFile = async (dataURI, filename, onprogress = noop$1) => {
+var dataURIToFile = async (dataURI, filename = 'data-uri', onprogress = noop$1) => {
     // basic loader, no size info
     onprogress(createProgressEvent(0));
     const res = await fetch(dataURI);
@@ -1363,19 +1419,19 @@ var cropImageData = async (imageData, options = {}) => {
 
 var resizeTransform = (options, done) => {
     const { imageData, width, height } = options;
-    const originWidth = imageData.width;
-    const originHeight = imageData.height;
-    const targetWidth = Math.round(width);
-    const targetHeight = Math.round(height);
+    const inputWidth = imageData.width;
+    const inputHeight = imageData.height;
+    const outputWidth = Math.round(width);
+    const outputHeight = Math.round(height);
     const inputData = imageData.data;
-    const outputData = new Uint8ClampedArray(targetWidth * targetHeight * 4);
-    const ratioWidth = originWidth / targetWidth;
-    const ratioHeight = originHeight / targetHeight;
-    const ratioWidthHalf = Math.ceil(ratioWidth * 0.5);
-    const ratioHeightHalf = Math.ceil(ratioHeight * 0.5);
-    for (let j = 0; j < targetHeight; j++) {
-        for (let i = 0; i < targetWidth; i++) {
-            const x2 = (i + j * targetWidth) * 4;
+    const outputData = new Uint8ClampedArray(outputWidth * outputHeight * 4);
+    const scaleX = inputWidth / outputWidth;
+    const scaleY = inputHeight / outputHeight;
+    const scaleXHalf = Math.ceil(scaleX * 0.5);
+    const scaleYHalf = Math.ceil(scaleY * 0.5);
+    for (let j = 0; j < outputHeight; j++) {
+        for (let i = 0; i < outputWidth; i++) {
+            const x2 = (i + j * outputWidth) * 4;
             let weight = 0;
             let weights = 0;
             let weightsAlpha = 0;
@@ -1383,30 +1439,30 @@ var resizeTransform = (options, done) => {
             let g = 0;
             let b = 0;
             let a = 0;
-            const centerY = (j + 0.5) * ratioHeight;
-            for (let yy = Math.floor(j * ratioHeight); yy < (j + 1) * ratioHeight; yy++) {
-                const dy = Math.abs(centerY - (yy + 0.5)) / ratioHeightHalf;
-                const centerX = (i + 0.5) * ratioWidth;
+            const centerY = (j + 0.5) * scaleY;
+            for (let yy = Math.floor(j * scaleY); yy < (j + 1) * scaleY; yy++) {
+                const dy = Math.abs(centerY - (yy + 0.5)) / scaleYHalf;
+                const centerX = (i + 0.5) * scaleX;
                 const w0 = dy * dy;
-                for (let xx = Math.floor(i * ratioWidth); xx < (i + 1) * ratioWidth; xx++) {
-                    let dx = Math.abs(centerX - (xx + 0.5)) / ratioWidthHalf;
+                for (let xx = Math.floor(i * scaleX); xx < (i + 1) * scaleX; xx++) {
+                    let dx = Math.abs(centerX - (xx + 0.5)) / scaleXHalf;
                     const w = Math.sqrt(w0 + dx * dx);
-                    if (w >= -1 && w <= 1) {
-                        weight = 2 * w * w * w - 3 * w * w + 1;
-                        if (weight > 0) {
-                            dx = 4 * (xx + yy * originWidth);
-                            const ref = inputData[dx + 3];
-                            a += weight * ref;
-                            weightsAlpha += weight;
-                            if (ref < 255) {
-                                weight = (weight * ref) / 250;
-                            }
-                            r += weight * inputData[dx];
-                            g += weight * inputData[dx + 1];
-                            b += weight * inputData[dx + 2];
-                            weights += weight;
-                        }
+                    if (w < -1 || w > 1)
+                        continue;
+                    weight = 2 * w * w * w - 3 * w * w + 1;
+                    if (weight <= 0)
+                        continue;
+                    dx = 4 * (xx + yy * inputWidth);
+                    const ref = inputData[dx + 3];
+                    a += weight * ref;
+                    weightsAlpha += weight;
+                    if (ref < 255) {
+                        weight = (weight * ref) / 250;
                     }
+                    r += weight * inputData[dx];
+                    g += weight * inputData[dx + 1];
+                    b += weight * inputData[dx + 2];
+                    weights += weight;
                 }
             }
             outputData[x2] = r / weights;
@@ -1417,8 +1473,8 @@ var resizeTransform = (options, done) => {
     }
     done(null, {
         data: outputData,
-        width: targetWidth,
-        height: targetHeight,
+        width: outputWidth,
+        height: outputHeight,
     });
 };
 
@@ -1439,7 +1495,7 @@ var imageDataObjectToImageData = (obj) => {
     return imageData;
 };
 
-var resizeImageData = async (imageData, options = {}) => {
+var resizeImageData = async (imageData, options = {}, resizeImageData) => {
     const { width, height, fit, upscale } = options;
     // no need to rescale
     if (!width && !height)
@@ -1453,8 +1509,8 @@ var resizeImageData = async (imageData, options = {}) => {
         targetHeight = width;
     }
     if (fit !== 'force') {
-        let scalarWidth = targetWidth / imageData.width;
-        let scalarHeight = targetHeight / imageData.height;
+        const scalarWidth = targetWidth / imageData.width;
+        const scalarHeight = targetHeight / imageData.height;
         let scalar = 1;
         if (fit === 'cover') {
             scalar = Math.max(scalarWidth, scalarHeight);
@@ -1471,8 +1527,17 @@ var resizeImageData = async (imageData, options = {}) => {
     // no need to resize?
     if (imageData.width === targetWidth && imageData.height === targetHeight)
         return imageData;
-    // let's resize!
-    imageData = await thread(resizeTransform, [{ imageData: imageData, width: targetWidth, height: targetHeight }], [imageData.data.buffer]);
+    // run custom image data resizer if defined
+    if (resizeImageData)
+        return resizeImageData(imageData, targetWidth, targetHeight);
+    // let's use the included resize method
+    imageData = await thread(resizeTransform, [
+        {
+            imageData: imageData,
+            width: targetWidth,
+            height: targetHeight,
+        },
+    ], [imageData.data.buffer]);
     // the resizer returns a plain object, not an actual image data object, lets create one
     return imageDataObjectToImageData(imageData);
 };
@@ -1546,6 +1611,7 @@ var convolutionEffect = (options, done) => {
         return done(null, imageData);
     // calculate kernel weight
     let kernelWeight = matrix.reduce((prev, curr) => prev + curr);
+    kernelWeight = kernelWeight <= 0 ? 1 : kernelWeight;
     // input info
     const inputWidth = imageData.width;
     const inputHeight = imageData.height;
@@ -1569,8 +1635,18 @@ var convolutionEffect = (options, done) => {
                 for (cx = 0; cx < side; cx++) {
                     scy = y + cy - sideHalf;
                     scx = x + cx - sideHalf;
-                    if (scy < 0 || scy >= inputHeight || scx < 0 || scx >= inputWidth)
-                        continue;
+                    if (scy < 0) {
+                        scy = inputHeight - 1;
+                    }
+                    if (scy >= inputHeight) {
+                        scy = 0;
+                    }
+                    if (scx < 0) {
+                        scx = inputWidth - 1;
+                    }
+                    if (scx >= inputWidth) {
+                        scx = 0;
+                    }
                     srcOff = (scy * inputWidth + scx) * 4;
                     weight = matrix[cy * side + cx];
                     r += inputData[srcOff] * weight;
@@ -1797,8 +1873,6 @@ var isEmoji = (str) => isString(str) &&
 
 var hasProp = (obj, key) => obj.hasOwnProperty(key);
 
-var isFunction = (v) => typeof v === 'function';
-
 var isArray = (arr) => Array.isArray(arr);
 
 var isApple = () => isIOS() || isMac();
@@ -1832,287 +1906,365 @@ var isBinary = (v) => v instanceof Blob;
 
 var toPercentage = (value, total) => `${(value / total) * 100}%`;
 
-var isRemoteURL = (url) => new URL(url, location.href).origin !== location.origin;
-
-var loadImage = (image, onsize = undefined) => new Promise((resolve, reject) => {
-    // the image element we'll use to load the image
-    let imageElement = image;
-    let sizeCalculated = false;
-    const reportSize = () => {
-        if (sizeCalculated)
-            return;
-        sizeCalculated = true;
-        isFunction(onsize) &&
-            /* Use Promise.resolve to make async but place before resolve of parent promise */
-            Promise.resolve().then(() => onsize(sizeCreate(imageElement.naturalWidth, imageElement.naturalHeight)));
-    };
-    // if is not an image element, it must be a valid image source
-    if (!imageElement.src) {
-        imageElement = new Image();
-        // if is remote image, set crossOrigin
-        // why not always set crossOrigin? -> because when set this fires two requests,
-        // one for asking permission and one for downloading the image
-        if (isString(image) && isRemoteURL(image))
-            imageElement.crossOrigin = 'anonymous';
-        imageElement.src = isString(image) ? image : URL.createObjectURL(image);
-    }
-    if (imageElement.complete) {
-        reportSize();
-        return resolve(imageElement);
-    }
-    // try to calculate size faster
-    if (isFunction(onsize))
-        getImageElementSize(imageElement).then(reportSize).catch(reject);
-    imageElement.onload = () => {
-        reportSize();
-        resolve(imageElement);
-    };
-    imageElement.onerror = reject;
-});
-
 var colorArrayToRGBA = (color) => `rgba(${Math.round(color[0] * 255)}, ${Math.round(color[1] * 255)}, ${Math.round(color[2] * 255)}, ${isNumber(color[3]) ? color[3] : 1})`;
 
-const textPadding = 20;
-// font offset
-// font size 16 -> 2, 4
-// font size 32 -> 4, 6
-// font size 64 -> 8, 12
-// font size 128 -> 16, 24
-// font size 256 -> 32, 48
-let fontOffsetBrowser = undefined;
-const getBrowserFontOffset = (fontSize) => {
-    if (!fontOffsetBrowser) {
-        // size
-        const size = 32;
-        // let's calculate it
-        const ctx = createSimpleContext(size, size);
-        updateTextContext(ctx, { fontSize: 100, color: '#fff' });
-        ctx.fillText('F', 0, 0);
-        // get pixel data so we can find the white pixels
-        const data = ctx.getImageData(0, 0, size, size).data;
-        // find x offset
-        let p = 0;
-        let step = 4;
-        let to = data.length;
-        let from = to - size * 4;
-        for (p = from; p < to; p += step) {
-            if (data[p])
-                break;
-        }
-        const x = (p - from) / step;
-        // find y offset
-        from = (size - 1) * 4;
-        step = size * 4;
-        for (p = from; p < to; p += step) {
-            if (data[p])
-                break;
-        }
-        const y = (p - from) / step;
-        fontOffsetBrowser = vectorCreate(x, y);
-        // done with canvas
-        releaseCanvas(ctx.canvas);
-    }
-    return vectorCreate(-fontOffsetBrowser.x * fontSize * 0.01, -fontOffsetBrowser.y * fontSize * 0.01);
+// tested and this seems a tiny bit faster than JSON.stringify
+var objectUID = (obj) => Object.values(obj).join('_');
+
+var timeout = (timeout = 0) => new Promise((resolve) => {
+    setTimeout(resolve, timeout);
+});
+
+// cannot use a ObjectURL because of a webkit bug (throws error in chrome / safari)
+// returns true if every pixel's uint32 representation is 0 (or "blank")
+const isContextBlank = (ctx) => {
+    const buffer = new Uint32Array(ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height).data.buffer);
+    return !buffer.some((color) => color !== 0);
 };
-const createSimpleContext = (width = 1, height = 1) => {
-    const canvas = h('canvas');
+const width = 80;
+const height = 80;
+const whenSVGSafeForDrawing = async (img, delay = 0) => {
+    // Safari has some trouble with custom fonts
+    const canvas = h('canvas', { width, height });
     const ctx = canvas.getContext('2d');
-    ctx.canvas.width = width;
-    ctx.canvas.height = height;
-    return ctx;
+    // always wait a short while because it's never ready on first drawy
+    await timeout(delay);
+    // we draw the image so we can test if the content is drawn. If custom font isn't ready the canvas will be empty
+    ctx.drawImage(img, 0, 0, width, height);
+    if (isContextBlank(ctx) && delay <= 256)
+        return await whenSVGSafeForDrawing(img, delay + 16);
+    return true;
 };
-const updateTextContext = (ctx, options) => {
-    const { fontSize = 16, fontFamily = 'sans-serif', fontWeight = 'normal', fontVariant = 'normal', fontStyle = 'normal', textAlign = 'left', color = '#000', } = options;
-    ctx.font = `${fontStyle} ${fontVariant} ${fontWeight} ${fontSize}px ${fontFamily}`;
-    ctx.textBaseline = 'top';
-    ctx.textAlign = textAlign;
-    ctx.fillStyle = Array.isArray(color) ? colorArrayToRGBA(color) : color;
-};
-const createSimpleTextContext = (options) => {
-    const ctx = createSimpleContext();
-    updateTextContext(ctx, options);
-    return ctx;
-};
-const computeLineHeight = (fontSize, lineHeight) => isFunction(lineHeight) ? lineHeight(fontSize) : lineHeight;
-const getMeasureVisibleWidth = (measure) => Math.abs(measure.actualBoundingBoxLeft) + Math.abs(measure.actualBoundingBoxRight);
-const resizeContextToFitText = (ctx, text, options) => {
-    const { width, height } = measureTextContext(ctx, text, computeLineHeight(options.fontSize, options.lineHeight));
-    ctx.canvas.width = Math.ceil(width);
-    ctx.canvas.height = Math.ceil(height);
-    return ctx;
-};
-const measureTextContext = (ctx, text, computedLineHeight) => {
-    const storedTextAlign = ctx.textAlign;
-    ctx.textAlign = 'left';
-    // calculate width
-    const lines = text.split('\n');
-    const width = lines.reduce((prev, curr) => {
-        const lineWidth = getMeasureVisibleWidth(ctx.measureText(curr));
-        if (lineWidth > prev) {
-            prev = lineWidth;
-        }
-        return prev;
-    }, 1);
-    ctx.textAlign = storedTextAlign;
-    // calculate height
-    const height = computedLineHeight * lines.length;
-    return sizeCreate(Math.ceil(width), Math.ceil(height));
-};
-const TextSizeCache = new Map();
-const createTextSizeHash = (text, { fontSize, fontFamily, lineHeight, fontWeight, fontStyle, fontVariant }) => `${[text, fontSize, fontWeight, fontStyle, fontVariant, fontFamily].join('_')}_${isFunction(lineHeight) ? lineHeight(fontSize) : lineHeight}`;
-const textSize = (text, options) => {
-    const ctx = createSimpleTextContext(options);
-    if (options.width)
-        text = wrapText(ctx, text, options.width);
-    const hash = createTextSizeHash(text, options);
-    let size = TextSizeCache.get(hash);
-    if (size)
-        return { ...size };
-    size = measureTextContext(ctx, text, computeLineHeight(options.fontSize, options.lineHeight));
-    TextSizeCache.set(hash, size);
-    return { ...size };
-};
-const wrapText = (ctx, text, lineWidth) => {
-    // exit if no text
-    if (text.length === 0)
-        return '';
-    const res = [];
-    let lineBuffer = '';
-    let lineIndex = 0;
-    let measureWidth;
-    const paragraphs = text.split('\n\n');
-    // draw the current line
-    const pushLine = () => {
-        if (!lineBuffer.length)
-            return;
-        if (!res[lineIndex]) {
-            res[lineIndex] = [];
-        }
-        res[lineIndex].push(lineBuffer);
-        // clear buffer
-        lineBuffer = '';
-    };
-    const fitChar = (char) => {
-        const testLine = lineBuffer + char;
-        // measure width of entire line if adding these chars
-        measureWidth = ctx.measureText(testLine).width;
-        // fits on line?
-        if (measureWidth < lineWidth) {
-            lineBuffer = testLine;
-        }
-        else {
-            // doesn't fit but line buffer is empty, just print the character and move to next line
-            if (!lineBuffer.length) {
-                lineBuffer = testLine;
-                pushLine();
-            }
-            // fits, lets print current line and move char to next line
-            else {
-                pushLine();
-                lineBuffer = char;
-            }
-            lineIndex++;
-        }
-    };
-    const fitWord = (word) => {
-        const testLine = lineBuffer.length ? lineBuffer + ' ' + word : word;
-        // measure width of entire line if adding these chars
-        measureWidth = ctx.measureText(testLine).width;
-        // fits on line?
-        if (measureWidth < lineWidth) {
-            lineBuffer = testLine;
-        }
-        // wrap to next line
-        else {
-            // if line buffer is empty, whole word doesn't fit, need to cut it up
-            if (!lineBuffer.length) {
-                word.split('').forEach(fitChar);
-            }
-            // there are words in the buffer that do fit, let's draw the line and move this word to the next line
-            else {
-                // draw current buffer
-                pushLine();
-                lineIndex++;
-                // retry to fit this word
-                fitWord(word);
-            }
-        }
-    };
-    paragraphs.forEach((p) => {
-        const lines = p.split('\n');
-        lines.forEach((l) => {
-            l.split(' ').forEach(fitWord);
-            // end of line reached, if we have words in our buffer
-            // at this point we need to draw them and then move to the next line
-            if (lineBuffer.length)
-                pushLine();
-            // forced new line
-            lineIndex++;
+// store cached draw cycles here
+const safariDrawCache = new Map();
+var svgToImage = (svg, { safariCacheKey = '*' } = {}) => new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onerror = reject;
+    img.onload = () => {
+        // We done!
+        if (!isSafari$1() || !svg.includes('@font-face') || safariDrawCache.has(safariCacheKey))
+            return resolve(img);
+        // wait for embedded fonts to load
+        whenSVGSafeForDrawing(img).then(() => {
+            safariDrawCache.set(safariCacheKey, true);
+            resolve(img);
         });
-        // forced new line
-        lineIndex++;
-    });
-    return res.map((line) => line.join(' ')).join('\n');
-};
-const drawText$1 = (ctx, text = '', options = {}) => {
-    // exit if no text
-    if (text.length === 0)
-        return ctx;
-    const { x = 0, y = 0, lineWidth = 0, textAlign, fontSize, lineHeight } = options;
-    // determine where the browser will render the font and correct for browser differences
-    const browserFontOffset = vectorAdd(getBrowserFontOffset(fontSize), vectorCreate(fontSize / 12, fontSize / 3.75));
-    const fontOffsetX = x + browserFontOffset.x;
-    const fontOffsetY = y + browserFontOffset.y;
-    const lineHeightComputed = isFunction(lineHeight) ? lineHeight(fontSize) : lineHeight;
-    let offset = textAlign === 'right' ? lineWidth : textAlign === 'center' ? lineWidth * 0.5 : 0;
-    text.split('\n').forEach((line, i) => {
-        ctx.fillText(line, fontOffsetX + offset, fontOffsetY + i * lineHeightComputed);
-    });
-    return ctx;
+    };
+    img.src = 'data:image/svg+xml,' + svg;
+});
+
+var blobToDataURL = (blob) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => resolve(reader.result);
+    reader.readAsDataURL(blob);
+});
+
+var pubsub = () => {
+    let subs = [];
+    return {
+        sub: (event, callback) => {
+            subs.push({ event, callback });
+            return () => (subs = subs.filter((subscriber) => subscriber.event !== event || subscriber.callback !== callback));
+        },
+        pub: (event, value) => {
+            subs
+                .filter((sub) => sub.event === event)
+                .forEach((sub) => sub.callback(value));
+        }
+    };
 };
 
-//#region shape generic
-const shapeContain = (shape, parentRect) => {
-    // skip ellipse for now
-    if (shapeIsEllipse(shape))
-        return shape;
-    // deal with rect
-    if (shapeIsRect(shape) && isNumber(shape.width)) {
-        const shapeAspectRatio = shape.width / shape.height;
-        const containedShape = rectContainRect(parentRect, shapeAspectRatio);
-        if (shape.width > containedShape.width || shape.height > containedShape.height) {
-            shape.width = containedShape.width;
-            shape.height = containedShape.height;
-        }
-    }
-    return shape;
+// draw text at slightly higher resolution, disabled for now because doesn't work correctly on Safari
+const TextPixelRatio = 1;
+// used to make sure text is drawn outside of element in a correct way
+const TextPadding = 32;
+const textGetInitialLineOffset = ({ fontSize = 16, lineHeight = 20 } = {}) => Math.max(0, fontSize - lineHeight) * 0.5;
+const textGetStyles = ({ color = [0, 0, 0], fontSize = 16, fontFamily = 'sans-serif', fontVariant = 'normal', fontWeight = 'normal', fontStyle = 'normal', textAlign = 'left', lineHeight = 20, }) => `font-size:${fontSize}px;font-style:${fontStyle};font-weight:${fontWeight};font-family:${fontFamily};font-variant:${fontVariant};line-height:${lineHeight}px;text-align:${textAlign};color:${colorArrayToRGBA(color)};`;
+const textGetContentEditableStyles = (options) => {
+    const { width, height } = options;
+    const isAutoWidth = !width;
+    const widthValue = isAutoWidth ? 'auto' : `${width}px`;
+    const heightValue = height ? `${height}px` : 'auto';
+    const wordBreak = isAutoWidth ? 'normal' : 'break-word';
+    const whiteSpace = isAutoWidth ? 'nowrap' : 'pre-line';
+    const paddingTop = textGetInitialLineOffset(options);
+    return `max-width:none;min-width:auto;width:${widthValue};height:${heightValue};margin-top:0;margin-bottom:0;padding-top:${paddingTop}px;word-break:${wordBreak};word-wrap:normal;white-space:${whiteSpace};overflow:visible;`;
 };
-const shapeCenter = (shape, position) => {
-    // skip ellipse for now
-    if (shapeIsEllipse(shape)) {
-        shape.x = position.x;
-        shape.y = position.y;
-        return shape;
+const TextMeasureCache = new Map();
+const textMeasure = (text = '', options) => {
+    // gather props that impact size and test if can be found in cache
+    const { width = 0, fontSize, fontFamily, lineHeight, fontWeight, fontStyle, fontVariant, } = options;
+    const uid = objectUID({
+        text,
+        fontFamily,
+        fontWeight,
+        fontStyle,
+        fontVariant,
+        fontSize,
+        lineHeight,
+        width,
+    });
+    let measurement = TextMeasureCache.get(uid);
+    if (measurement)
+        return measurement;
+    // this is appended to the end of the text and helps us determine if text wrapped
+    const endMarker = h('span');
+    const element = appendForMeasuring(h('pre', {
+        contenteditable: 'true',
+        spellcheck: 'false',
+        style: `pointer-events:none;visibility:hidden;position:absolute;left:0;top:0;${textGetStyles({
+            fontFamily,
+            fontWeight,
+            fontStyle,
+            fontVariant,
+            fontSize,
+            lineHeight,
+        })};${textGetContentEditableStyles(options)}"`,
+        innerHTML: text,
+    }, [endMarker]));
+    //
+    // insert a character at the end and ask bounding client rect, should change position if wrapping changes
+    //
+    const elementRect = element.getBoundingClientRect();
+    const endMarkerRect = endMarker.getBoundingClientRect();
+    measurement = {
+        size: sizeCreateFromAny(elementRect),
+        lastCharPosition: vectorApply(vectorCreateFromAny(endMarkerRect), Math.round),
+    };
+    TextMeasureCache.set(uid, measurement);
+    // clean up measured elements
+    element.remove();
+    return measurement;
+};
+const TextSizeCache = new Map();
+const textToSize = (text = '', options) => {
+    const { width = 0, height = 0 } = options;
+    if (width && height)
+        return sizeCreate(width, height);
+    // gather props that impact size and test if can be found in cache
+    const { fontSize, fontFamily, lineHeight, fontWeight, fontStyle, fontVariant } = options;
+    const uid = objectUID({
+        text,
+        fontFamily,
+        fontWeight,
+        fontStyle,
+        fontVariant,
+        fontSize,
+        lineHeight,
+        width,
+    });
+    let size = TextSizeCache.get(uid);
+    if (size)
+        return size;
+    // new measurement needed
+    const element = appendForMeasuring(h('pre', {
+        contenteditable: 'true',
+        spellcheck: 'false',
+        style: `pointer-events:none;visibility:hidden;position:absolute;${textGetStyles(options)};${textGetContentEditableStyles(options)}"`,
+        innerHTML: text,
+    }, [h('span')]));
+    const rect = element.getBoundingClientRect();
+    // cache measurement for next query
+    size = sizeCreateFromAny(rect);
+    // add additional height to prevent cutting off footer
+    size.height += Math.max(0, fontSize - lineHeight);
+    TextSizeCache.set(uid, size);
+    return size;
+};
+const getPathFromURL = (url) => url.pathname.split('/').slice(0, -1).join('/');
+const createStyleSheetLoader = (url) => {
+    const { sub, pub } = pubsub();
+    let text;
+    let error;
+    fetch(url)
+        .then((res) => res.text())
+        .then((txt) => {
+        text = txt;
+        pub('load', text);
+    })
+        .catch((err) => {
+        error = err;
+        pub('error', error);
+    });
+    return {
+        sub: (event, cb) => {
+            if (event === 'load' && text)
+                return cb(text);
+            if (event === 'error' && error)
+                return cb(error);
+            sub(event, cb);
+        },
+    };
+};
+const StyleSheetLoaders = new Map();
+const loadStylesheet = (url) => new Promise((resolve, reject) => {
+    let loader = StyleSheetLoaders.get(url);
+    if (!loader) {
+        loader = createStyleSheetLoader(url);
+        StyleSheetLoaders.set(url, loader);
     }
-    // deal with rect
-    if (shapeIsRect(shape) && isNumber(shape.width)) {
-        shape.x = position.x - shape.width * 0.5;
-        shape.y = position.y - shape.height * 0.5;
-        return shape;
+    loader.sub('load', resolve);
+    loader.sub('error', reject);
+});
+// use this method to access rules because when accessing third party stylesheetes like google fonts it will throw a warning
+const getRulesRemote = async (src) => {
+    // could not access, let's try to load
+    let styleSheetContent;
+    try {
+        styleSheetContent = await loadStylesheet(src);
     }
-    shape.x = position.x;
-    shape.y = position.y;
-    return shape;
+    catch (err) {
+        return [];
+    }
+    const style = h('style', {
+        innerHTML: styleSheetContent,
+        id: getUniqueId(),
+    });
+    document.head.append(style);
+    const tempStyleSheet = Array.from(document.styleSheets).find((styleSheet) => {
+        const node = styleSheet.ownerNode;
+        return node.id === style.id;
+    });
+    style.remove();
+    return Array.from(tempStyleSheet.cssRules);
+};
+const RemoteStyleSheetRulesCache = new Map();
+const filterFontFaceRules = (rules) => rules.filter((rule) => rule instanceof CSSFontFaceRule);
+const getFontFaceRulesSafe = async (styleSheet, willRequestResource = () => true) => {
+    // if excluded (because on remote URL that doesn't allow CORS), return zero rules
+    if (RemoteStyleSheetRulesCache.has(styleSheet.href))
+        return RemoteStyleSheetRulesCache.get(styleSheet.href);
+    // try to get rules
+    let rules;
+    try {
+        rules = filterFontFaceRules(Array.from(styleSheet.cssRules));
+    }
+    catch (err) {
+        const url = styleSheet.href;
+        // allow blocking this request
+        if (!willRequestResource(url)) {
+            RemoteStyleSheetRulesCache.set(url, []);
+            return [];
+        }
+        // this tries to load the styles with `fetch`
+        rules = filterFontFaceRules(await getRulesRemote(url));
+        // if no rules returned, exclude for subsequent searches
+        RemoteStyleSheetRulesCache.set(url, rules);
+    }
+    return rules;
+};
+const getCSSPropertyValue = (rule, name) => rule.style.getPropertyValue(name);
+const isMatchingFontRule = (rule, fontFamily) => {
+    const family = getCSSPropertyValue(rule, 'font-family').replace(/^"|"$/g, '');
+    return family == fontFamily;
+};
+const getMatchingFontRule = (rules, fontFamily) => {
+    const res = [];
+    for (const fontRule of rules) {
+        const isMatch = isMatchingFontRule(fontRule, fontFamily);
+        if (!isMatch)
+            continue;
+        res.push(fontRule);
+    }
+    return res;
+};
+const getDocumentStylesheetFontFaceRules = async (willRequestResource) => {
+    const styleSheets = Array.from(document.styleSheets).map((styleSheet) => getFontFaceRulesSafe(styleSheet, willRequestResource));
+    const ruleSets = await Promise.all(styleSheets);
+    const rules = [];
+    ruleSets.forEach((ruleSet) => rules.push(...ruleSet));
+    return rules;
+};
+const getFontSources = async (fontFamily, willRequestResource) => {
+    // get matching font face rules
+    const fontFaceRules = await getDocumentStylesheetFontFaceRules(willRequestResource);
+    // rules matching this font
+    const matchingRules = getMatchingFontRule(fontFaceRules, fontFamily);
+    if (!matchingRules.length)
+        return [];
+    return matchingRules.map((rule) => {
+        // create stylesheet root path so we can determine font path
+        const url = rule.parentStyleSheet.href && new URL(rule.parentStyleSheet.href);
+        const styleSheetPath = url ? url.origin + getPathFromURL(url) + '/' : '';
+        // create font source
+        const fontSources = rule.style.getPropertyValue('src');
+        const fontSrcFirst = fontSources.match(/url\("?(.*?)"?\)/)[1];
+        // get styles
+        const fontProps = Array.from(rule.style)
+            .filter((prop) => prop != 'src')
+            .reduce((props, key) => {
+            props += key + ':' + getCSSPropertyValue(rule, key) + ';';
+            return props;
+        }, '');
+        // merge together to create path (Safari font URL is absolute so if it is we only use that url)
+        return [
+            /^http/.test(fontSrcFirst) ? fontSrcFirst : styleSheetPath + fontSrcFirst,
+            fontProps,
+        ];
+    });
+};
+const FontLocal = new Map();
+const FontCache = new Map();
+const getFontFaceEmbed = async (fontFamily, willRequestResource) => {
+    // todo test if is local font
+    if (FontLocal.get(fontFamily))
+        return;
+    let fontStyles = FontCache.get(fontFamily);
+    if (!fontStyles) {
+        // not cached yet, let's find the font source and turn it into a dataURL
+        const fontSources = await getFontSources(fontFamily, willRequestResource);
+        // no source found, is local font
+        if (!fontSources.length) {
+            FontLocal.set(fontFamily, true);
+            return;
+        }
+        const fontFaces = [];
+        for (const [fontSource, fontProps] of fontSources) {
+            const blob = await fetch(fontSource).then((res) => res.blob());
+            const dataType = blob.type.split('/')[1] || 'woff2';
+            const dataURL = await blobToDataURL(blob);
+            fontFaces.push(`@font-face { src:url(${dataURL}) format('${dataType}');${fontProps};font-display:block; }`);
+        }
+        fontStyles = fontFaces.join('');
+        // cache the font so it's super fast in next request
+        FontCache.set(fontFamily, fontStyles);
+    }
+    return fontStyles;
+};
+var textToImage = async (text = '', options) => {
+    // exit if no text
+    if (!text.length)
+        return;
+    const { imageWidth = 300, imageHeight = 150, paddingLeft = TextPadding, paddingRight = TextPadding, fontFamily, willRequestResource, } = options;
+    const width = (imageWidth + paddingLeft + paddingRight) * TextPixelRatio;
+    const height = imageHeight * TextPixelRatio;
+    const textStyles = textGetStyles(options);
+    const textContentEditableStyles = textGetContentEditableStyles(options);
+    const fontEmbed = await getFontFaceEmbed(fontFamily, willRequestResource);
+    const textEncoded = text
+        // these characters need to be encoded in an SVG dataURL
+        .replace(/&/g, '&amp;')
+        .replace(/#/g, '%23')
+        // no non-closing tags allowed in foreignObject as is xhtml namespace
+        .replace(/<br>/g, '<br/>')
+        // safari and firefox don't draw newline character so replace with <br/>
+        .replace(/\n/g, '<br/>');
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><foreignObject x="0" y="0" width="${imageWidth + paddingLeft + paddingRight}" height="${imageHeight}" transform="scale(${TextPixelRatio})"><div xmlns="http://www.w3.org/1999/xhtml">${fontEmbed ? `<style>${fontEmbed}</style>` : ''}<pre contenteditable="true" spellcheck="false" style="position:absolute;padding-right:${paddingRight}px;padding-left:${paddingLeft}px;${textStyles};${textContentEditableStyles}">${textEncoded}</pre></div></foreignObject></svg>`;
+    return svgToImage(svg, { safariCacheKey: fontFamily });
+};
+
+var fixPrecision = (value, precision = 12) => parseFloat(value.toFixed(precision));
+
+const shapeEqual = (a, b) => {
+    return JSON.stringify(a) === JSON.stringify(b);
+};
+const shapeShallowCopy = (shape) => {
+    return { ...shape };
 };
 const shapeDeepCopy = (shape) => {
-    // don't attempt to clone background image element
-    // TODO: MOVE IMAGE ELEMENT TO SOME INTERNAL CACHE
     const shapeShallowCopy = { ...shape };
-    shapeShallowCopy.backgroundImageElement = undefined;
     const shapeDeepCopy = deepCopy(shapeShallowCopy);
-    // we don't want a million image elements so we'll reference the original one
-    if (shape.backgroundImageElement)
-        shapeDeepCopy.backgroundImageElement = shape.backgroundImageElement;
     return shapeDeepCopy;
 };
 const getContextSize = (context, size = {}) => {
@@ -2157,7 +2309,7 @@ const shapeCreateFromEmoji = (emoji, props = {}) => {
         backgroundImage: SVGToDataURL(getEmojiSVG(emoji)),
     };
 };
-const shapeCreateFromImage = (src, oncomplete, shapeProps = {}) => {
+const shapeCreateFromImage = (src, shapeProps = {}) => {
     const shapeDefaultLayout = shapeIsEllipse(shapeProps)
         ? {}
         : {
@@ -2173,98 +2325,56 @@ const shapeCreateFromImage = (src, oncomplete, shapeProps = {}) => {
         // merge with custom props
         ...shapeProps,
         // set image
-        backgroundImage: isString(src) ? src : URL.createObjectURL(src),
+        backgroundImage: 
+        // is svg or URL
+        isString(src) ? src : isBinary(src) ? URL.createObjectURL(src) : src,
     };
-    return shapeLoadResources(shape, oncomplete);
-};
-const shapeLoadResources = (shape, oncomplete = noop$1) => {
-    if (shape.backgroundImage) {
-        // if is canvas
-        if (/canvas/.test(shape.backgroundImage.nodeName)) {
-            shape.isComplete = true;
-            shape.isError = false;
-            shape.isLoading = false;
-            oncomplete(shape.isError, shape);
-            return shape;
-        }
-        // done loading
-        if (shape.isComplete) {
-            oncomplete(shape.isError, shape);
-            return shape;
-        }
-        // is still loading
-        if (shape.isLoading)
-            return shape;
-        // default state before loading
-        shape.isComplete = false;
-        shape.isError = false;
-        shape.isLoading = true;
-        // updates the size of the shape relative to the image
-        const updateShapeSize = (imageSize) => {
-            // if background size is not set the shape is not locked to the image aspect ratio
-            if (shape.backgroundSize || shapeIsEllipse(shape))
-                return;
-            // always locked to aspect ratio
-            const aspectRatio = imageSize.width / imageSize.height;
-            // check if width has been defined, if so, we update height to match aspect ratio
-            const width = shape.width || imageSize.width;
-            const height = width / aspectRatio;
-            // set final dimensions
-            shape.width = width;
-            shape.height = height;
-            shape.aspectRatio = imageSize.width / imageSize.height;
-        };
-        // now loading
-        loadImage(shape.backgroundImage, updateShapeSize)
-            .then((image) => {
-            shape.backgroundImageElement = image;
-        })
-            .catch((error) => {
-            shape.isError = error;
-        })
-            .finally(() => {
-            shape.isLoading = false;
-            shape.isComplete = true;
-            oncomplete(shape.isError, shape);
-        });
-    }
     return shape;
 };
-const shapeCreateFromPreset = (preset, parentRect, oncomplete) => {
+const shapeCreateFromPreset = (preset, parentRect) => {
     let shape;
     if (isString(preset) || isBinary(preset)) {
+        // default props for "quick" preset
+        const shapeOptions = {
+            ...getContextSize(parentRect),
+            backgroundSize: 'contain',
+        };
         // if is emoji, create default markup,
         if (isEmoji(preset)) {
-            // create markup
-            shape = shapeCreateFromEmoji(preset, getContextSize(parentRect));
-            setTimeout(() => oncomplete(undefined, shape), 0);
+            shape = shapeCreateFromEmoji(preset, shapeOptions);
         }
         // is URL, create default markup for image
         else {
-            shape = shapeCreateFromImage(preset, oncomplete, {
-                // disableStyle: true,
-                ...getContextSize(parentRect),
-            });
+            shape = shapeCreateFromImage(preset, shapeOptions);
         }
     }
     else {
         // is using src shortcut
         if (preset.src) {
+            const contextSize = getContextSize(parentRect, preset.shape || preset);
             // shape options
             const shapeOptions = {
                 // default shape styles
                 ...preset.shape,
                 // precalcualte size of shape in context
-                ...getContextSize(parentRect, preset.shape || preset),
+                ...contextSize,
             };
+            // should auto-fix aspect ratio
+            if (preset.width && preset.height && !hasProp(shapeOptions, 'aspectRatio')) {
+                const width = shapeGetPropPixelValue(contextSize, 'width', parentRect);
+                const height = shapeGetPropPixelValue(contextSize, 'height', parentRect);
+                shapeOptions.aspectRatio = getAspectRatio(width, height);
+            }
+            // should auto-contain sticker in container
+            if (!shapeOptions.backgroundSize && !preset.shape && (!preset.width || !preset.height))
+                shapeOptions.backgroundSize = 'contain';
             // emoji markup
             if (isEmoji(preset.src)) {
                 shape = shapeCreateFromEmoji(preset.src, shapeOptions);
-                setTimeout(() => oncomplete(undefined, shape), 0);
             }
             // is url
             else {
-                shape = shapeCreateFromImage(preset.src, oncomplete, shapeOptions);
+                shape = shapeCreateFromImage(preset.src, shapeOptions);
             }
         }
         // should have markup defined
@@ -2279,7 +2389,7 @@ const shapeCreateFromPreset = (preset, parentRect, oncomplete) => {
         }
         // for image presets, disable styles by default
         if (!hasProp(shape, 'disableStyle')) {
-            shape.disableStyle = true;
+            shape.disableStyle = ['backgroundColor', 'strokeColor', 'strokeWidth'];
         }
         // by default don't allow flipping
         if (!hasProp(shape, 'disableFlip')) {
@@ -2290,7 +2400,6 @@ const shapeCreateFromPreset = (preset, parentRect, oncomplete) => {
 };
 const shapeLineGetStartPoint = (line) => vectorCreate(line.x1, line.y1);
 const shapeLineGetEndPoint = (line) => vectorCreate(line.x2, line.y2);
-const shapeTextUID = ({ text, textAlign, fontSize, fontFamily, lineHeight, fontWeight, fontStyle, fontVariant, }) => `${[text, textAlign, fontSize, fontWeight, fontStyle, fontVariant, fontFamily].join('_')}_${isFunction(lineHeight) ? lineHeight(fontSize) : lineHeight}`;
 //#endregion
 //#region shape testing
 // shape types
@@ -2307,7 +2416,8 @@ const shapeIsTextEmpty = (shape) => shapeIsText(shape) && !shape.text.length;
 const shapeIsTextEditing = (shape) => shapeIsText(shape) && shape.isEditing;
 const shapeIsVisible = (shape) => hasProp(shape, 'opacity') ? shape.opacity > 0 : true;
 const shapeIsSelected = (shape) => shape.isSelected;
-const shapeIsDraft = (shape) => shape.isDraft;
+const shapeIsEditing = (shape) => shape.isEditing;
+const shapeIsDraft = (shape) => shape._isDraft;
 const shapeHasSize = (shape) => hasProp(shape, 'width') && hasProp(shape, 'height');
 const shapeHasNumericStroke = (shape) => isNumber(shape.strokeWidth) && shape.strokeWidth > 0; // only relevant if is bigger than 0
 const shapeHasRelativePosition = (shape) => {
@@ -2325,7 +2435,11 @@ const shapeSelect = (shape) => {
     return shape;
 };
 const shapeMakeDraft = (shape) => {
-    shape.isDraft = true;
+    shape._isDraft = true;
+    return shape;
+};
+const shapeMakeFinal = (shape) => {
+    shape._isDraft = false;
     return shape;
 };
 // rights
@@ -2337,7 +2451,7 @@ const shapeCanStyle = (shape, style) => {
     }
     return true;
 };
-const shapeCanSelect = (shape) => shape.disableSelect !== true && !shapeIsPath(shape) && !shapeIsTriangle(shape);
+const shapeCanSelect = (shape) => shape.disableSelect !== true && !shapeIsTriangle(shape);
 const shapeCanRemove = (shape) => shape.disableRemove !== true;
 const shapeCanDuplicate = (shape) => shape.disableDuplicate !== true && shapeCanMove(shape);
 const shapeCanReorder = (shape) => shape.disableReorder !== true;
@@ -2366,7 +2480,7 @@ const shapeCanChangeTextLayout = (shape, layout) => {
     return true;
 };
 const shapeCanManipulate = (shape) => shape.disableManipulate !== true && !shapeIsDraft(shape) && !shapeHasRelativePosition(shape);
-const shapeCanMove = (shape) => shapeCanManipulate(shape) && shape.disableMove !== true && !shapeIsPath(shape);
+const shapeCanMove = (shape) => shapeCanManipulate(shape) && shape.disableMove !== true;
 const shapeCanResize = (shape) => shapeCanManipulate(shape) &&
     shapeCanMove(shape) &&
     shape.disableResize !== true &&
@@ -2400,14 +2514,13 @@ const shapeFormatFill = (shape) => {
             : [0, 0, 0];
     return shape;
 };
-const autoLineHeight = (fontSize) => fontSize * 1.2;
 const shapeFormatText = (shape) => {
-    shape.fontSize = shape.fontSize || 16;
+    shape.fontSize = shape.fontSize || '4%';
     shape.fontFamily = shape.fontFamily || 'sans-serif';
     shape.fontWeight = shape.fontWeight || 'normal';
     shape.fontStyle = shape.fontStyle || 'normal';
     shape.fontVariant = shape.fontVariant || 'normal';
-    shape.lineHeight = isNumber(shape.lineHeight) ? shape.lineHeight : autoLineHeight;
+    shape.lineHeight = shape.lineHeight || '120%';
     shape.color = shape.color || [0, 0, 0];
     return shapeIsTextLine(shape) ? shapeFormatTextLine(shape) : shapeFormatTextBox(shape);
 };
@@ -2478,7 +2591,6 @@ const shapeFormat = (shape) => {
     else if (shapeIsTriangle(shape)) {
         shapeFormatTriangle(shape);
     }
-    shapeLoadResources(shape);
     return shape;
 };
 const shapeGetDescription = (shape) => {
@@ -2505,54 +2617,50 @@ const shapeGetDescription = (shape) => {
 //#endregion
 const toPixelValue = (percentage, total) => (parseFloat(percentage) / 100) * total;
 //#region shape transforming
-const shapeComputeValue = (shape, prop, { width, height }) => {
-    if (!hasProp(shape, prop))
-        return;
-    const value = shape[prop];
-    if (/points/.test(prop)) {
-        const arr = shape[prop];
-        if (!isString(arr[0].x))
-            return;
-        shape[prop] = arr.map((p) => vectorCreate(toPixelValue(p.x, width), toPixelValue(p.y, height)));
+const xRegExp = new RegExp(/^x|left|^width|rx|fontSize|cornerRadius|strokeWidth/, 'i');
+const yRegExp = new RegExp(/^y|top|^height|ry/, 'i');
+const rightRegExp = new RegExp(/right/, 'i');
+const bottomRegExp = new RegExp(/bottom/, 'i');
+const compute = (key, value, { width, height }) => {
+    // handle array of percentage values
+    if (Array.isArray(value)) {
+        return value.map((v) => {
+            if (isObject(v)) {
+                // update the object itself
+                computeProps(v, { width, height });
+            }
+            return v;
+        });
     }
-    else if (isString(value)) {
-        const f = parseFloat(value) / 100;
-        if (/^x|left|width|rx|fontSize|cornerRadius|strokeWidth/.test(prop))
-            shape[prop] = width * f;
-        else if (/^right/.test(prop))
-            shape[prop] = width - width * f;
-        else if (/^y|top|height|ry/.test(prop))
-            shape[prop] = height * f;
-        else if (/^bottom/.test(prop))
-            shape[prop] = height - height * f;
-    }
+    // no need to compute (test with typeof instead of for perf)
+    if (typeof value !== 'string')
+        return value;
+    if (!value.endsWith('%'))
+        return value;
+    const f = parseFloat(value) / 100;
+    if (xRegExp.test(key))
+        return fixPrecision(width * f, 6);
+    if (yRegExp.test(key))
+        return fixPrecision(height * f, 6);
+    if (rightRegExp.test(key))
+        return fixPrecision(width - width * f, 6);
+    if (bottomRegExp.test(key))
+        return fixPrecision(height - height * f, 6);
+    // dont auto-compute
+    return value;
 };
-const displayProps = [
-    'width',
-    'height',
-    'left',
-    'top',
-    'right',
-    'bottom',
-    'x',
-    'y',
-    'rx',
-    'ry',
-    'points',
-    'fontSize',
-    'strokeWidth',
-    'lineHeight',
-    'x1',
-    'y1',
-    'x2',
-    'y2',
-    'x3',
-    'y3',
-];
-const shapeComputeDisplay = (shape, parentRect) => {
-    displayProps.forEach((prop) => shapeComputeValue(shape, prop, parentRect));
-    shapeComputeRect(shape, parentRect);
-    // if (shape.didCompute) Object.assign(shape, shape.didCompute(shape, parentRect));
+const computeProps = (obj, context) => {
+    Object.entries(obj).map(([key, value]) => {
+        obj[key] = compute(key, value, context);
+    });
+    // assume is percentage
+    const lineHeight = obj.lineHeight;
+    if (isString(lineHeight))
+        obj.lineHeight = Math.round(obj.fontSize * (parseFloat(lineHeight) / 100));
+};
+const shapeComputeDisplay = (shape, context) => {
+    computeProps(shape, context);
+    shapeComputeRect(shape, context);
     return shape;
 };
 const shapeGetPropPixelTotal = (prop, parentRect) => {
@@ -2571,7 +2679,7 @@ const shapeUpdateProp = (shape, prop, value, parentRect) => {
         return shape;
     }
     const total = shapeGetPropPixelTotal(prop, parentRect);
-    shape[prop] = toPercentage(value, total);
+    shape[prop] = total === undefined ? value : toPercentage(value, total);
     return shape;
 };
 const shapeGetPropPixelValue = (shape, prop, parentRect) => {
@@ -2590,11 +2698,69 @@ const shapeUpdateProps = (shape, props, parentRect) => {
     Object.keys(props).forEach((key) => shapeUpdateProp(shape, key, props[key], parentRect));
     return shape;
 };
-const shapeComputeRect = (shape, parentRect) => {
+const shapeBounds = (shape) => {
+    const rect = rectCreateEmpty();
+    const strokeWidth = shape.strokeWidth || 0;
+    if (shapeIsRect(shape)) {
+        rect.x = shape.x - strokeWidth * 0.5;
+        rect.y = shape.y - strokeWidth * 0.5;
+        rect.width = shape.width + strokeWidth;
+        rect.height = shape.height + strokeWidth;
+    }
+    else if (shapeIsLine(shape)) {
+        const { x1, y1, x2, y2 } = shape;
+        const left = Math.abs(Math.min(x1, x2));
+        const right = Math.abs(Math.max(x1, x2));
+        const top = Math.abs(Math.min(y1, y2));
+        const bottom = Math.abs(Math.min(y1, y2));
+        rect.x = left + strokeWidth * 0.5;
+        rect.y = right + strokeWidth * 0.5;
+        rect.width = right - left + strokeWidth;
+        rect.height = bottom - top + strokeWidth;
+    }
+    else if (shapeIsEllipse(shape)) {
+        rect.x = shape.x - shape.rx + strokeWidth * 0.5;
+        rect.y = shape.y - shape.ry + strokeWidth * 0.5;
+        rect.width = shape.rx * 2 + strokeWidth;
+        rect.height = shape.ry * 2 + strokeWidth;
+    }
+    if (rect && hasProp(shape, 'rotation')) {
+        rectRotate(rect, shape.rotation);
+    }
+    return rectToBounds(rect);
+};
+const shapesBounds = (shapes, parentRect) => {
+    const bounds = shapes
+        .filter((shape) => shape.x < 0 || shape.y < 0 || shape.x1 < 0 || shape.y1 < 0)
+        .reduce((bounds, shape) => {
+        const [top, right, bottom, left] = shapeBounds(shape);
+        bounds.top = Math.min(top, bounds.top);
+        bounds.left = Math.min(left, bounds.left);
+        bounds.bottom = Math.max(bottom, bounds.bottom);
+        bounds.right = Math.max(right, bounds.right);
+        return bounds;
+    }, {
+        top: 0,
+        right: 0,
+        bottom: 0,
+        left: 0,
+    });
+    if (bounds.right > 0)
+        bounds.right -= parentRect.width;
+    if (bounds.bottom > 0)
+        bounds.bottom -= parentRect.height;
+    return bounds;
+};
+const shapesFromCompositShape = (shape, parentRect, parser) => {
+    const shapeCopy = shapeDeepCopy(shape);
+    shapeComputeDisplay(shapeCopy, parentRect);
+    return parser(shapeCopy);
+};
+const shapeComputeRect = (shape, context) => {
     if (hasProp(shape, 'left'))
         shape.x = shape.left;
     if (hasProp(shape, 'right')) {
-        const r = parentRect.width - shape.right;
+        const r = context.width - shape.right;
         if (hasProp(shape, 'left')) {
             shape.x = shape.left;
             shape.width = Math.max(0, r - shape.left);
@@ -2606,7 +2772,7 @@ const shapeComputeRect = (shape, parentRect) => {
     if (hasProp(shape, 'top'))
         shape.y = shape.top;
     if (hasProp(shape, 'bottom')) {
-        const b = parentRect.height - shape.bottom;
+        const b = context.height - shape.bottom;
         if (hasProp(shape, 'top')) {
             shape.y = shape.top;
             shape.height = Math.max(0, b - shape.top);
@@ -2617,6 +2783,7 @@ const shapeComputeRect = (shape, parentRect) => {
     }
     return shape;
 };
+// currently only used for drawing to canvas in output
 const shapeComputeTransform = (shape, translate, scale) => {
     if (shapeIsPath(shape)) {
         shape.points
@@ -2669,9 +2836,15 @@ const shapeComputeTransform = (shape, translate, scale) => {
     if (shapeHasNumericStroke(shape)) {
         shape.strokeWidth *= scale;
     }
-    if (shapeIsText(shape) && isNumber(shape.fontSize)) {
-        shape.fontSize *= scale;
-        if (isNumber(shape.width) && !isNumber(shape.width))
+    if (shapeIsText(shape)) {
+        shape._scale = scale;
+        if (isNumber(shape.fontSize)) {
+            shape.fontSize *= scale;
+        }
+        if (isNumber(shape.lineHeight)) {
+            shape.lineHeight *= scale;
+        }
+        if (isNumber(shape.width) && !isNumber(shape.height))
             shape.width *= scale;
     }
     if (hasProp(shape, 'cornerRadius') && isNumber(shape.cornerRadius)) {
@@ -2687,11 +2860,11 @@ const shapeGetCenter = (shape) => {
         return vectorCreate(shape.x, shape.y);
     }
     if (shapeIsTextBox(shape)) {
-        const height = shape.height || textSize(shape.text, shape).height;
+        const height = shape.height || textToSize(shape.text, shape).height;
         return vectorCreate(shape.x + shape.width * 0.5, shape.y + height * 0.5);
     }
     if (shapeIsTextLine(shape)) {
-        const size = textSize(shape.text, shape);
+        const size = textToSize(shape.text, shape);
         return vectorCreate(shape.x + size.width * 0.5, shape.y + size.height * 0.5);
     }
     if (shapeIsPath(shape)) {
@@ -2704,101 +2877,6 @@ const shapeGetCenter = (shape) => {
         ]);
     }
     return undefined;
-};
-const shapeComputeLineEnd = (position, strokeWidth, color, style, direction) => {
-    let shape = {};
-    const isSolid = /solid/.test(style);
-    const scaledSize = 5 * strokeWidth;
-    const s = isSolid ? scaledSize : scaledSize - 1;
-    const sh = isSolid ? s * 0.5 : Math.ceil(s * 0.5);
-    const normal = vectorNormalize(direction);
-    const offset = vectorMultiply(vectorClone(normal), sh);
-    const anchor = vectorClone(position);
-    const positionUpdated = vectorClone(position);
-    if (/arrow/.test(style)) {
-        let x = position.x;
-        let y = position.y;
-        const tipOffset = vectorMultiply(vectorClone(normal), scaledSize);
-        const inset = vectorCreate(x + tipOffset.x, y + tipOffset.y);
-        vectorMultiply(tipOffset, 0.55);
-        if (isSolid) {
-            const arrowOffset = vectorMultiply(vectorClone(normal), sh * 0.5);
-            x -= arrowOffset.x;
-            y -= arrowOffset.y;
-            shape = {
-                points: [
-                    vectorCreate(x, y),
-                    vectorCreate(inset.x - tipOffset.y, inset.y + tipOffset.x),
-                    vectorCreate(inset.x + tipOffset.y, inset.y - tipOffset.x),
-                ],
-                backgroundColor: color,
-            };
-            // move back so arrow triangle overlaps with end of line (otherwise line sticks out of triangle tip)
-            positionUpdated.x += offset.x;
-            positionUpdated.y += offset.y;
-        }
-        else {
-            // this prevents trouble with sharp line rendering in webgl
-            const p = vectorMultiply(vectorPerpendicular(vectorClone(normal)), 0.5);
-            const tipLeft = vectorCreate(x - p.x, y - p.y);
-            const tipRight = vectorCreate(x + p.x, y + p.y);
-            shape = {
-                points: [
-                    vectorCreate(inset.x + tipOffset.y, inset.y - tipOffset.x),
-                    tipLeft,
-                    vectorCreate(x, y),
-                    tipRight,
-                    vectorCreate(inset.x - tipOffset.y, inset.y + tipOffset.x),
-                ],
-                strokeWidth: strokeWidth,
-                strokeColor: color,
-            };
-        }
-    }
-    else if (/circle/.test(style)) {
-        // adjust line point offset
-        positionUpdated.x += offset.x;
-        positionUpdated.y += offset.y;
-        // add line cap
-        shape = {
-            x: anchor.x,
-            y: anchor.y,
-            rx: sh,
-            ry: sh,
-            backgroundColor: isSolid ? color : undefined,
-            strokeWidth: isSolid ? undefined : strokeWidth,
-            strokeColor: isSolid ? undefined : color,
-        };
-    }
-    else if (/square/.test(style)) {
-        // adjust line point offset
-        positionUpdated.x += offset.x;
-        positionUpdated.y += offset.y;
-        shape = {
-            x: anchor.x - sh,
-            y: anchor.y - sh,
-            width: sh * 2,
-            height: sh * 2,
-            rotation: vectorAngle(normal),
-            backgroundColor: isSolid ? color : undefined,
-            strokeWidth: isSolid ? undefined : strokeWidth,
-            strokeColor: isSolid ? undefined : color,
-        };
-    }
-    else if (style === 'bar') {
-        shape = {
-            points: [
-                vectorCreate(anchor.x - offset.y, anchor.y + offset.x),
-                vectorCreate(anchor.x + offset.y, anchor.y - offset.x),
-            ],
-            strokeWidth: strokeWidth,
-            strokeColor: color,
-        };
-    }
-    return {
-        position: positionUpdated,
-        shape,
-    };
 };
 //#endregion
 
@@ -2817,6 +2895,119 @@ var ctxRoundRect = (ctx, x, y, width, height, radius) => {
     return ctx;
 };
 
+var isCanvas = (element) => /canvas/i.test(element.nodeName);
+
+var isRemoteURL = (url) => new URL(url, location.href).origin !== location.origin;
+
+var loadImage = (image, onSize = undefined) => new Promise((resolve, reject) => {
+    // the image element we'll use to load the image
+    let imageElement = image;
+    let sizeCalculated = false;
+    const reportSize = () => {
+        if (sizeCalculated)
+            return;
+        sizeCalculated = true;
+        isFunction(onSize) &&
+            /* Use Promise.resolve to make async but place before resolve of parent promise */
+            Promise.resolve().then(() => onSize(sizeCreate(imageElement.naturalWidth, imageElement.naturalHeight)));
+    };
+    // if is not an image element, it must be a valid image source
+    if (!imageElement.src) {
+        imageElement = new Image();
+        // if is remote image, set crossOrigin
+        // why not always set crossOrigin? -> because when set this fires two requests,
+        // one for asking permission and one for downloading the image
+        if (isString(image) && isRemoteURL(image))
+            imageElement.crossOrigin = 'anonymous';
+        imageElement.src = isString(image) ? image : URL.createObjectURL(image);
+    }
+    if (imageElement.complete) {
+        reportSize();
+        return resolve(imageElement);
+    }
+    // try to calculate size faster
+    if (isFunction(onSize))
+        getImageElementSize(imageElement).then(reportSize).catch(reject);
+    imageElement.onload = () => {
+        reportSize();
+        resolve(imageElement);
+    };
+    imageElement.onerror = reject;
+});
+
+const cache = new Map([]);
+const getImage = (src, options = {}) => new Promise((resolve, reject) => {
+    const { onMetadata = noop$1, onLoad = resolve, onError = reject, onComplete = noop$1, } = options;
+    let imageLoadState = cache.get(src);
+    // start loading
+    if (!imageLoadState) {
+        imageLoadState = {
+            loading: false,
+            complete: false,
+            error: false,
+            image: undefined,
+            size: undefined,
+            bus: pubsub(),
+        };
+        // store
+        cache.set(src, imageLoadState);
+    }
+    // wait for load
+    imageLoadState.bus.sub('meta', onMetadata);
+    imageLoadState.bus.sub('load', onLoad);
+    imageLoadState.bus.sub('error', onError);
+    imageLoadState.bus.sub('complete', onComplete);
+    // if is canvas, it's already done
+    if (isCanvas(src)) {
+        const canvas = src;
+        // get image
+        const image = canvas.cloneNode();
+        // update state
+        imageLoadState.complete = true;
+        imageLoadState.image = image;
+        imageLoadState.size = sizeCreateFromElement(canvas);
+    }
+    // already loaded
+    if (imageLoadState.complete) {
+        imageLoadState.bus.pub('meta', { size: imageLoadState.size });
+        if (imageLoadState.error) {
+            imageLoadState.bus.pub('error', imageLoadState.error);
+        }
+        else {
+            imageLoadState.bus.pub('load', imageLoadState.image);
+        }
+        imageLoadState.bus.pub('complete');
+        // reset subscribers
+        imageLoadState.bus = pubsub();
+        return;
+    }
+    // already loading, exit here
+    if (imageLoadState.loading)
+        return;
+    // now loading
+    imageLoadState.loading = true;
+    // resource needs to be loaded
+    loadImage(src, (size) => {
+        imageLoadState.size = size;
+        imageLoadState.bus.pub('meta', { size });
+    })
+        .then((image) => {
+        imageLoadState.image = image;
+        imageLoadState.bus.pub('load', image);
+    })
+        .catch((err) => {
+        imageLoadState.error = err;
+        imageLoadState.bus.pub('error', err);
+    })
+        .finally(() => {
+        imageLoadState.complete = true;
+        imageLoadState.loading = false;
+        imageLoadState.bus.pub('complete');
+        // reset subscribers
+        imageLoadState.bus = pubsub();
+    });
+});
+
 const drawCanvas = (ctx, image, srcRect, destRect) => ctx.drawImage(image, srcRect.x, srcRect.x, srcRect.width, srcRect.height, destRect.x, destRect.y, destRect.width, destRect.height);
 var ctxDrawImage = async (ctx, image, srcRect, destRect, draw = drawCanvas) => {
     ctx.save();
@@ -2824,18 +3015,27 @@ var ctxDrawImage = async (ctx, image, srcRect, destRect, draw = drawCanvas) => {
     await draw(ctx, image, srcRect, destRect);
     ctx.restore();
 };
-const getDrawImageParams = (container, backgroundSize, imageSize) => {
+const getDrawImageParams = (container, backgroundSize, imageSize, backgroundCorners) => {
     let srcRect = rectCreate(0, 0, imageSize.width, imageSize.height);
     const destRect = rectClone(container);
-    if (backgroundSize === 'contain') {
-        const rect = rectContainRect(container, rectAspectRatio(srcRect));
-        destRect.width = rect.width;
-        destRect.height = rect.height;
-        destRect.x += rect.x;
-        destRect.y += rect.y;
+    if (backgroundCorners) {
+        srcRect = rectApply(rectCreateFromPoints(backgroundCorners), fixPrecision);
+        srcRect.x *= imageSize.width;
+        srcRect.width *= imageSize.width;
+        srcRect.y *= imageSize.height;
+        srcRect.height *= imageSize.height;
     }
-    else if (backgroundSize === 'cover') {
-        srcRect = rectContainRect(rectCreate(0, 0, srcRect.width, srcRect.height), rectAspectRatio(destRect));
+    else {
+        if (backgroundSize === 'contain') {
+            const rect = rectContainRect(container, rectAspectRatio(srcRect));
+            destRect.width = rect.width;
+            destRect.height = rect.height;
+            destRect.x += rect.x;
+            destRect.y += rect.y;
+        }
+        else if (backgroundSize === 'cover') {
+            srcRect = rectContainRect(rectCreate(0, 0, srcRect.width, srcRect.height), rectAspectRatio(destRect));
+        }
     }
     return {
         srcRect,
@@ -2857,24 +3057,31 @@ const strokeRectShape = (ctx, shape) => {
     shape.strokeWidth && ctx.stroke();
     return ctx;
 };
-var drawRect = async (ctx, shape, options = {}) => new Promise((resolve, reject) => {
+var drawRect = async (ctx, shape, options = {}) => new Promise(async (resolve, reject) => {
     const { drawImage } = options;
     ctx.lineWidth = shape.strokeWidth ? shape.strokeWidth : 1; // 1 is default value for lineWidth prop
     ctx.strokeStyle = shape.strokeColor ? colorArrayToRGBA(shape.strokeColor) : 'none';
     ctx.fillStyle = shape.backgroundColor ? colorArrayToRGBA(shape.backgroundColor) : 'none';
     ctx.globalAlpha = shape.opacity;
     if (shape.backgroundImage) {
-        shapeLoadResources(shape, async (error, shape) => {
-            if (error)
-                return reject(error);
-            const { srcRect, destRect } = getDrawImageParams(shape, shape.backgroundSize, sizeCreateFromImageNaturalSize(shape.backgroundImageElement));
-            defineRectShape(ctx, shape);
-            fillRectShape(ctx, shape);
-            // @ts-ignore
-            await ctxDrawImage(ctx, shape.backgroundImageElement, srcRect, destRect, drawImage);
-            strokeRectShape(ctx, shape);
-            resolve([]);
-        });
+        let image;
+        try {
+            if (isCanvas(shape.backgroundImage)) {
+                image = shape.backgroundImage;
+            }
+            else {
+                image = await getImage(shape.backgroundImage);
+            }
+        }
+        catch (err) {
+            reject(err);
+        }
+        defineRectShape(ctx, shape);
+        fillRectShape(ctx, shape);
+        const { srcRect, destRect } = getDrawImageParams(shape, shape.backgroundSize, sizeCreateFromElement(image), shape.backgroundCorners);
+        await ctxDrawImage(ctx, image, srcRect, destRect, drawImage);
+        strokeRectShape(ctx, shape);
+        resolve([]);
     }
     else {
         defineRectShape(ctx, shape);
@@ -2884,7 +3091,7 @@ var drawRect = async (ctx, shape, options = {}) => new Promise((resolve, reject)
     }
 });
 
-var drawEllipse = async (ctx, shape, options = {}) => new Promise((resolve, reject) => {
+var drawEllipse = async (ctx, shape, options = {}) => new Promise(async (resolve, reject) => {
     const { drawImage } = options;
     ctx.lineWidth = shape.strokeWidth || 1; // 1 is default value for lineWidth prop
     ctx.strokeStyle = shape.strokeColor ? colorArrayToRGBA(shape.strokeColor) : 'none';
@@ -2893,16 +3100,19 @@ var drawEllipse = async (ctx, shape, options = {}) => new Promise((resolve, reje
     ctx.ellipse(shape.x, shape.y, shape.rx, shape.ry, 0, 0, Math.PI * 2);
     shape.backgroundColor && ctx.fill();
     if (shape.backgroundImage) {
-        shapeLoadResources(shape, async (error, image) => {
-            if (error)
-                return reject(error);
-            const bounds = rectCreate(shape.x - shape.rx, shape.y - shape.ry, shape.rx * 2, shape.ry * 2);
-            const { srcRect, destRect } = getDrawImageParams(bounds, shape.backgroundSize, sizeCreateFromImageNaturalSize(shape.backgroundImageElement));
-            // @ts-ignore
-            await ctxDrawImage(ctx, image.backgroundImageElement, srcRect, destRect, drawImage);
-            shape.strokeWidth && ctx.stroke();
-            resolve([]);
-        });
+        let image;
+        try {
+            image = await getImage(shape.backgroundImage);
+        }
+        catch (err) {
+            reject(err);
+        }
+        const bounds = rectCreate(shape.x - shape.rx, shape.y - shape.ry, shape.rx * 2, shape.ry * 2);
+        const { srcRect, destRect } = getDrawImageParams(bounds, shape.backgroundSize, sizeCreateFromElement(image));
+        // @ts-ignore
+        await ctxDrawImage(ctx, image, srcRect, destRect, drawImage);
+        shape.strokeWidth && ctx.stroke();
+        resolve([]);
     }
     else {
         shape.strokeWidth && ctx.stroke();
@@ -2911,13 +3121,14 @@ var drawEllipse = async (ctx, shape, options = {}) => new Promise((resolve, reje
 });
 
 var drawText = async (ctx, shape, options) => {
+    // get text size
     const size = shape.width && shape.height
         ? sizeCreateFromAny(shape)
-        : textSize(shape.text, shape);
+        : textToSize(shape.text, shape);
     const rect = {
         x: shape.x,
         y: shape.y,
-        width: shape.width || size.width,
+        width: size.width,
         height: size.height,
     };
     drawRect(ctx, {
@@ -2925,61 +3136,38 @@ var drawText = async (ctx, shape, options) => {
         ...rect,
         options,
     });
-    updateTextContext(ctx, shape);
-    let tx = 0;
-    if (shape.textAlign == 'center') {
-        tx = -textPadding * 0.5;
-    }
-    else if (shape.textAlign === 'right') {
-        tx = -textPadding;
-    }
-    ctx.rect(shape.x + tx, shape.y, shape.width + textPadding * 2, shape.height);
-    ctx.save();
-    ctx.clip();
-    drawText$1(ctx, shape.width ? wrapText(ctx, shape.text, shape.width) : shape.text, {
-        x: shape.x,
-        y: shape.y,
-        fontSize: shape.fontSize,
-        textAlign: shape.textAlign,
-        lineHeight: shape.lineHeight,
-        lineWidth: shape.width,
+    // skip if no text
+    if (!shape.text.length)
+        return [];
+    const { willRequestResource } = options;
+    const image = await textToImage(shape.text, {
+        ...shape,
+        ...rect,
+        imageWidth: rect.width,
+        imageHeight: rect.height,
+        willRequestResource,
     });
-    ctx.restore();
+    ctx.drawImage(image, shape.x - TextPadding, shape.y, image.width / TextPixelRatio, image.height / TextPixelRatio);
     return [];
 };
 
-const getLineEndStyle = (style) => {
-    if (!style || style === 'none')
-        return undefined;
-    return style;
-};
-var drawLine = async (ctx, shape) => new Promise(async (resolve, reject) => {
+// TODO! START
+// -----------
+var drawLine = async (ctx, shape) => new Promise(async (resolve) => {
     ctx.lineWidth = shape.strokeWidth || 1; // 1 is default value for lineWidth prop
     ctx.strokeStyle = shape.strokeColor ? colorArrayToRGBA(shape.strokeColor) : 'none';
     ctx.globalAlpha = shape.opacity;
-    let lineStartStyle = getLineEndStyle(shape.lineStart);
-    let lineEndStyle = getLineEndStyle(shape.lineEnd);
     let lineStartPosition = shapeLineGetStartPoint(shape);
     let lineEndPosition = shapeLineGetEndPoint(shape);
-    const lineStartDescription = lineStartStyle &&
-        shapeComputeLineEnd(lineStartPosition, shape.strokeWidth, shape.strokeColor, lineStartStyle, vectorCreate(lineEndPosition.x - lineStartPosition.x, lineEndPosition.y - lineStartPosition.y));
-    const lineEndDescription = lineEndStyle &&
-        shapeComputeLineEnd(lineEndPosition, shape.strokeWidth, shape.strokeColor, lineEndStyle, vectorCreate(lineStartPosition.x - lineEndPosition.x, lineStartPosition.y - lineEndPosition.y));
-    // update start and end position of line if required to draw caps
-    lineStartPosition = lineStartDescription
-        ? lineStartDescription.position
-        : lineStartPosition;
-    lineEndPosition = lineEndDescription ? lineEndDescription.position : lineEndPosition;
     // draw line
     ctx.moveTo(lineStartPosition.x, lineStartPosition.y);
     ctx.lineTo(lineEndPosition.x, lineEndPosition.y);
     shape.strokeWidth && ctx.stroke();
     // draw other shapes
-    resolve([
-        lineStartDescription && lineStartDescription.shape,
-        lineEndDescription && lineEndDescription.shape,
-    ].filter(Boolean));
+    resolve([]);
 });
+// TODO! END
+// -----------
 
 var drawPath = async (ctx, shape) => new Promise((resolve, reject) => {
     ctx.lineWidth = shape.strokeWidth || 1; // 1 is default value for lineWidth prop
@@ -2988,11 +3176,15 @@ var drawPath = async (ctx, shape) => new Promise((resolve, reject) => {
     ctx.globalAlpha = shape.opacity;
     // draw line
     const { points } = shape;
+    if (shape.pathClose)
+        ctx.beginPath();
     ctx.moveTo(points[0].x, points[0].y);
     const l = points.length;
     for (let i = 1; i < l; i++) {
         ctx.lineTo(points[i].x, points[i].y);
     }
+    if (shape.pathClose)
+        ctx.closePath();
     shape.strokeWidth && ctx.stroke();
     shape.backgroundColor && ctx.fill();
     resolve([]);
@@ -3048,32 +3240,33 @@ var drawShapes = async (ctx, shapes, options) => {
 };
 
 var drawImageData = async (imageData, options = {}) => {
-    const { shapes = [], context = imageData, transform = noop$1, drawImage } = options;
+    const { shapes = [], context = imageData, contextBounds = imageData, transform = noop$1, drawImage, willRequestResource, preprocessShape = passthrough, } = options;
     // no shapes to draw
     if (!shapes.length)
         return imageData;
-    // output
-    let imageDataOut;
     // create drawing context
     const canvas = h('canvas');
-    canvas.width = imageData.width;
-    canvas.height = imageData.height;
+    canvas.width = contextBounds.width;
+    canvas.height = contextBounds.height;
     const ctx = canvas.getContext('2d');
-    ctx.putImageData(imageData, 0, 0);
+    ctx.putImageData(imageData, contextBounds.x || 0, contextBounds.y || 0);
     // compute the position of all shapes
-    const computedShapes = shapes.map(shapeDeepCopy).map((shape) => shapeComputeDisplay(shape, {
-        x: 0,
-        y: 0,
+    const computedShapes = shapes
+        .map(shapeDeepCopy)
+        .map((shape) => shapeComputeDisplay(shape, {
         width: context.width,
         height: context.height,
-    }));
+    })) // need to take into account output size?
+        .map(preprocessShape)
+        .flat();
     // compute transforms for all shapes
     transform(ctx);
     // draw shapes to canvas
     await drawShapes(ctx, computedShapes, {
         drawImage,
+        willRequestResource,
     });
-    imageDataOut = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const imageDataOut = ctx.getImageData(0, 0, canvas.width, canvas.height);
     releaseCanvas(canvas);
     return imageDataOut;
 };
@@ -3084,8 +3277,7 @@ var fillImageData = async (imageData, options = {}) => {
     if (!backgroundColor || (backgroundColor && backgroundColor[3] === 0))
         return imageData;
     // fill
-    let imageDataOut;
-    let image = h('canvas');
+    const image = h('canvas');
     image.width = imageData.width;
     image.height = imageData.height;
     const ctx = image.getContext('2d');
@@ -3094,7 +3286,7 @@ var fillImageData = async (imageData, options = {}) => {
     ctx.globalCompositeOperation = 'destination-over';
     ctx.fillStyle = colorArrayToRGBA(backgroundColor);
     ctx.fillRect(0, 0, image.width, image.height);
-    imageDataOut = ctx.getImageData(0, 0, image.width, image.height);
+    const imageDataOut = ctx.getImageData(0, 0, image.width, image.height);
     releaseCanvas(image);
     return imageDataOut;
 };
@@ -3131,6 +3323,22 @@ var dotColorMatrix = (a, b) => {
 var getColorMatrixFromColorMatrices = (colorMatrices) => colorMatrices.length
     ? colorMatrices.reduce((previous, current) => dotColorMatrix([...previous], current), colorMatrices.shift())
     : [];
+
+var roundFraction = (value, fr = 2) => Math.round(value * fr) / fr;
+
+var getImageRedactionScaleFactor = (imageSize, redactionShapes) => {
+    const imageRes = imageSize.width * imageSize.height;
+    const maxShapeSize = redactionShapes.reduce((max, shape) => {
+        if (shape.width > max.width && shape.height > max.height) {
+            max.width = shape.width;
+            max.height = shape.height;
+        }
+        return max;
+    }, { width: 0, height: 0 });
+    const maxShapeRes = maxShapeSize.width * maxShapeSize.height;
+    const fraction = Math.max(0.5, 0.5 + (1 - maxShapeRes / imageRes) / 2);
+    return roundFraction(fraction, 5);
+};
 
 function noop() { }
 const identity = x => x;
@@ -3215,6 +3423,14 @@ function exclude_internal_props(props) {
         if (k[0] !== '$')
             result[k] = props[k];
     return result;
+}
+function compute_rest_props(props, keys) {
+    const rest = {};
+    keys = new Set(keys);
+    for (const k in props)
+        if (!keys.has(k) && k[0] !== '$')
+            rest[k] = props[k];
+    return rest;
 }
 function set_store_value(store, ret, value = ret) {
     store.set(value);
@@ -3339,13 +3555,41 @@ function set_data(text, data) {
 function set_input_value(input, value) {
     input.value = value == null ? '' : value;
 }
-function set_style(node, key, value, important) {
-    node.style.setProperty(key, value, important ? 'important' : '');
-}
 function custom_event(type, detail) {
     const e = document.createEvent('CustomEvent');
     e.initCustomEvent(type, false, false, detail);
     return e;
+}
+class HtmlTag {
+    constructor(anchor = null) {
+        this.a = anchor;
+        this.e = this.n = null;
+    }
+    m(html, target, anchor = null) {
+        if (!this.e) {
+            this.e = element(target.nodeName);
+            this.t = target;
+            this.h(html);
+        }
+        this.i(anchor);
+    }
+    h(html) {
+        this.e.innerHTML = html;
+        this.n = Array.from(this.e.childNodes);
+    }
+    i(anchor) {
+        for (let i = 0; i < this.n.length; i += 1) {
+            insert(this.t, this.n[i], anchor);
+        }
+    }
+    p(html) {
+        this.d();
+        this.h(html);
+        this.i(this.a);
+    }
+    d() {
+        this.n.forEach(detach);
+    }
 }
 
 const active_docs = new Set();
@@ -4072,11 +4316,11 @@ const UNIQUE_DERIVED_STORE = (fn) => ({
 });
 const MAP_STORE = (fn) => ({
     store: (defaultValue, stores) => {
-        const [valueMapper, paramStores = {}] = fn(stores);
+        const [valueMapper, observedStores = {}, sorter = undefined] = fn(stores);
         let storedItems = [];
-        let $paramStores = {};
-        const mapValue = (item) => valueMapper(item, $paramStores);
-        // set default properties for each shape
+        const $observedStores = {};
+        const mapValue = (item) => valueMapper(item, $observedStores);
+        // set default properties for each item
         const setValue = (items) => {
             // was empty, still empty
             if (!storedItems.length && !items.length)
@@ -4087,21 +4331,24 @@ const MAP_STORE = (fn) => ({
         };
         const updateValue = () => {
             const mappedItems = storedItems.map(mapValue);
-            storedItems = mappedItems;
+            if (sorter)
+                mappedItems.sort(sorter);
+            storedItems = [...mappedItems];
             set(mappedItems);
         };
-        Object.entries(paramStores).forEach(([name, store]) => {
-            store.subscribe((value) => {
-                $paramStores[name] = value;
+        // TODO: need to at some point unsub from these stores
+        Object.entries(observedStores).map(([name, store]) => {
+            return store.subscribe((value) => {
+                $observedStores[name] = value;
                 if (!value)
                     return;
                 updateValue();
             });
         });
-        const { subscribe, set } = writable(defaultValue);
+        const { subscribe, set } = writable(defaultValue || []);
         return {
             set: setValue,
-            update: (fn) => setValue(fn(null)),
+            update: (fn) => setValue(fn(storedItems)),
             subscribe,
         };
     },
@@ -4160,24 +4407,15 @@ var props = [
     ['src'],
     ['imageReader'],
     ['imageWriter'],
+    // will scramble image data for use with image redaction logic
+    ['imageScrambler'],
     // current images
     ['images', DEFAULT_VALUE(() => [])],
+    // will process markup items before rendering, used by arrows and frames
+    ['shapePreprocessor'],
+    // will be called when requesting a resource, return false to prevent loading
+    ['willRequestResource'],
 ];
-
-var pubsub = () => {
-    let subs = [];
-    return {
-        sub: (event, callback) => {
-            subs.push({ event, callback });
-            return () => (subs = subs.filter((subscriber) => subscriber.event !== event || subscriber.callback !== callback));
-        },
-        pub: (event, value) => {
-            subs
-                .filter((sub) => sub.event === event)
-                .forEach((sub) => sub.callback(value));
-        }
-    };
-};
 
 var capitalizeFirstLetter = (str) => str.charAt(0).toUpperCase() + str.slice(1);
 
@@ -4192,8 +4430,6 @@ var defineMethods = (object, api) => {
         Object.defineProperty(object, name, descriptor);
     });
 };
-
-var fixPrecision = (value, precision = 12) => parseFloat(value.toFixed(precision));
 
 const scalar = 10000;
 var offsetRectToFitPolygon = (rect, poly) => {
@@ -4525,6 +4761,7 @@ var applyRotationAction = (imageRotationPrevious, imageRotation, imageRotationRa
     return rotate(imageRotationPrevious, imageRotationClamped);
 };
 
+// @ts-ignore
 const ORDERED_STATE_PROPS = [
     // requirements
     'cropLimitToImage',
@@ -4545,8 +4782,10 @@ const ORDERED_STATE_PROPS = [
     'vignette',
     // 'noise',
     // shapes
+    'redaction',
     'annotation',
     'decoration',
+    'frame',
     // other
     'backgroundColor',
     'targetSize',
@@ -4561,23 +4800,10 @@ const clone = (value) => {
     }
     return value;
 };
-/* TODO: keep this state outside of the shape array? */
-const excludedShapeProps = [
-    'isDraft',
-    'isFormatted',
-    'isComplete',
-    'isError',
-    'isLoading',
-];
-/* note this method doesn't actually test if the value is fully serializable it simlpy excludes known prop values that can't be serialized */
-const isSerializeAble = (value) => {
-    // isFunction(value) ||
-    return !isElement(value);
-};
-const filterShapeState = (shapes) => shapes.map((shape) => Object.keys(shape).reduce((copy, prop) => {
-    if (excludedShapeProps.includes(prop) || !isSerializeAble(shape[prop]))
+const filterShapeState = (shapes) => shapes.map((shape) => Object.entries(shape).reduce((copy, [key, value]) => {
+    if (key.startsWith('_'))
         return copy;
-    copy[prop] = shape[prop];
+    copy[key] = value;
     return copy;
 }, {}));
 var stateStore = (_, stores, accessors) => {
@@ -4592,7 +4818,8 @@ var stateStore = (_, stores, accessors) => {
         }, {});
         // round crop if defined
         state.crop && rectApply(state.crop, Math.round);
-        // remove state props from decoration and annotation
+        // remove internal state props from decoration and annotation
+        state.redaction = state.redaction && filterShapeState(state.redaction);
         state.annotation = state.annotation && filterShapeState(state.annotation);
         state.decoration = state.decoration && filterShapeState(state.decoration);
         // set new state
@@ -4607,7 +4834,7 @@ var stateStore = (_, stores, accessors) => {
         // apply new values
         ORDERED_STATE_PROPS
             // remove keys that weren't set
-            .filter((key) => state.hasOwnProperty(key))
+            .filter((key) => hasProp(state, key))
             // apply each key in order
             .forEach((key) => {
             accessors[key] = clone(state[key]);
@@ -4758,7 +4985,9 @@ const updateRotation = (props) => (rotationNext, rotationPrevious, onUpdate) => 
     return res.rotation;
 };
 // updates the range of valid rotation input
-const updateRotationRange = (imageSize, imageIsRotatedSideways, cropMinSize, cropSize) => {
+const updateRotationRange = (imageSize, imageIsRotatedSideways, cropMinSize, cropSize, cropLimitToImage) => {
+    if (!cropLimitToImage)
+        return [MIN_ROTATION, MAX_ROTATION];
     /*
     - 'a' is angle between diagonal and image height
     - 'b' is angle between diagonal and crop height
@@ -4821,21 +5050,42 @@ const updateCropRange = (imageSize, rotation, cropAspectRatio, cropMinSize, crop
         return [minSize, maxSize];
     return [minSize, sizeApply(getMaxSizeInRect(imageSize, rotation, cropAspectRatio), Math.round)];
 };
-const prepareShape = (shape, options) => {
+const formatShape = (shape, options) => {
+    const { context, props } = options;
     // only auto-format once
-    if (!shape.isFormatted) {
+    if (!shape._isFormatted) {
         shape = shapeFormat(shape);
-        shape.isFormatted = true;
+        shape._isFormatted = true;
+        Object.assign(shape, props);
     }
-    // we need to make sure shape is still correctly positioned relative to parent
+    // we need to make sure shape is still correctly positioned relative to parent context
     // draft cannot be relative
     // if context changed
     // if has left top right or bottom
-    if (!shape.isDraft &&
+    if (!shape._isDraft &&
         shapeHasRelativeSize(shape) &&
-        (!shape.context || !rectEqual(options.context, shape.context))) {
-        shape = shapeComputeRect(shape, options.context);
-        shape.context = { ...options.context };
+        (!shape._context || !rectEqual(context, shape._context))) {
+        shape = shapeComputeRect(shape, context);
+        shape._context = { ...context };
+    }
+    return shape;
+};
+const updateFrame = () => (frameShapeNext) => {
+    if (!frameShapeNext)
+        return;
+    const shape = {
+        frameStyle: undefined,
+        x: 0,
+        y: 0,
+        width: '100%',
+        height: '100%',
+        disableStyle: ['backgroundColor', 'strokeColor', 'strokeWidth'],
+    };
+    if (isString(frameShapeNext)) {
+        shape.frameStyle = frameShapeNext;
+    }
+    else {
+        Object.assign(shape, frameShapeNext);
     }
     return shape;
 };
@@ -4923,13 +5173,13 @@ var imageProps = [
     ],
     [
         'rotationRange',
-        UNIQUE_DERIVED_STORE(({ size, isRotatedSideways, cropMinSize, cropSize }) => [
-            [size, isRotatedSideways, cropMinSize, cropSize],
-            ([$size, $isRotatedSideways, $cropMinSize, $cropSize], set) => {
+        UNIQUE_DERIVED_STORE(({ size, isRotatedSideways, cropMinSize, cropSize, cropLimitToImage }) => [
+            [size, isRotatedSideways, cropMinSize, cropSize, cropLimitToImage],
+            ([$size, $isRotatedSideways, $cropMinSize, $cropSize, $cropLimitToImage], set) => {
                 // wait for image size
                 if (!$size || !$cropSize)
                     return;
-                const range = updateRotationRange($size, $isRotatedSideways, $cropMinSize, $cropSize);
+                const range = updateRotationRange($size, $isRotatedSideways, $cropMinSize, $cropSize, $cropLimitToImage);
                 set(range);
             },
             // if is same range as previous range, don't trigger update
@@ -4946,18 +5196,14 @@ var imageProps = [
     ['gamma'],
     ['noise'],
     ['vignette'],
-    // annotations live in image space
-    [
-        'annotation',
-        MAP_STORE(({ size }) => [prepareShape, { context: size }]),
-        DEFAULT_VALUE(() => []),
-    ],
-    // decorations live in crop space
-    [
-        'decoration',
-        MAP_STORE(({ crop }) => [prepareShape, { context: crop }]),
-        DEFAULT_VALUE(() => []),
-    ],
+    // redaction lives in image space
+    ['redaction', MAP_STORE(({ size }) => [formatShape, { context: size }])],
+    // annotation lives in image space
+    ['annotation', MAP_STORE(({ size }) => [formatShape, { context: size }])],
+    // decoration lives in crop space
+    ['decoration', MAP_STORE(({ crop }) => [formatShape, { context: crop }])],
+    // frame to render on top of the image (or outside)
+    ['frame', UPDATE_VALUE(updateFrame)],
     // custom metadata
     ['metadata'],
     // state of image, used to restore a previous state or request the current state
@@ -5155,7 +5401,7 @@ var createImageCore = ({ minSize = { width: 1, height: 1 } } = {}) => {
     };
     //#endregion
     //#region write image
-    const write = (writer) => {
+    const write = (writer, options) => {
         // not ready to start processing
         if (!accessors.loadState.complete)
             return;
@@ -5176,7 +5422,7 @@ var createImageCore = ({ minSize = { width: 1, height: 1 } } = {}) => {
         // we need this token to be a blet to cancel the processing operation
         let imageWriteToken = { cancel: noop$1 };
         let imageWriteCancelled = false;
-        const writerOptions = {};
+        const writerOptions = options;
         const processOptions = {
             token: imageWriteToken,
             ...imageWriteHandler,
@@ -5372,7 +5618,11 @@ var createImageEditor = () => {
         // get current image
         let image = getImage();
         // determine min defined image size (is crop min size)
-        const minImageSize = options.cropMinSize || (image && image.accessors.cropMinSize);
+        const cropLimitedToImage = !(options.cropLimitToImage === false || options.imageCropLimitToImage === false);
+        const cropMinSize = options.cropMinSize || options.imageCropMinSize;
+        const minImageSize = cropLimitedToImage
+            ? cropMinSize
+            : image && image.accessors.cropMinSize;
         // if already has image, remove existing image
         if (image)
             removeImage();
@@ -5412,47 +5662,49 @@ var createImageEditor = () => {
     });
     // start processing a loaded image, resolve when image is processed
     let imageProcessAbort;
-    const processImage = (src, options) => {
-        return new Promise(async (resolve, reject) => {
-            // if src supplied, first load src, then process
-            if (isImageSource(src)) {
-                await loadImage(src, options);
+    const processImage = (src, options) => new Promise(async (resolve, reject) => {
+        // if src supplied, first load src, then process
+        if (isImageSource(src)) {
+            await loadImage(src, options);
+        }
+        // if first argument is not `src` but is set it's an options object, so we'll update the options before generating the image
+        else if (src) {
+            if (isImageState(src)) {
+                accessors.imageState = src;
             }
-            // if first argument is not `src` but is set it's an options object, so we'll update the options before generating the image
-            else if (src) {
-                if (isImageState(src)) {
-                    accessors.imageState = src;
-                }
-                else {
-                    Object.assign(accessors, src);
-                }
+            else {
+                Object.assign(accessors, src);
             }
-            // get current active image
-            const image = getImage();
-            // needs image for processing
-            if (!image)
-                return reject('no image');
-            // done, clean up listeners
-            const fin = () => {
-                imageProcessAbort = undefined;
-                unsubs.forEach((unsub) => unsub());
-            };
-            const unsubs = [];
-            unsubs.push(image.accessors.on('processerror', (error) => {
-                fin();
-                reject(error);
-            }));
-            unsubs.push(image.accessors.on('processabort', () => {
-                fin();
-                reject({ name: 'AbortError' });
-            }));
-            unsubs.push(image.accessors.on('process', (output) => {
-                fin();
-                resolve(output);
-            }));
-            imageProcessAbort = image.accessors.write(accessors.imageWriter);
+        }
+        // get current active image
+        const image = getImage();
+        // needs image for processing
+        if (!image)
+            return reject('no image');
+        // done, clean up listeners
+        const fin = () => {
+            imageProcessAbort = undefined;
+            unsubs.forEach((unsub) => unsub());
+        };
+        const unsubs = [];
+        unsubs.push(image.accessors.on('processerror', (error) => {
+            fin();
+            reject(error);
+        }));
+        unsubs.push(image.accessors.on('processabort', () => {
+            fin();
+            reject({ name: 'AbortError' });
+        }));
+        unsubs.push(image.accessors.on('process', (output) => {
+            fin();
+            resolve(output);
+        }));
+        imageProcessAbort = image.accessors.write(accessors.imageWriter, {
+            shapePreprocessor: accessors.shapePreprocessor || passthrough,
+            imageScrambler: accessors.imageScrambler,
+            willRequestResource: accessors.willRequestResource,
         });
-    };
+    });
     const abortProcessImage = () => {
         const image = getImage();
         if (!image)
@@ -5529,8 +5781,22 @@ const processImage = (src, options) => {
     return processImage(src, options);
 };
 
+var getCanvasMemoryLimit = () => {
+    if (!isSafari$1())
+        return Infinity;
+    const isSafari15 = /15_/.test(navigator.userAgent);
+    if (isIOS()) {
+        // limit resolution a little bit further to prevent drawing issues
+        if (isSafari15)
+            return 3840 * 3840;
+        // old iOS can deal with 4096 * 4096 without issues
+        return 4096 * 4096;
+    }
+    return isSafari15 ? 4096 * 4096 : Infinity;
+};
+
 // custom method to draw images
-const canvasDrawImage = async (ctx, image, srcRect, destRect) => {
+const createCanvasImageDrawer = ({ imageDataResizer, } = {}) => async (ctx, image, srcRect, destRect) => {
     // get resized image
     const { dest } = await processImage(image, {
         imageReader: createDefaultImageReader$1(),
@@ -5540,31 +5806,26 @@ const canvasDrawImage = async (ctx, image, srcRect, destRect) => {
                 ...destRect,
                 upscale: true,
             },
+            imageDataResizer,
         }),
         imageCrop: srcRect,
     });
     // draw processed image
-    ctx.drawImage(dest, destRect.x, destRect.y);
+    ctx.drawImage(dest, destRect.x, destRect.y, destRect.width, destRect.height);
     // release image canvas to free up memory
     releaseCanvas(dest);
 };
 // connect function in process chain
 const connect = (fn, getter = (...args) => args, setter) => async (state, options, onprogress) => {
     // will hold function result
-    let res;
     // at this point we don't know if the length of this task can be computed
     onprogress(createProgressEvent(0, false));
     // try to run the function
     let progressUpdated = false;
-    try {
-        res = await fn(...getter(state, options, (event) => {
-            progressUpdated = true;
-            onprogress(event);
-        }));
-    }
-    catch (err) {
-        throw err;
-    }
+    const res = await fn(...getter(state, options, (event) => {
+        progressUpdated = true;
+        onprogress(event);
+    }));
     // a setter isn't required
     setter && setter(state, res);
     // if progress was updated, we expect the connected function to fire the 1/1 event, else we fire it here
@@ -5603,25 +5864,12 @@ const ImageHeadClearExifOrientationTag = ({ srcProp = 'head' } = {}) => [
     connect(arrayBufferImageExif, (state) => [state[srcProp], ORIENTATION_TAG, 1]),
     'clear-exif-orientation-tag',
 ];
-const ApplyCanvasScalar = ({ srcImageSize = 'size', srcCanvasSize = 'imageData', srcImageState = 'imageState', destImageSize = 'size', destScalar = 'scalar', } = {}) => [
-    connect((naturalSize, canvasSize, imageState) => {
-        // calculate canvas scalar
-        const scalar = Math.min(canvasSize.width / naturalSize.width, canvasSize.height / naturalSize.height);
-        // done because not scaling
-        if (scalar !== 1) {
-            const { crop, annotation, decoration } = imageState;
-            // origin to scale to
-            const origin = vectorCreateEmpty();
-            // scale select.crop
-            if (crop)
-                imageState.crop = rectScale(crop, scalar, origin);
-            // scale annotation
-            const translate = vectorCreateEmpty();
-            imageState.annotation = annotation.map((shape) => shapeComputeTransform(shape, translate, scalar));
-            // scale decoration
-            imageState.decoration = decoration.map((shape) => shapeComputeTransform(shape, translate, scalar));
-        }
-        return [scalar, sizeCreateFromAny(canvasSize)];
+const CalculateCanvasScalar = ({ srcImageSize = 'size', srcCanvasSize = 'imageData', srcImageState = 'imageState', destImageSize = 'size', destScalar = 'scalar', } = {}) => [
+    connect((naturalSize, canvasSize) => {
+        return [
+            Math.min(canvasSize.width / naturalSize.width, canvasSize.height / naturalSize.height),
+            sizeCreateFromAny(canvasSize),
+        ];
     }, (state) => [state[srcImageSize], state[srcCanvasSize], state[srcImageState]], (state, [scalar, imageSize]) => {
         state[destScalar] = scalar;
         state[destImageSize] = imageSize;
@@ -5636,43 +5884,53 @@ const ImageDataMatchOrientation = ({ srcImageData = 'imageData', srcOrientation 
     connect(orientImageData, (state) => [state[srcImageData], state[srcOrientation]], (state, imageData) => (state.imageData = imageData)),
     'image-data-match-orientation',
 ];
-const ImageDataFill = ({ srcImageData = 'imageData', srcImageState = 'imageState', } = {}) => [
+const ImageDataFill = ({ srcImageData = 'imageData', srcImageState = 'imageState' } = {}) => [
     connect(fillImageData, (state) => [
         state[srcImageData],
         { backgroundColor: state[srcImageState].backgroundColor },
     ], (state, imageData) => (state.imageData = imageData)),
     'image-data-fill',
 ];
-const ImageDataCrop = ({ srcImageData = 'imageData', srcImageState = 'imageState', } = {}) => [
-    connect(cropImageData, (state) => [
-        state[srcImageData],
-        {
-            crop: state[srcImageState].crop,
-            rotation: state[srcImageState].rotation,
-            flipX: state[srcImageState].flipX,
-            flipY: state[srcImageState].flipY,
-        },
-    ], (state, imageData) => (state.imageData = imageData)),
+const ImageDataCrop = ({ srcImageData = 'imageData', srcImageState = 'imageState', destScalar = 'scalar', } = {}) => [
+    connect(cropImageData, (state) => {
+        // scale crop if needed
+        const scalar = state[destScalar];
+        let { crop } = state[srcImageState];
+        if (crop && scalar !== 1) {
+            crop = rectScale(rectClone(crop), scalar, vectorCreateEmpty());
+        }
+        // apply crop
+        return [
+            state[srcImageData],
+            {
+                crop,
+                rotation: state[srcImageState].rotation,
+                flipX: state[srcImageState].flipX,
+                flipY: state[srcImageState].flipY,
+            },
+        ];
+    }, (state, imageData) => (state.imageData = imageData)),
     'image-data-crop',
 ];
 const hasTargetSize = (imageState) => !!((imageState.targetSize && imageState.targetSize.width) ||
     (imageState.targetSize && imageState.targetSize.height));
-const ImageDataResize = ({ resize = {
+const ImageDataResize = ({ targetSize = {
     width: undefined,
     height: undefined,
     fit: undefined,
     upscale: undefined,
-}, srcProp = 'imageData', srcImageState = 'imageState', destImageScaledSize = 'imageScaledSize', }) => [
+}, imageDataResizer = undefined, srcProp = 'imageData', srcImageState = 'imageState', destImageScaledSize = 'imageScaledSize', }) => [
     connect(resizeImageData, (state) => [
         state[srcProp],
         {
-            width: Math.min(resize.width || Number.MAX_SAFE_INTEGER, (state[srcImageState].targetSize && state[srcImageState].targetSize.width) ||
+            width: Math.min(targetSize.width || Number.MAX_SAFE_INTEGER, (state[srcImageState].targetSize && state[srcImageState].targetSize.width) ||
                 Number.MAX_SAFE_INTEGER),
-            height: Math.min(resize.height || Number.MAX_SAFE_INTEGER, (state[srcImageState].targetSize && state[srcImageState].targetSize.height) ||
+            height: Math.min(targetSize.height || Number.MAX_SAFE_INTEGER, (state[srcImageState].targetSize && state[srcImageState].targetSize.height) ||
                 Number.MAX_SAFE_INTEGER),
-            fit: resize.fit || 'contain',
-            upscale: hasTargetSize(state[srcImageState]) ? true : resize.upscale || false,
+            fit: targetSize.fit || 'contain',
+            upscale: hasTargetSize(state[srcImageState]) ? true : targetSize.upscale || false,
         },
+        imageDataResizer,
     ], (state, imageData) => {
         if (!sizeEqual(state.imageData, imageData))
             state[destImageScaledSize] = sizeCreateFromAny(imageData);
@@ -5700,69 +5958,210 @@ const ImageDataFilter = ({ srcImageData = 'imageData', srcImageState = 'imageSta
     }, (state, imageData) => (state[destImageData] = imageData)),
     'image-data-filter',
 ];
-const ImageDataAnnotate = ({ srcImageData = 'imageData', srcSize = 'size', srcImageState = 'imageState', destImageData = 'imageData', destImageScaledSize = 'imageScaledSize', } = {}) => [
-    connect(drawImageData, (state) => [
+const createImageContextDrawingTransform = (state, { srcSize, srcImageState, destImageScaledSize, destScalar }) => (ctx) => {
+    const imageSize = state[srcSize];
+    const { rotation = 0, flipX, flipY } = state[srcImageState];
+    // scale crop
+    const canvasScalar = state[destScalar];
+    // scale crop if needed
+    let { crop = rectCreateFromSize(imageSize) } = state[srcImageState];
+    if (canvasScalar !== 1) {
+        crop = rectScale(rectClone(crop), canvasScalar, vectorCreateEmpty());
+    }
+    const rotatedRect = getImageTransformedRect(imageSize, rotation);
+    const rotatedSize = {
+        width: rotatedRect.width,
+        height: rotatedRect.height,
+    };
+    // calculate image scalar so we can scale annotations accordingly
+    const scaledSize = state[destImageScaledSize];
+    const scalar = scaledSize
+        ? Math.min(scaledSize.width / crop.width, scaledSize.height / crop.height)
+        : 1;
+    // calculate center
+    const dx = imageSize.width * 0.5 - rotatedSize.width * 0.5;
+    const dy = imageSize.height * 0.5 - rotatedSize.height * 0.5;
+    const center = sizeCenter(imageSize);
+    // image scalar
+    ctx.scale(scalar, scalar);
+    // offset
+    ctx.translate(-dx, -dy);
+    ctx.translate(-crop.x, -crop.y);
+    // rotation
+    ctx.translate(center.x, center.y);
+    ctx.rotate(rotation);
+    ctx.translate(-center.x, -center.y);
+    // flipping
+    ctx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
+    ctx.translate(flipX ? -imageSize.width : 0, flipY ? -imageSize.height : 0);
+    // annotations are clipped clip to image
+    ctx.rect(0, 0, imageSize.width, imageSize.height);
+    ctx.clip();
+};
+const ImageDataRedact = ({ srcImageData = 'imageData', srcImageState = 'imageState', destImageData = 'imageData', destScalar = 'scalar', } = {}) => [
+    connect(async (imageData, imageScrambler, imageBackgroundColor, shapes, scalar) => {
+        // skip!
+        if (!imageScrambler)
+            return imageData;
+        // create scrambled texture version
+        let scrambledCanvas;
+        try {
+            const options = {
+                dataSizeScalar: getImageRedactionScaleFactor(imageData, shapes),
+            };
+            if (imageBackgroundColor && imageBackgroundColor[3] > 0) {
+                options.backgroundColor = [...imageBackgroundColor];
+            }
+            scrambledCanvas = await imageScrambler(imageData, options);
+        }
+        catch (err) {
+        }
+        // create drawing context
+        const canvas = h('canvas');
+        canvas.width = imageData.width;
+        canvas.height = imageData.height;
+        const ctx = canvas.getContext('2d');
+        ctx.putImageData(imageData, 0, 0);
+        // set up a clip path so we only draw scrambled image within path
+        const path = new Path2D();
+        shapes.forEach((shape) => {
+            const rect = rectCreate(shape.x, shape.y, shape.width, shape.height);
+            rectMultiply(rect, scalar);
+            const corners = rectRotate(rectClone(rect), shape.rotation);
+            const poly = new Path2D();
+            corners.forEach((corner, i) => {
+                if (i === 0)
+                    return poly.moveTo(corner.x, corner.y);
+                poly.lineTo(corner.x, corner.y);
+            });
+            path.addPath(poly);
+        });
+        ctx.clip(path, 'nonzero');
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(scrambledCanvas, 0, 0, canvas.width, canvas.height);
+        releaseCanvas(scrambledCanvas);
+        // done
+        const imageDataOut = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        // clean up memory usage
+        releaseCanvas(canvas);
+        return imageDataOut;
+    }, (state, { imageScrambler }) => [
         state[srcImageData],
-        {
-            shapes: state[srcImageState].annotation,
-            context: state[srcSize],
-            transform: (ctx) => {
-                const imageSize = state[srcSize];
-                const { crop = rectCreateFromSize(imageSize), rotation = 0, flipX, flipY, } = state[srcImageState];
-                const rotatedRect = getImageTransformedRect(imageSize, rotation);
-                const rotatedSize = {
-                    width: rotatedRect.width,
-                    height: rotatedRect.height,
-                };
-                // calculate image scalar so we can scale annotations accordingly
-                const scaledSize = state[destImageScaledSize];
-                const scalar = scaledSize
-                    ? Math.min(scaledSize.width / crop.width, scaledSize.height / crop.height)
-                    : 1;
-                // calculate center
-                const dx = imageSize.width * 0.5 - rotatedSize.width * 0.5;
-                const dy = imageSize.height * 0.5 - rotatedSize.height * 0.5;
-                const center = sizeCenter(imageSize);
-                // image scalar
-                ctx.scale(scalar, scalar);
-                // offset
-                ctx.translate(-dx, -dy);
-                ctx.translate(-crop.x, -crop.y);
-                // rotation
-                ctx.translate(center.x, center.y);
-                ctx.rotate(rotation);
-                ctx.translate(-center.x, -center.y);
-                // flipping
-                ctx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
-                ctx.translate(flipX ? -imageSize.width : 0, flipY ? -imageSize.height : 0);
-                // annotations are clipped clip to image
-                ctx.rect(0, 0, imageSize.width, imageSize.height);
-                ctx.clip();
-            },
-            drawImage: canvasDrawImage,
-        },
+        imageScrambler,
+        state[srcImageState].backgroundColor,
+        state[srcImageState].redaction,
+        state[destScalar],
     ], (state, imageData) => (state[destImageData] = imageData)),
+    'image-data-redact',
+];
+const ImageDataAnnotate = ({ srcImageData = 'imageData', srcSize = 'size', srcImageState = 'imageState', destImageData = 'imageData', destImageScaledSize = 'imageScaledSize', destScalar = 'scalar', imageDataResizer = undefined, } = {}) => [
+    connect(drawImageData, (state, { shapePreprocessor, willRequestResource }) => {
+        // scale annotations if needed
+        const scalar = state[destScalar];
+        let { annotation } = state[srcImageState];
+        if (scalar !== 1) {
+            const translate = vectorCreateEmpty();
+            annotation = annotation.map((shape) => shapeComputeTransform(shapeShallowCopy(shape), translate, scalar));
+        }
+        // go
+        return [
+            state[srcImageData],
+            {
+                shapes: annotation,
+                context: state[srcSize],
+                transform: createImageContextDrawingTransform(state, {
+                    srcSize,
+                    srcImageState,
+                    destImageScaledSize,
+                    destScalar,
+                }),
+                drawImage: createCanvasImageDrawer({ imageDataResizer }),
+                preprocessShape: (shape) => shapePreprocessor(shape, { isPreview: false }),
+                willRequestResource,
+            },
+        ];
+    }, (state, imageData) => (state[destImageData] = imageData)),
     'image-data-annotate',
 ];
-const ImageDataDecorate = ({ srcImageData = 'imageData', srcImageState = 'imageState', destImageData = 'imageData', destImageScaledSize = 'imageScaledSize', } = {}) => [
-    connect(drawImageData, (state) => [
-        state[srcImageData],
-        {
-            shapes: state[srcImageState].decoration,
-            context: state[srcImageState].crop,
-            transform: (ctx) => {
-                // calculate image scalar so we can scale decoration accordingly
-                const { crop } = state.imageState;
-                const scaledSize = state[destImageScaledSize];
-                const scalar = scaledSize
-                    ? Math.min(scaledSize.width / crop.width, scaledSize.height / crop.height)
-                    : 1;
-                ctx.scale(scalar, scalar);
+const ImageDataDecorate = ({ srcImageData = 'imageData', srcImageState = 'imageState', destImageData = 'imageData', destImageScaledSize = 'imageScaledSize', imageDataResizer = undefined, destScalar = 'scalar', } = {}) => [
+    connect(drawImageData, (state, { shapePreprocessor, willRequestResource }) => {
+        // scale decoration and crop if needed
+        const scalar = state[destScalar];
+        let { decoration, crop } = state[srcImageState];
+        if (scalar !== 1) {
+            // scale decoration shapes
+            const translate = vectorCreateEmpty();
+            decoration = decoration.map((shape) => shapeComputeTransform(shapeShallowCopy(shape), translate, scalar));
+            // need to scale crop as well
+            if (crop)
+                crop = rectScale(rectClone(crop), scalar, vectorCreateEmpty());
+        }
+        // go
+        return [
+            state[srcImageData],
+            {
+                shapes: decoration,
+                context: crop,
+                transform: (ctx) => {
+                    const scaledSize = state[destImageScaledSize];
+                    // calculate context scalar
+                    const contextScalar = scaledSize
+                        ? Math.min(scaledSize.width / crop.width, scaledSize.height / crop.height)
+                        : 1;
+                    // apply scalar to drawing context
+                    ctx.scale(contextScalar, contextScalar);
+                },
+                drawImage: createCanvasImageDrawer({ imageDataResizer }),
+                preprocessShape: (shape) => shapePreprocessor(shape, { isPreview: false }),
+                willRequestResource,
             },
-            drawImage: canvasDrawImage,
-        },
-    ], (state, imageData) => (state[destImageData] = imageData)),
+        ];
+    }, (state, imageData) => (state[destImageData] = imageData)),
     'image-data-decorate',
+];
+const ImageDataFrame = ({ srcImageData = 'imageData', srcImageState = 'imageState', destImageData = 'imageData', destImageScaledSize = 'imageScaledSize', imageDataResizer = undefined, destScalar = 'scalar', } = {}) => [
+    connect(drawImageData, (state, { shapePreprocessor, willRequestResource }) => {
+        const frame = state[srcImageState].frame;
+        if (!frame)
+            return [state[srcImageData]];
+        // scale crop if needed
+        // scale crop if needed
+        const scalar = state[destScalar];
+        let { crop } = state[srcImageState];
+        if (crop && scalar !== 1) {
+            crop = rectScale(rectClone(crop), scalar, vectorCreateEmpty());
+        }
+        const context = { ...crop }; //{ ...state[srcImageState].crop };
+        const bounds = shapesBounds(shapesFromCompositShape(frame, context, shapePreprocessor), context);
+        context.x = Math.abs(bounds.left);
+        context.y = Math.abs(bounds.top);
+        context.width += Math.abs(bounds.left) + Math.abs(bounds.right);
+        context.height += Math.abs(bounds.top) + Math.abs(bounds.bottom);
+        const scaledSize = state[destImageScaledSize];
+        const contaxtScalar = scaledSize
+            ? Math.min(scaledSize.width / crop.width, scaledSize.height / crop.height)
+            : 1;
+        rectMultiply(context, contaxtScalar);
+        // use floor because we can't fill up half pixels
+        context.x = Math.floor(context.x);
+        context.y = Math.floor(context.y);
+        context.width = Math.floor(context.width);
+        context.height = Math.floor(context.height);
+        return [
+            state[srcImageData],
+            {
+                shapes: [frame],
+                contextBounds: context,
+                transform: (ctx) => {
+                    ctx.translate(context.x, context.y);
+                },
+                drawImage: createCanvasImageDrawer({ imageDataResizer }),
+                preprocessShape: (shape) => shapePreprocessor(shape, { isPreview: false }),
+                willRequestResource,
+            },
+        ];
+    }, (state, imageData) => (state[destImageData] = imageData)),
+    'image-data-frame',
 ];
 const ImageDataToBlob = ({ mimeType = undefined, quality = undefined, srcImageData = 'imageData', srcFile = 'src', destBlob = 'blob', } = {}) => [
     connect(imageDataToBlob, (state) => [
@@ -5814,14 +6213,7 @@ const Store = ({ url = './', dataset = (state) => [
 ], destStore = 'store', }) => [
     connect(
     // upload function
-    async (dataset, onprogress) => {
-        try {
-            return await post(url, dataset, { onprogress });
-        }
-        catch (err) {
-            throw err;
-        }
-    }, 
+    async (dataset, onprogress) => await post(url, dataset, { onprogress }), 
     // get state values
     (state, options, onprogress) => [dataset(state), onprogress], 
     // set state values
@@ -5871,7 +6263,7 @@ const createDefaultImageReader$1 = (options = {}) => {
     ].filter(Boolean);
 };
 const createDefaultImageWriter$1 = (options = {}) => {
-    let { canvasMemoryLimit = isIOS() ? 4096 * 4096 : Infinity, orientImage = true, copyImageHead = true, mimeType = undefined, quality = undefined, renameFile = undefined, targetSize = undefined, store = undefined, format = 'file', outputProps = ['src', 'dest', 'imageState', 'store'], preprocessImageSource, preprocessImageState, postprocessImageData, } = options;
+    const { canvasMemoryLimit = getCanvasMemoryLimit(), orientImage = true, copyImageHead = true, mimeType = undefined, quality = undefined, renameFile = undefined, targetSize = undefined, imageDataResizer = undefined, store = undefined, format = 'file', outputProps = ['src', 'dest', 'imageState', 'store'], preprocessImageSource, preprocessImageState, postprocessImageData, postprocessImageBlob, } = options;
     return [
         // allow preprocessing of image blob, should return a new blob, for example to automatically make image background transparent
         preprocessImageSource && [
@@ -5902,14 +6294,16 @@ const createDefaultImageWriter$1 = (options = {}) => {
         orientImage && ImageSizeMatchOrientation(),
         orientImage && ImageDataMatchOrientation(),
         // apply canvas scalar to data
-        ApplyCanvasScalar(),
+        CalculateCanvasScalar(),
         // apply image state
+        ImageDataRedact(),
         ImageDataCrop(),
-        ImageDataResize({ resize: targetSize }),
+        ImageDataResize({ targetSize, imageDataResizer }),
         ImageDataFilter(),
         ImageDataFill(),
-        ImageDataAnnotate(),
-        ImageDataDecorate(),
+        ImageDataAnnotate({ imageDataResizer }),
+        ImageDataDecorate({ imageDataResizer }),
+        ImageDataFrame({ imageDataResizer }),
         // run post processing on image data, for example to apply circular crop
         postprocessImageData && [
             connect(postprocessImageData, (state, options, onprogress) => [
@@ -5934,6 +6328,15 @@ const createDefaultImageWriter$1 = (options = {}) => {
         format === 'file' && orientImage && ImageHeadClearExifOrientationTag(),
         // we write the new image head to the target blob
         format === 'file' && copyImageHead && BlobWriteImageHead(),
+        // allow converting the blob to a different format
+        postprocessImageBlob && [
+            connect(postprocessImageBlob, ({ blob, imageData, src }, options, onprogress) => [
+                { blob, imageData, src },
+                options,
+                onprogress,
+            ], (state, blob) => (state.blob = blob)),
+            'postprocess-image-file',
+        ],
         // turn the image blob into a file, will also rename the file
         format === 'file' && BlobToFile({ defaultFilename: 'image', renameFile }),
         // upload or process data if is a file
@@ -5954,6 +6357,124 @@ const createDefaultImageWriter$1 = (options = {}) => {
         // remove unwanted props
         PropFilter(outputProps),
     ].filter(Boolean);
+};
+
+var scrambleEffect = (options, done) => {
+    const { imageData, amount = 1 } = options;
+    const intensity = Math.round(Math.max(1, amount) * 2);
+    const range = Math.round(intensity * 0.5);
+    const inputWidth = imageData.width;
+    const inputHeight = imageData.height;
+    const outputData = new Uint8ClampedArray(inputWidth * inputHeight * 4);
+    const inputData = imageData.data;
+    let randomData;
+    let i = 0, x, y, r;
+    let xoffset = 0;
+    let yoffset = 0;
+    let index;
+    const l = inputWidth * inputHeight * 4 - 4;
+    for (y = 0; y < inputHeight; y++) {
+        randomData = crypto.getRandomValues(new Uint8ClampedArray(inputHeight));
+        for (x = 0; x < inputWidth; x++) {
+            r = randomData[y] / 255;
+            xoffset = 0;
+            yoffset = 0;
+            if (r < 0.5) {
+                xoffset = (-range + Math.round(Math.random() * intensity)) * 4;
+            }
+            if (r > 0.5) {
+                yoffset = (-range + Math.round(Math.random() * intensity)) * (inputWidth * 4);
+            }
+            // limit to image data
+            index = Math.min(Math.max(0, i + xoffset + yoffset), l);
+            outputData[i] = inputData[index];
+            outputData[i + 1] = inputData[index + 1];
+            outputData[i + 2] = inputData[index + 2];
+            outputData[i + 3] = inputData[index + 3];
+            i += 4;
+        }
+    }
+    done(null, {
+        data: outputData,
+        width: imageData.width,
+        height: imageData.height,
+    });
+};
+
+// basic blur covolution matrix
+const BLUR_MATRIX = [0.0625, 0.125, 0.0625, 0.125, 0.25, 0.125, 0.0625, 0.125, 0.0625];
+var imageDataScramble = async (inputData, options = {}) => {
+    if (!inputData)
+        return;
+    const { width, height } = inputData;
+    const { dataSize = 96, dataSizeScalar = 1, scrambleAmount = 4, blurAmount = 6, outputFormat = 'canvas', backgroundColor = [0, 0, 0], } = options;
+    const size = Math.round(dataSize * dataSizeScalar);
+    const scalar = Math.min(size / width, size / height);
+    const outputWidth = Math.floor(width * scalar);
+    const outputHeight = Math.floor(height * scalar);
+    // draw low res preview, add margin so blur isn't transparent
+    const scaledOutputCanvas = (h('canvas', { width: outputWidth, height: outputHeight }));
+    const ctx = scaledOutputCanvas.getContext('2d');
+    // fill background on transparent images
+    backgroundColor.length = 3; // prevent transparent colors
+    ctx.fillStyle = colorArrayToRGBA(backgroundColor);
+    ctx.fillRect(0, 0, outputWidth, outputHeight);
+    if (isImageData(inputData)) {
+        // temporarily draw to canvas so we can draw image data to scaled context
+        const transferCanvas = h('canvas', { width, height });
+        transferCanvas.getContext('2d').putImageData(inputData, 0, 0);
+        // draw to scaled context
+        ctx.drawImage(transferCanvas, 0, 0, outputWidth, outputHeight);
+        // release memory
+        releaseCanvas(transferCanvas);
+    }
+    else {
+        // bitmap data
+        ctx.drawImage(inputData, 0, 0, outputWidth, outputHeight);
+    }
+    // get scaled image data for scrambling
+    const imageData = ctx.getImageData(0, 0, outputWidth, outputHeight);
+    // filters to apply
+    const filters = [];
+    // add scramble filter
+    if (scrambleAmount > 0)
+        filters.push([scrambleEffect, { amount: scrambleAmount }]);
+    // add blur filters
+    if (blurAmount > 0)
+        for (let i = 0; i < blurAmount; i++) {
+            filters.push([convolutionEffect, { matrix: BLUR_MATRIX }]);
+        }
+    let imageDataScrambled;
+    if (filters.length) {
+        // builds effect chain
+        const chain = (transforms, i) => `(err, imageData) => {
+                (${transforms[i][0].toString()})(Object.assign({ imageData: imageData }, filterInstructions[${i}]), 
+                    ${transforms[i + 1] ? chain(transforms, i + 1) : 'done'})
+            }`;
+        const filterChain = `function (options, done) {
+            const filterInstructions = options.filterInstructions;
+            const imageData = options.imageData;
+            (${chain(filters, 0)})(null, imageData)
+        }`;
+        // scramble image data in separate thread
+        const imageDataObjectScrambled = await thread(filterChain, [
+            {
+                imageData: imageData,
+                filterInstructions: filters.map((t) => t[1]),
+            },
+        ], [imageData.data.buffer]);
+        imageDataScrambled = imageDataObjectToImageData(imageDataObjectScrambled);
+    }
+    else {
+        imageDataScrambled = imageData;
+    }
+    if (outputFormat === 'canvas') {
+        // put back scrambled data
+        ctx.putImageData(imageDataScrambled, 0, 0);
+        // return canvas
+        return scaledOutputCanvas;
+    }
+    return imageDataScrambled;
 };
 
 var getComponentExportedProps = (Component) => {
@@ -6226,6 +6747,8 @@ function tick() {
     frame = requestAnimationFrame(tick);
 }
 let observer; // ResizeObserver API not known by TypeScript
+// total observed elements so we know when we can unload observer
+let observedNodes = 0;
 var measurable = (node, options = {}) => {
     const { observePosition = false, observeViewRect = false, once = false, disabled = false, } = options;
     // exit
@@ -6246,16 +6769,26 @@ var measurable = (node, options = {}) => {
         // measure our node for the first time
         measureOffset(node);
         // if should only measure once, remove now
-        if (once)
+        if (once) {
             observer.unobserve(node);
+        }
+        else {
+            observedNodes++;
+        }
         // and we done, need to return a clean up method for when our node is destroyed
         return {
             destroy() {
                 // already unobserved this node
                 if (once)
                     return;
+                // stop observing this node
                 observer.unobserve(node);
-                // TODO: test if all nodes have been removed, if so, remove observer
+                // test if all nodes have been removed, if so, remove observer
+                observedNodes--;
+                if (observedNodes === 0) {
+                    observer.disconnect();
+                    observer = undefined;
+                }
             },
         };
     }
@@ -6275,6 +6808,7 @@ var measurable = (node, options = {}) => {
         destroy() {
             const index = elements.indexOf(node);
             elements.splice(index, 1);
+            delete node.measure;
         },
     };
 };
@@ -6374,6 +6908,7 @@ var supportsWebGL2 = () => {
                 result$7 = false;
             }
             canvas && releaseCanvas(canvas);
+            canvas = undefined;
         }
         else {
             result$7 = false;
@@ -6430,9 +6965,9 @@ var SHADER_FRAG_RECT_AA = "\nvec2 scaledPoint=vec2(vRectCoord.x*uSize.x,vRectCoo
 
 var SHADER_FRAG_CORNER_RADIUS = "\nvec2 s=(uSize-2.0)*.5;vec2 r=(vRectCoord*uSize);vec2 p=r-(uSize*.5);float cornerRadius=uCornerRadius[0];bool left=r.x<s.x;bool top=r.y<s.x;if(!left&&top){cornerRadius=uCornerRadius[1];}if(!left&&!top){cornerRadius=uCornerRadius[3];}if(left&&!top){cornerRadius=uCornerRadius[2];}a*=1.0-clamp(length(max(abs(p)-(s-cornerRadius),0.0))-cornerRadius,0.0,1.0);"; // eslint-disable-line
 
-var SHADER_FRAG_SHAPE_BLEND_COLOR = "\nfillColor.a*=a;fillColor.rgb*=fillColor.a;fillColor.rgb*=m;fillColor.rgb+=(1.0-m)*(uCanvasColor.rgb*fillColor.a);textureColor*=uTextureOpacity;textureColor.a*=a;textureColor.rgb*=m*a;textureColor.rgb+=(1.0-m)*(uCanvasColor.rgb*textureColor.a);fragColor=textureColor+(fillColor*(1.0-textureColor.a));"; // eslint-disable-line
+var SHADER_FRAG_SHAPE_BLEND_COLOR = "\nif(m<=0.0)discard;fillColor.a*=a;fillColor.rgb*=fillColor.a;fillColor.rgb*=m;fillColor.rgb+=(1.0-m)*(uCanvasColor.rgb*fillColor.a);textureColor*=uTextureOpacity;textureColor.a*=a;textureColor.rgb*=m*a;textureColor.rgb+=(1.0-m)*(uCanvasColor.rgb*textureColor.a);fragColor=textureColor+(fillColor*(1.0-textureColor.a));"; // eslint-disable-line
 
-var SHADER_FRAG_TEXTURE_COLORIZE = "\nif(uTextureColor.a!=0.0&&textureColor.a>0.0){vec3 colorFlattened=textureColor.rgb/textureColor.a;if(colorFlattened.r>.999999&&colorFlattened.g==0.0&&colorFlattened.b>.999999){textureColor.rgb=uTextureColor.rgb*textureColor.a;}textureColor*=uTextureColor.a;}"; // eslint-disable-line
+var SHADER_FRAG_TEXTURE_COLORIZE = "\nif(uTextureColor.a!=0.0&&textureColor.a>0.0){vec3 colorFlattened=textureColor.rgb/textureColor.a;if(colorFlattened.r>=.9999&&colorFlattened.g==0.0&&colorFlattened.b>=.9999){textureColor.rgb=uTextureColor.rgb*textureColor.a;}textureColor*=uTextureColor.a;}"; // eslint-disable-line
 
 var SHADER_VERT_HEAD = "#version 300 es\n\nin vec4 aPosition;uniform mat4 uMatrix;"; // eslint-disable-line
 
@@ -6485,10 +7020,12 @@ const compileShader = (gl, src, type) => {
     }
     return shader;
 };
-const createShader = (gl, vertexShader, fragmentShader, attribs, uniforms) => {
+const createShader = (gl, vertexShaderCode, fragmentShaderCode, attribs, uniforms) => {
+    const vertexShader = compileShader(gl, vertexShaderCode, gl.VERTEX_SHADER);
+    const fragmentShader = compileShader(gl, fragmentShaderCode, gl.FRAGMENT_SHADER);
     const program = gl.createProgram();
-    gl.attachShader(program, compileShader(gl, vertexShader, gl.VERTEX_SHADER));
-    gl.attachShader(program, compileShader(gl, fragmentShader, gl.FRAGMENT_SHADER));
+    gl.attachShader(program, vertexShader);
+    gl.attachShader(program, fragmentShader);
     gl.linkProgram(program);
     const locations = {};
     attribs.forEach((name) => {
@@ -6500,6 +7037,13 @@ const createShader = (gl, vertexShader, fragmentShader, attribs, uniforms) => {
     return {
         program,
         locations,
+        destroy() {
+            gl.detachShader(program, vertexShader);
+            gl.detachShader(program, fragmentShader);
+            gl.deleteShader(vertexShader);
+            gl.deleteShader(fragmentShader);
+            gl.deleteProgram(program);
+        },
     };
 };
 const canMipMap = (source) => {
@@ -6507,19 +7051,18 @@ const canMipMap = (source) => {
         return true;
     return isPowerOf2(source.width) && isPowerOf2(source.height);
 };
-const applyTextureProperties = (gl, source) => {
+const applyTextureProperties = (gl, source, options) => {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, canMipMap(source) ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, options.filter);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    if (canMipMap(source)) {
+    if (canMipMap(source))
         gl.generateMipmap(gl.TEXTURE_2D);
-    }
 };
-const updateTexture = (gl, texture, source) => {
+const updateTexture = (gl, texture, source, options) => {
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
-    applyTextureProperties(gl, source);
+    applyTextureProperties(gl, source, options);
     gl.bindTexture(gl.TEXTURE_2D, null);
     return texture;
 };
@@ -6671,17 +7214,17 @@ const mat4RotateZ = (mat, rad) => {
 
 var degToRad = (degrees) => degrees * Math.PI / 180;
 
-var imageFragmentShader = "\n##head\nin vec2 vTexCoord;uniform sampler2D uTexture;uniform sampler2D uTextureMarkup;uniform vec2 uTextureSize;uniform float uOpacity;uniform vec4 uFillColor;uniform vec4 uOverlayColor;uniform mat4 uColorMatrix;uniform vec4 uColorOffset;uniform float uClarityKernel[9];uniform float uClarityKernelWeight;uniform float uColorGamma;uniform float uColorVignette;uniform float uMaskClip;uniform float uMaskOpacity;uniform float uMaskBounds[4];uniform float uMaskCornerRadius[4];uniform float uMaskFeather[8];vec4 applyGamma(vec4 c,float g){c.r=pow(c.r,g);c.g=pow(c.g,g);c.b=pow(c.b,g);return c;}vec4 applyColorMatrix(vec4 c,mat4 m,vec4 o){vec4 cM=(c*m)+o;cM*=cM.a;return cM;}vec4 applyConvolutionMatrix(vec4 c,float k0,float k1,float k2,float k3,float k4,float k5,float k6,float k7,float k8,float w){vec2 pixel=vec2(1)/uTextureSize;vec4 colorSum=texture(uTexture,vTexCoord-pixel)*k0+texture(uTexture,vTexCoord+pixel*vec2(0.0,-1.0))*k1+texture(uTexture,vTexCoord+pixel*vec2(1.0,-1.0))*k2+texture(uTexture,vTexCoord+pixel*vec2(-1.0,0.0))*k3+texture(uTexture,vTexCoord)*k4+texture(uTexture,vTexCoord+pixel*vec2(1.0,0.0))*k5+texture(uTexture,vTexCoord+pixel*vec2(-1.0,1.0))*k6+texture(uTexture,vTexCoord+pixel*vec2(0.0,1.0))*k7+texture(uTexture,vTexCoord+pixel)*k8;vec4 color=vec4((colorSum/w).rgb,c.a);color.rgb=clamp(color.rgb,0.0,1.0);return color;}vec4 applyVignette(vec4 c,vec2 pos,vec2 center,float v){float d=distance(pos,center)/length(center);float f=1.0-(d*abs(v));if(v>0.0){c.rgb*=f;}else if(v<0.0){c.rgb+=(1.0-f)*(1.0-c.rgb);}return c;}vec4 blendPremultipliedAlpha(vec4 back,vec4 front){return front+(back*(1.0-front.a));}void main(){float x=gl_FragCoord.x;float y=gl_FragCoord.y;float a=1.0;float maskTop=uMaskBounds[0];float maskRight=uMaskBounds[1];float maskBottom=uMaskBounds[2];float maskLeft=uMaskBounds[3];float leftFeatherOpacity=step(uMaskFeather[1],x)*uMaskFeather[0]+((1.0-uMaskFeather[0])*smoothstep(uMaskFeather[1],uMaskFeather[3],x));float rightFeatherOpacity=(1.0-step(uMaskFeather[7],x))*uMaskFeather[4]+((1.0-uMaskFeather[4])*smoothstep(uMaskFeather[7],uMaskFeather[5],x));a*=leftFeatherOpacity*rightFeatherOpacity;float overlayColorAlpha=(smoothstep(maskLeft,maskLeft+1.0,x)*(1.0-smoothstep(maskRight-1.0,maskRight,x))*(1.0-step(maskTop,y))*step(maskBottom,y));if(uOverlayColor.a==0.0){a*=overlayColorAlpha;}vec2 offset=vec2(maskLeft,maskBottom);vec2 size=vec2(maskRight-maskLeft,maskTop-maskBottom)*.5;vec2 center=offset.xy+size.xy;int pixelX=int(step(center.x,x));int pixelY=int(step(y,center.y));float cornerRadius=0.0;if(pixelX==0&&pixelY==0)cornerRadius=uMaskCornerRadius[0];if(pixelX==1&&pixelY==0)cornerRadius=uMaskCornerRadius[1];if(pixelX==0&&pixelY==1)cornerRadius=uMaskCornerRadius[2];if(pixelX==1&&pixelY==1)cornerRadius=uMaskCornerRadius[3];float cornerOffset=sign(cornerRadius)*length(max(abs(gl_FragCoord.xy-size-offset)-size+cornerRadius,0.0))-cornerRadius;float cornerOpacity=1.0-smoothstep(0.0,1.0,cornerOffset);a*=cornerOpacity;vec2 scaledPoint=vec2(vTexCoord.x*uTextureSize.x,vTexCoord.y*uTextureSize.y);a*=smoothstep(0.0,1.0,uTextureSize.x-scaledPoint.x);a*=smoothstep(0.0,1.0,uTextureSize.y-scaledPoint.y);a*=smoothstep(0.0,1.0,scaledPoint.x);a*=smoothstep(0.0,1.0,scaledPoint.y);vec4 color=texture(uTexture,vTexCoord);if(uClarityKernelWeight!=-1.0){color=applyConvolutionMatrix(color,uClarityKernel[0],uClarityKernel[1],uClarityKernel[2],uClarityKernel[3],uClarityKernel[4],uClarityKernel[5],uClarityKernel[6],uClarityKernel[7],uClarityKernel[8],uClarityKernelWeight);}color=applyGamma(color,uColorGamma);color=applyColorMatrix(color,uColorMatrix,uColorOffset);color=blendPremultipliedAlpha(uFillColor,color);color*=a;if(uColorVignette!=0.0){vec2 pos=gl_FragCoord.xy-offset;color=applyVignette(color,pos,center-offset,uColorVignette);}color=blendPremultipliedAlpha(color,texture(uTextureMarkup,vTexCoord));vec4 overlayColor=uOverlayColor*(1.0-overlayColorAlpha);overlayColor.rgb*=overlayColor.a;color=blendPremultipliedAlpha(color,overlayColor);if(uOverlayColor.a>0.0&&color.a<1.0&&uFillColor.a>0.0){color=blendPremultipliedAlpha(uFillColor,overlayColor);}color*=uOpacity;fragColor=color;}"; // eslint-disable-line
+var imageFragmentShader = "\n##head\nin vec2 vTexCoord;uniform sampler2D uTexture;uniform sampler2D uTextureMarkup;uniform sampler2D uTextureBlend;uniform vec2 uTextureSize;uniform float uOpacity;uniform vec4 uFillColor;uniform vec4 uOverlayColor;uniform mat4 uColorMatrix;uniform vec4 uColorOffset;uniform float uClarityKernel[9];uniform float uClarityKernelWeight;uniform float uColorGamma;uniform float uColorVignette;uniform float uMaskClip;uniform float uMaskOpacity;uniform float uMaskBounds[4];uniform float uMaskCornerRadius[4];uniform float uMaskFeather[8];vec4 applyGamma(vec4 c,float g){c.r=pow(c.r,g);c.g=pow(c.g,g);c.b=pow(c.b,g);return c;}vec4 applyColorMatrix(vec4 c,mat4 m,vec4 o){vec4 cM=(c*m)+o;cM*=cM.a;return cM;}vec4 applyConvolutionMatrix(vec4 c,float k0,float k1,float k2,float k3,float k4,float k5,float k6,float k7,float k8,float w){vec2 pixel=vec2(1)/uTextureSize;vec4 colorSum=texture(uTexture,vTexCoord-pixel)*k0+texture(uTexture,vTexCoord+pixel*vec2(0.0,-1.0))*k1+texture(uTexture,vTexCoord+pixel*vec2(1.0,-1.0))*k2+texture(uTexture,vTexCoord+pixel*vec2(-1.0,0.0))*k3+texture(uTexture,vTexCoord)*k4+texture(uTexture,vTexCoord+pixel*vec2(1.0,0.0))*k5+texture(uTexture,vTexCoord+pixel*vec2(-1.0,1.0))*k6+texture(uTexture,vTexCoord+pixel*vec2(0.0,1.0))*k7+texture(uTexture,vTexCoord+pixel)*k8;vec4 color=vec4((colorSum/w).rgb,c.a);color.rgb=clamp(color.rgb,0.0,1.0);return color;}vec4 applyVignette(vec4 c,vec2 pos,vec2 center,float v){float d=distance(pos,center)/length(center);float f=1.0-(d*abs(v));if(v>0.0){c.rgb*=f;}else if(v<0.0){c.rgb+=(1.0-f)*(1.0-c.rgb);}return c;}vec4 blendPremultipliedAlpha(vec4 back,vec4 front){return front+(back*(1.0-front.a));}void main(){float x=gl_FragCoord.x;float y=gl_FragCoord.y;float a=1.0;float maskTop=uMaskBounds[0];float maskRight=uMaskBounds[1];float maskBottom=uMaskBounds[2];float maskLeft=uMaskBounds[3];float leftFeatherOpacity=step(uMaskFeather[1],x)*uMaskFeather[0]+((1.0-uMaskFeather[0])*smoothstep(uMaskFeather[1],uMaskFeather[3],x));float rightFeatherOpacity=(1.0-step(uMaskFeather[7],x))*uMaskFeather[4]+((1.0-uMaskFeather[4])*smoothstep(uMaskFeather[7],uMaskFeather[5],x));a*=leftFeatherOpacity*rightFeatherOpacity;float overlayColorAlpha=(smoothstep(maskLeft,maskLeft+1.0,x)*(1.0-smoothstep(maskRight-1.0,maskRight,x))*(1.0-step(maskTop,y))*step(maskBottom,y));if(uOverlayColor.a==0.0){a*=overlayColorAlpha;}vec2 offset=vec2(maskLeft,maskBottom);vec2 size=vec2(maskRight-maskLeft,maskTop-maskBottom)*.5;vec2 center=offset.xy+size.xy;int pixelX=int(step(center.x,x));int pixelY=int(step(y,center.y));float cornerRadius=0.0;if(pixelX==0&&pixelY==0)cornerRadius=uMaskCornerRadius[0];if(pixelX==1&&pixelY==0)cornerRadius=uMaskCornerRadius[1];if(pixelX==0&&pixelY==1)cornerRadius=uMaskCornerRadius[2];if(pixelX==1&&pixelY==1)cornerRadius=uMaskCornerRadius[3];float cornerOffset=sign(cornerRadius)*length(max(abs(gl_FragCoord.xy-size-offset)-size+cornerRadius,0.0))-cornerRadius;float cornerOpacity=1.0-smoothstep(0.0,1.0,cornerOffset);a*=cornerOpacity;vec2 scaledPoint=vec2(vTexCoord.x*uTextureSize.x,vTexCoord.y*uTextureSize.y);a*=smoothstep(0.0,1.0,uTextureSize.x-scaledPoint.x);a*=smoothstep(0.0,1.0,uTextureSize.y-scaledPoint.y);a*=smoothstep(0.0,1.0,scaledPoint.x);a*=smoothstep(0.0,1.0,scaledPoint.y);vec4 color=texture(uTexture,vTexCoord);color=blendPremultipliedAlpha(color,texture(uTextureBlend,vTexCoord));if(uClarityKernelWeight!=-1.0){color=applyConvolutionMatrix(color,uClarityKernel[0],uClarityKernel[1],uClarityKernel[2],uClarityKernel[3],uClarityKernel[4],uClarityKernel[5],uClarityKernel[6],uClarityKernel[7],uClarityKernel[8],uClarityKernelWeight);}color=applyGamma(color,uColorGamma);color=applyColorMatrix(color,uColorMatrix,uColorOffset);color=blendPremultipliedAlpha(uFillColor,color);color*=a;if(uColorVignette!=0.0){vec2 pos=gl_FragCoord.xy-offset;color=applyVignette(color,pos,center-offset,uColorVignette);}color=blendPremultipliedAlpha(color,texture(uTextureMarkup,vTexCoord));vec4 overlayColor=uOverlayColor*(1.0-overlayColorAlpha);overlayColor.rgb*=overlayColor.a;color=blendPremultipliedAlpha(color,overlayColor);if(uOverlayColor.a>0.0&&color.a<1.0&&uFillColor.a>0.0){color=blendPremultipliedAlpha(uFillColor,overlayColor);}color*=uOpacity;fragColor=color;}"; // eslint-disable-line
 
 var imageVertexShader = "\n##head\n##text\nvoid main(){vTexCoord=aTexCoord;gl_Position=uMatrix*aPosition;}"; // eslint-disable-line
 
-var pathVertexShader = "#version 300 es\n\nin vec4 aPosition;in vec2 aNormal;in float aMiter;out vec2 vNormal;out float vMiter;uniform float uWidth;uniform mat4 uMatrix;void main(){vMiter=aMiter;vNormal=aNormal;float w=uWidth;gl_Position=uMatrix*vec4(aPosition.x+(aNormal.x*w*.5*aMiter),aPosition.y+(aNormal.y*w*.5*aMiter),0,1);}"; // eslint-disable-line
+var pathVertexShader = "#version 300 es\n\nin vec4 aPosition;in vec2 aNormal;in float aMiter;out vec2 vNormal;out float vMiter;out float vWidth;uniform float uWidth;uniform mat4 uMatrix;void main(){vMiter=aMiter;vNormal=aNormal;vWidth=(uWidth*.5)+1.0;gl_Position=uMatrix*vec4(aPosition.x+(aNormal.x*vWidth*aMiter),aPosition.y+(aNormal.y*vWidth*aMiter),0,1);}"; // eslint-disable-line
 
-var pathFragmentShader = "\n##head\n##mask\nin vec2 vNormal;in float vMiter;uniform float uWidth;uniform vec4 uColor;uniform vec4 uCanvasColor;void main(){vec4 fillColor=uColor;float w=(uWidth-1.0)*.5;float d=1.0-(abs(vMiter)*vMiter);float m=mask(gl_FragCoord.x,gl_FragCoord.y,uMaskBounds,uMaskOpacity);fillColor.a*=clamp(smoothstep(0.25,1.0,d*w),0.0,1.0);fillColor.rgb*=fillColor.a;fillColor.rgb*=m;fillColor.rgb+=(1.0-m)*(uCanvasColor.rgb*fillColor.a);fragColor=fillColor;}"; // eslint-disable-line
+var pathFragmentShader = "\n##head\n##mask\nin vec2 vNormal;in float vMiter;in float vWidth;uniform float uWidth;uniform vec4 uColor;uniform vec4 uCanvasColor;void main(){vec4 fillColor=uColor;float m=mask(gl_FragCoord.x,gl_FragCoord.y,uMaskBounds,uMaskOpacity);if(m<=0.0)discard;fillColor.a*=clamp(smoothstep(vWidth-.5,vWidth-1.0,abs(vMiter)*vWidth),0.0,1.0);fillColor.rgb*=fillColor.a;fillColor.rgb*=m;fillColor.rgb+=(1.0-m)*(uCanvasColor.rgb*fillColor.a);fragColor=fillColor;}"; // eslint-disable-line
 
 var rectVertexShader = "\n##head\n##text\nin vec2 aRectCoord;out vec2 vRectCoord;void main(){vTexCoord=aTexCoord;vRectCoord=aRectCoord;\n##matrix\n}"; // eslint-disable-line
 
-var rectFragmentShader = "\n##head\n##mask\nin vec2 vTexCoord;in vec2 vRectCoord;uniform sampler2D uTexture;uniform vec4 uTextureColor;uniform float uTextureOpacity;uniform vec4 uColor;uniform float uCornerRadius[4];uniform vec2 uSize;uniform vec2 uPosition;uniform vec4 uCanvasColor;void main(){\n##init\n##colorize\n##edgeaa\n##cornerradius\n##maskfeatherapply\n##maskapply\n##fragcolor\n}"; // eslint-disable-line
+var rectFragmentShader = "\n##head\n##mask\nin vec2 vTexCoord;in vec2 vRectCoord;uniform sampler2D uTexture;uniform vec4 uTextureColor;uniform float uTextureOpacity;uniform vec4 uColor;uniform float uCornerRadius[4];uniform vec2 uSize;uniform vec2 uPosition;uniform vec4 uCanvasColor;uniform int uInverted;void main(){\n##init\n##colorize\n##edgeaa\n##cornerradius\n##maskfeatherapply\nif(uInverted==1)a=1.0-a;\n##maskapply\n##fragcolor\n}"; // eslint-disable-line
 
 var ellipseVertexShader = "\n##head\n##text\nout vec2 vTexCoordDouble;void main(){vTexCoordDouble=vec2(aTexCoord.x*2.0-1.0,aTexCoord.y*2.0-1.0);vTexCoord=aTexCoord;\n##matrix\n}"; // eslint-disable-line
 
@@ -6697,19 +7240,18 @@ const createPathSegment = (vertices, index, a, b, c) => {
     const tangent = vectorNormalize(vectorCreate(ab.x + bc.x, ab.y + bc.y));
     const miter = vectorCreate(-tangent.y, tangent.x);
     const normal = vectorCreate(-ab.y, ab.x);
-    // TODO: The Math.min is a "dirty" hack to prevent miter spikes, should bevel line edges
-    // const dist = Math.min(1, 1 / vectorDot(miter, normal));
-    const miterLength = 1 / vectorDot(miter, normal);
+    // limit miter length (TEMP fix to prevent spikes, should eventually add caps)
+    const miterLength = Math.min(1 / vectorDot(miter, normal), 5);
     vertices[index] = b.x;
     vertices[index + 1] = b.y;
-    vertices[index + 2] = miter.x;
-    vertices[index + 3] = miter.y;
-    vertices[index + 4] = -miterLength;
+    vertices[index + 2] = miter.x * miterLength;
+    vertices[index + 3] = miter.y * miterLength;
+    vertices[index + 4] = -1;
     vertices[index + 5] = b.x;
     vertices[index + 6] = b.y;
-    vertices[index + 7] = miter.x;
-    vertices[index + 8] = miter.y;
-    vertices[index + 9] = miterLength;
+    vertices[index + 7] = miter.x * miterLength;
+    vertices[index + 8] = miter.y * miterLength;
+    vertices[index + 9] = 1;
 };
 const createPathVertices = (points, close) => {
     let a, b, c, i = 0;
@@ -6827,6 +7369,25 @@ const pushRectCornerPoints = (points, x, y, radius, offset) => {
     }
 };
 
+let limit = null;
+var getWebGLTextureSizeLimit = () => {
+    if (limit !== null)
+        return limit;
+    let canvas = h('canvas');
+    const gl = getWebGLContext(canvas);
+    limit = gl ? gl.getParameter(gl.MAX_TEXTURE_SIZE) : undefined;
+    releaseCanvas(canvas);
+    canvas = undefined;
+    return limit;
+};
+
+let result$5 = null;
+var isFirefox = () => {
+    if (result$5 === null)
+        result$5 = isUserAgent(/Firefox/);
+    return result$5;
+};
+
 // prettier-ignore
 // B   D
 // | \ |
@@ -6840,12 +7401,13 @@ const RECT_UV = new Float32Array([
 const CLARITY_IDENTITY = [0, 0, 0, 0, 1, 0, 0, 0, 0];
 const COLOR_MATRIX_IDENTITY$1 = [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0];
 const TEXTURE_TRANSPARENT_INDEX = 0;
-const TEXTURE_PREVIEW_MARKUP_INDEX = 1;
-const TEXTURE_PREVIEW_INDEX = 2;
-const TEXTURE_SHAPE_INDEX = 3;
+const TEXTURE_PREVIEW_BLEND_INDEX = 1;
+const TEXTURE_PREVIEW_MARKUP_INDEX = 2;
+const TEXTURE_PREVIEW_INDEX = 3;
+const TEXTURE_SHAPE_INDEX = 4;
 const COLOR_TRANSPARENT = [0, 0, 0, 0];
 const NO_CORNERS = [0, 0, 0, 0];
-const getBackgroundUV = (width, height, backgroundSize, backgroundPosition, viewPixelDensity) => {
+const calculateBackgroundUVMap = (width, height, backgroundSize, backgroundPosition, viewPixelDensity) => {
     if (!backgroundSize || !backgroundPosition)
         return RECT_UV;
     const x = backgroundPosition.x / backgroundSize.width;
@@ -6885,8 +7447,10 @@ const limitCornerRadius = (r, size) => {
     return Math.floor(clamp(r, 0, Math.min((size.width - 1) * 0.5, (size.height - 1) * 0.5)));
 };
 var createWebGLCanvas = (canvas) => {
+    // go
     const viewSize = { width: 0, height: 0 };
     const viewSizeVisual = { width: 0, height: 0 };
+    const textureSizeLimit = getWebGLTextureSizeLimit() || 1024;
     let viewAspectRatio;
     let viewPixelDensity;
     const markupMatrixCanvas = mat4Create();
@@ -6949,7 +7513,7 @@ var createWebGLCanvas = (canvas) => {
     With pre-multiplied alpha on, [1, .5, .5, 0] does not exist, it's always [0, 0, 0, 0]
     */
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, isFirefox() ? false : true);
     // something to look into:
     // gl.UNPACK_COLORSPACE_CONVERSION_WEBGL
     const transparentTexture = gl.createTexture();
@@ -6962,12 +7526,17 @@ var createWebGLCanvas = (canvas) => {
     // create image markup texture and framebuffer
     const imageMarkupTexture = gl.createTexture();
     indexTextureMap.set(TEXTURE_PREVIEW_MARKUP_INDEX, imageMarkupTexture);
-    const fb = gl.createFramebuffer();
+    const markupFramebuffer = gl.createFramebuffer();
+    // create image blend texture and framebuffer
+    const imageBlendTexture = gl.createTexture();
+    indexTextureMap.set(TEXTURE_PREVIEW_BLEND_INDEX, imageBlendTexture);
+    const blendFramebuffer = gl.createFramebuffer();
     // #region image
     // create default pixel drawing program, supports what we need
     const imageShader = createShader(gl, imageVertexShader, imageFragmentShader, ['aPosition', 'aTexCoord'], [
         'uMatrix',
         'uTexture',
+        'uTextureBlend',
         'uTextureMarkup',
         'uTextureSize',
         'uColorGamma',
@@ -6989,7 +7558,7 @@ var createWebGLCanvas = (canvas) => {
     const texturePositionsBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, texturePositionsBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, RECT_UV, gl.STATIC_DRAW);
-    const drawImage = (texture, textureSize, originX, originY, translateX, translateY, rotateX, rotateY, rotateZ, scale, colorMatrix = COLOR_MATRIX_IDENTITY$1, opacity = 1, clarity, gamma = 1, vignette = 0, maskFeather = IMAGE_MASK_FEATHER, maskCornerRadius = NO_CORNERS, imageBackgroundColor = COLOR_TRANSPARENT, imageOverlayColor = COLOR_TRANSPARENT, enableMarkup = false) => {
+    const drawImage = (texture, textureSize, originX, originY, translateX, translateY, rotateX, rotateY, rotateZ, scale, colorMatrix = COLOR_MATRIX_IDENTITY$1, opacity = 1, clarity, gamma = 1, vignette = 0, maskFeather = IMAGE_MASK_FEATHER, maskCornerRadius = NO_CORNERS, imageBackgroundColor = COLOR_TRANSPARENT, imageOverlayColor = COLOR_TRANSPARENT, enableMarkup = false, enableBlend = false) => {
         // update image texture
         const imageWidth = textureSize.width * viewPixelDensity;
         const imageHeight = textureSize.height * viewPixelDensity;
@@ -7063,14 +7632,21 @@ var createWebGLCanvas = (canvas) => {
         gl.uniform2f(locations.uTextureSize, textureSize.width, textureSize.height);
         gl.activeTexture(gl.TEXTURE0 + TEXTURE_PREVIEW_INDEX);
         gl.bindTexture(gl.TEXTURE_2D, texture);
-        // TEXTURE_PREVIEW_INDEX
+        // set up blend texture
+        const blendTextureIndex = enableBlend
+            ? TEXTURE_PREVIEW_BLEND_INDEX
+            : TEXTURE_TRANSPARENT_INDEX;
+        const blendTexture = indexTextureMap.get(blendTextureIndex);
+        gl.uniform1i(locations.uTextureBlend, blendTextureIndex);
+        gl.activeTexture(gl.TEXTURE0 + blendTextureIndex);
+        gl.bindTexture(gl.TEXTURE_2D, blendTexture);
         // set up markup texture
-        const textureIndex = enableMarkup
+        const markupTextureIndex = enableMarkup
             ? TEXTURE_PREVIEW_MARKUP_INDEX
             : TEXTURE_TRANSPARENT_INDEX;
-        const markupTexture = indexTextureMap.get(textureIndex);
-        gl.uniform1i(locations.uTextureMarkup, textureIndex);
-        gl.activeTexture(gl.TEXTURE0 + textureIndex);
+        const markupTexture = indexTextureMap.get(markupTextureIndex);
+        gl.uniform1i(locations.uTextureMarkup, markupTextureIndex);
+        gl.activeTexture(gl.TEXTURE0 + markupTextureIndex);
         gl.bindTexture(gl.TEXTURE_2D, markupTexture);
         // set up buffers
         gl.bindBuffer(gl.ARRAY_BUFFER, imagePositionsBuffer);
@@ -7131,7 +7707,7 @@ var createWebGLCanvas = (canvas) => {
     // #region path
     const pathShader = createShader(gl, pathVertexShader, pathFragmentShader, ['aPosition', 'aNormal', 'aMiter'], ['uColor', 'uCanvasColor', 'uMatrix', 'uWidth', 'uMaskBounds', 'uMaskOpacity']);
     const pathBuffer = gl.createBuffer();
-    const strokePath = (points, width, color, close) => {
+    const strokePath = (points, width, color, close = false) => {
         const { program, locations } = pathShader;
         gl.useProgram(program);
         gl.enableVertexAttribArray(locations.aPosition);
@@ -7141,7 +7717,7 @@ var createWebGLCanvas = (canvas) => {
         const stride = Float32Array.BYTES_PER_ELEMENT * 5;
         const normalOffset = Float32Array.BYTES_PER_ELEMENT * 2; // at position 2
         const miterOffset = Float32Array.BYTES_PER_ELEMENT * 4; // at position 4
-        gl.uniform1f(locations.uWidth, width + 1.0);
+        gl.uniform1f(locations.uWidth, width); // add 1 so we can feather the edges
         gl.uniform4fv(locations.uColor, color);
         gl.uniformMatrix4fv(locations.uMatrix, false, markupMatrix);
         gl.uniform4f(locations.uCanvasColor, CANVAS_COLOR_R, CANVAS_COLOR_G, CANVAS_COLOR_B, 1);
@@ -7193,12 +7769,13 @@ var createWebGLCanvas = (canvas) => {
         'uMaskOpacity',
         'uMaskFeather',
         'uCornerRadius',
+        'uInverted',
     ];
     const rectShader = createShader(gl, rectVertexShader, rectFragmentShader, rectShaderAttributes, rectShaderUniforms);
     const rectBuffer = gl.createBuffer();
     const rectTextureBuffer = gl.createBuffer();
     const rectCornerBuffer = gl.createBuffer();
-    const fillRect = (vertices, width, height, cornerRadius, backgroundColor, backgroundImage = transparentTexture, opacity = 1.0, colorFilter = COLOR_TRANSPARENT, uv = RECT_UV, maskFeather = RECT_MASK_FEATHER) => {
+    const fillRect = (vertices, width, height, cornerRadius, backgroundColor, backgroundImage = transparentTexture, opacity = 1.0, colorFilter = COLOR_TRANSPARENT, uv = RECT_UV, maskFeather = RECT_MASK_FEATHER, inverted) => {
         const { program, locations } = rectShader;
         gl.useProgram(program);
         gl.enableVertexAttribArray(locations.aPosition);
@@ -7207,6 +7784,7 @@ var createWebGLCanvas = (canvas) => {
         gl.uniform4fv(locations.uColor, backgroundColor);
         gl.uniform2fv(locations.uSize, [width, height]);
         gl.uniform2fv(locations.uPosition, [vertices[2], vertices[3]]);
+        gl.uniform1i(locations.uInverted, inverted ? 1 : 0);
         gl.uniform1fv(locations.uCornerRadius, cornerRadius);
         gl.uniform4f(locations.uCanvasColor, CANVAS_COLOR_R, CANVAS_COLOR_G, CANVAS_COLOR_B, 1);
         // mask
@@ -7280,14 +7858,14 @@ var createWebGLCanvas = (canvas) => {
     //
     // draw calls
     //
-    const drawPath = (points, strokeWidth, strokeColor, opacity) => {
+    const drawPath = (points, strokeWidth, strokeColor, strokeClose, opacity) => {
         // is no line
         if (points.length < 2)
             return;
         strokePath(points.map((p) => ({
             x: p.x * viewPixelDensity,
             y: p.y * viewPixelDensity,
-        })), strokeWidth * viewPixelDensity, applyOpacity(strokeColor, opacity), false);
+        })), strokeWidth * viewPixelDensity, applyOpacity(strokeColor, opacity), strokeClose);
     };
     const drawTriangle = (points, rotation = 0, flipX = false, flipY = false, backgroundColor, opacity) => {
         if (!backgroundColor)
@@ -7303,7 +7881,7 @@ var createWebGLCanvas = (canvas) => {
         const vertices = trianglePointToVertices(clonedPoints);
         fillTriangle(vertices, applyOpacity(backgroundColor, opacity));
     };
-    const drawRect = (rect, rotation = 0, flipX = false, flipY = false, cornerRadius, backgroundColor, backgroundImage, backgroundSize = undefined, backgroundPosition = undefined, strokeWidth, strokeColor, opacity, maskFeather = undefined, colorize) => {
+    const drawRect = (rect, rotation = 0, flipX = false, flipY = false, cornerRadius, backgroundColor, backgroundImage, backgroundSize = undefined, backgroundPosition = undefined, backgroundUVMap = undefined, strokeWidth, strokeColor, opacity, maskFeather = undefined, colorize, inverted) => {
         // clone first
         const rectOut = rectMultiply(rectClone(rect), viewPixelDensity);
         // has radius, doesn't matter for coordinates
@@ -7328,7 +7906,9 @@ var createWebGLCanvas = (canvas) => {
                 if (color[3] === 0)
                     color[3] = 0.001;
             }
-            fillRect(vertices, rectFill.width, rectFill.height, cornerRadiusOut, applyOpacity(backgroundColor, opacity), backgroundImage, opacity, color, getBackgroundUV(rectFill.width, rectFill.height, backgroundSize, backgroundPosition, viewPixelDensity), maskFeather);
+            fillRect(vertices, rectFill.width, rectFill.height, cornerRadiusOut, applyOpacity(backgroundColor, opacity), backgroundImage, opacity, color, backgroundUVMap
+                ? new Float32Array(backgroundUVMap)
+                : calculateBackgroundUVMap(rectFill.width, rectFill.height, backgroundSize, backgroundPosition, viewPixelDensity), maskFeather, inverted);
         }
         // should draw outline
         if (strokeWidth) {
@@ -7339,7 +7919,7 @@ var createWebGLCanvas = (canvas) => {
             createRectOutline(rectOut.x, rectOut.y, rectOut.width, rectOut.height, rotation, cornerRadiusOut, flipX, flipY), strokeWidth * viewPixelDensity, applyOpacity(strokeColor, opacity), true);
         }
     };
-    const drawEllipse = (center, rx, ry, rotation, flipX, flipY, backgroundColor, backgroundImage, backgroundSize = undefined, backgroundPosition = undefined, strokeWidth, strokeColor, opacity, inverted) => {
+    const drawEllipse = (center, rx, ry, rotation, flipX, flipY, backgroundColor, backgroundImage, backgroundSize = undefined, backgroundPosition = undefined, backgroundUVMap = undefined, strokeWidth, strokeColor, opacity, inverted) => {
         const rectOut = rectMultiply(rectCreate(center.x - rx, center.y - ry, rx * 2, ry * 2), viewPixelDensity);
         if (backgroundColor || backgroundImage) {
             // adjust for edge anti-aliasing, if we don't do this the
@@ -7351,7 +7931,9 @@ var createWebGLCanvas = (canvas) => {
             rectFill.height += 1.0;
             const points = createRectPoints(rectFill, rotation, flipX, flipY);
             const vertices = rectPointsToVertices(points);
-            fillEllipse(vertices, rectFill.width, rectFill.height, applyOpacity(backgroundColor, opacity), backgroundImage, getBackgroundUV(rectFill.width, rectFill.height, backgroundSize, backgroundPosition, viewPixelDensity), opacity, inverted);
+            fillEllipse(vertices, rectFill.width, rectFill.height, applyOpacity(backgroundColor, opacity), backgroundImage, backgroundUVMap
+                ? new Float32Array(backgroundUVMap)
+                : calculateBackgroundUVMap(rectFill.width, rectFill.height, backgroundSize, backgroundPosition, viewPixelDensity), opacity, inverted);
         }
         if (strokeWidth)
             strokePath(
@@ -7360,7 +7942,65 @@ var createWebGLCanvas = (canvas) => {
     };
     //#endregion
     const glTextures = new Map();
-    const currentMarkupFrameBufferSize = { width: 0, height: 0 };
+    const imageFramebufferSize = {};
+    imageFramebufferSize[TEXTURE_PREVIEW_MARKUP_INDEX] = { width: 0, height: 0 };
+    imageFramebufferSize[TEXTURE_PREVIEW_BLEND_INDEX] = { width: 0, height: 0 };
+    const drawToImageFramebuffer = (index, buffer, imageSize) => {
+        const textureScalar = Math.min(textureSizeLimit / imageSize.width, textureSizeLimit / imageSize.height, 1);
+        const textureWidth = Math.floor(textureScalar * imageSize.width);
+        const textureHeight = Math.floor(textureScalar * imageSize.height);
+        if (!sizeEqual(imageSize, imageFramebufferSize[index])) {
+            // update preview markup texture
+            gl.bindTexture(gl.TEXTURE_2D, indexTextureMap.get(index));
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, textureWidth, textureHeight, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+            // set the filtering, we don't need mips
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, buffer);
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, indexTextureMap.get(index), 0);
+            // remember so we know when to update the framebuffer
+            imageFramebufferSize[index] = imageSize;
+        }
+        else {
+            gl.bindFramebuffer(gl.FRAMEBUFFER, buffer);
+        }
+        // switch transformMatrix
+        const w = imageSize.width * viewPixelDensity;
+        const h = imageSize.height * viewPixelDensity;
+        mat4Ortho(markupMatrixFrameBuffer, 0, w, h, 0, -1, 1);
+        mat4Translate(markupMatrixFrameBuffer, 0, h, 0);
+        mat4ScaleX(markupMatrixFrameBuffer, 1);
+        mat4ScaleY(markupMatrixFrameBuffer, -1);
+        markupMatrix = markupMatrixFrameBuffer;
+        // framebuffer lives in image space
+        gl.viewport(0, 0, textureWidth, textureHeight);
+        // always transparent
+        gl.colorMask(true, true, true, true);
+        gl.clearColor(0, 0, 0, 0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        // update rect mask
+        RECT_MASK_FEATHER = [
+            1,
+            0,
+            1,
+            0,
+            1,
+            Math.max(viewSize.width, imageSize.width),
+            1,
+            Math.max(viewSize.width, imageSize.width),
+        ];
+    };
+    const textureDelete = (texture, forceRelease = false) => {
+        const source = glTextures.get(texture);
+        if (source instanceof HTMLCanvasElement) {
+            if (!forceRelease && !source.dataset.retain) {
+                releaseCanvas(source);
+            }
+        }
+        glTextures.delete(texture);
+        gl.deleteTexture(texture);
+    };
     return {
         // draw api
         drawPath,
@@ -7368,29 +8008,28 @@ var createWebGLCanvas = (canvas) => {
         drawRect,
         drawEllipse,
         drawImage,
+        // texture filters
+        textureFilterNearest: gl.NEAREST,
+        textureFilterLinear: gl.LINEAR,
         //#region texture management
         textureCreate: () => {
             return gl.createTexture();
         },
-        textureUpdate: (texture, source) => {
+        textureUpdate: (texture, source, options) => {
             glTextures.set(texture, source);
-            return updateTexture(gl, texture, source);
+            return updateTexture(gl, texture, source, options);
         },
         textureSize: (texture) => {
-            return sizeCreateFromAny(glTextures.get(texture));
+            const src = glTextures.get(texture);
+            return sizeCreateFromAny(src);
         },
-        textureDelete: (texture) => {
-            const source = glTextures.get(texture);
-            if (source instanceof HTMLCanvasElement)
-                releaseCanvas(source);
-            glTextures.delete(texture);
-            gl.deleteTexture(texture);
-        },
+        textureDelete,
         //#endregion
         setCanvasColor(color) {
             CANVAS_COLOR_R = color[0];
             CANVAS_COLOR_G = color[1];
             CANVAS_COLOR_B = color[2];
+            gl.clear(gl.COLOR_BUFFER_BIT);
         },
         drawToCanvas() {
             gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -7406,48 +8045,11 @@ var createWebGLCanvas = (canvas) => {
             // update rect mask
             RECT_MASK_FEATHER = [1, 0, 1, 0, 1, viewSize.width, 1, viewSize.width];
         },
-        drawToFramebuffer(imageSize) {
-            if (!sizeEqual(imageSize, currentMarkupFrameBufferSize)) {
-                // update preview markup texture
-                gl.bindTexture(gl.TEXTURE_2D, indexTextureMap.get(TEXTURE_PREVIEW_MARKUP_INDEX));
-                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, imageSize.width, // Was imageData.width
-                imageSize.height, // Was imageData.height
-                0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-                // set the filtering, we don't need mips
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-                gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
-                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, indexTextureMap.get(TEXTURE_PREVIEW_MARKUP_INDEX), 0);
-            }
-            else {
-                gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
-            }
-            // switch transformMatrix
-            const w = imageSize.width * viewPixelDensity;
-            const h = imageSize.height * viewPixelDensity;
-            mat4Ortho(markupMatrixFrameBuffer, 0, w, h, 0, -1, 1);
-            mat4Translate(markupMatrixFrameBuffer, 0, h, 0);
-            mat4ScaleX(markupMatrixFrameBuffer, 1);
-            mat4ScaleY(markupMatrixFrameBuffer, -1);
-            markupMatrix = markupMatrixFrameBuffer;
-            // framebuffer lives in image space
-            gl.viewport(0, 0, imageSize.width, imageSize.height);
-            // always transparent
-            gl.colorMask(true, true, true, true);
-            gl.clearColor(0, 0, 0, 0);
-            gl.clear(gl.COLOR_BUFFER_BIT);
-            // update rect mask
-            RECT_MASK_FEATHER = [
-                1,
-                0,
-                1,
-                0,
-                1,
-                Math.max(viewSize.width, imageSize.width),
-                1,
-                Math.max(viewSize.width, imageSize.width),
-            ];
+        drawToImageBlendBuffer(imageSize) {
+            drawToImageFramebuffer(TEXTURE_PREVIEW_BLEND_INDEX, blendFramebuffer, imageSize);
+        },
+        drawToImageOverlayBuffer(imageSize) {
+            drawToImageFramebuffer(TEXTURE_PREVIEW_MARKUP_INDEX, markupFramebuffer, imageSize);
         },
         // set mask
         enableMask(rect, opacity) {
@@ -7473,8 +8075,25 @@ var createWebGLCanvas = (canvas) => {
         // canvas
         resize,
         release() {
+            // remove all stored textures
+            const textures = Array.from(glTextures.keys());
+            textures.forEach((texture) => textureDelete(texture, true));
+            glTextures.clear();
+            // remove indexed textures
+            indexTextureMap.forEach((texture) => {
+                gl.deleteTexture(texture);
+            });
+            indexTextureMap.clear();
+            // clean up shaders
+            imageShader.destroy();
+            pathShader.destroy();
+            triangleShader.destroy();
+            rectShader.destroy();
+            ellipseShader.destroy();
+            // clear canvas
             canvas.width = 1;
             canvas.height = 1;
+            canvas = undefined;
         },
     };
 };
@@ -7483,7 +8102,7 @@ var isImageBitmap = (obj) => 'close' in obj;
 
 /* src/core/ui/components/Canvas.svelte generated by Svelte v3.37.0 */
 
-function create_fragment$G(ctx) {
+function create_fragment$N(ctx) {
 	let div;
 	let canvas_1;
 	let mounted;
@@ -7498,11 +8117,11 @@ function create_fragment$G(ctx) {
 		m(target, anchor) {
 			insert(target, div, anchor);
 			append(div, canvas_1);
-			/*canvas_1_binding*/ ctx[22](canvas_1);
+			/*canvas_1_binding*/ ctx[25](canvas_1);
 
 			if (!mounted) {
 				dispose = [
-					listen(canvas_1, "measure", /*measure_handler*/ ctx[23]),
+					listen(canvas_1, "measure", /*measure_handler*/ ctx[26]),
 					action_destroyer(measurable.call(null, canvas_1))
 				];
 
@@ -7514,20 +8133,21 @@ function create_fragment$G(ctx) {
 		o: noop,
 		d(detaching) {
 			if (detaching) detach(div);
-			/*canvas_1_binding*/ ctx[22](null);
+			/*canvas_1_binding*/ ctx[25](null);
 			mounted = false;
 			run_all(dispose);
 		}
 	};
 }
 
-function instance$G($$self, $$props, $$invalidate) {
+function instance$N($$self, $$props, $$invalidate) {
 	let canDraw;
 	let drawUpdate;
 	let $background;
 	let $maskOpacityStore;
 	let $mask;
 	let $imageOverlayColor;
+	let $maskFrameOpacityStore;
 
 	const blendWithCanvasBackground = (back, front) => {
 		const [bR, bG, bB] = back;
@@ -7541,9 +8161,11 @@ function instance$G($$self, $$props, $$invalidate) {
 	let { animate } = $$props;
 	let { maskRect } = $$props;
 	let { maskOpacity = 1 } = $$props;
+	let { maskFrameOpacity = 0.95 } = $$props;
 	let { pixelRatio = 1 } = $$props;
 	let { backgroundColor } = $$props;
 	let { willRender = passthrough } = $$props;
+	let { willRequestResource = () => true } = $$props;
 	let { loadImageData = passthrough } = $$props;
 	let { images = [] } = $$props;
 	let { interfaceImages = [] } = $$props;
@@ -7566,32 +8188,39 @@ function instance$G($$self, $$props, $$invalidate) {
 	// Editor UI
 	const background = tweened(undefined, { duration: 250 });
 
-	component_subscribe($$self, background, value => $$invalidate(18, $background = value));
+	component_subscribe($$self, background, value => $$invalidate(21, $background = value));
 	const maskOpacityStore = spring(1, SPRING_PROPS_FRACTION);
-	component_subscribe($$self, maskOpacityStore, value => $$invalidate(19, $maskOpacityStore = value));
+	component_subscribe($$self, maskOpacityStore, value => $$invalidate(22, $maskOpacityStore = value));
+	const maskFrameOpacityStore = spring(1, SPRING_PROPS_FRACTION);
+	component_subscribe($$self, maskFrameOpacityStore, value => $$invalidate(31, $maskFrameOpacityStore = value));
 	const mask = writable();
-	component_subscribe($$self, mask, value => $$invalidate(26, $mask = value));
+	component_subscribe($$self, mask, value => $$invalidate(29, $mask = value));
 	const imageOverlayColor = writable();
-	component_subscribe($$self, imageOverlayColor, value => $$invalidate(27, $imageOverlayColor = value));
+	component_subscribe($$self, imageOverlayColor, value => $$invalidate(30, $imageOverlayColor = value));
 
 	//#region texture loading and binding
-	const TEXT_TEXTURE_MEASURE_CONTEXT = createSimpleContext();
-
 	const Textures = new Map([]);
 
-	const getImageTexture = image => {
+	const PlaceholderTextures = new Map([]);
+
+	const getImageTexture = (image, imageRendering) => {
 		// no texture yet for this source
 		if (!Textures.has(image)) {
-			// is in loading state when undefined
-			Textures.set(image, undefined);
+			// is in loading state when is same as source
+			Textures.set(image, image);
+
+			// get texture filter mode
+			const filter = imageRendering === "pixelated"
+			? canvasGL.textureFilterNearest
+			: canvasGL.textureFilterLinear;
 
 			// already loaded
-			if (!isString(image) && (isImageBitmap(image) || isImageData(image))) {
+			if (!isString(image) && (isImageBitmap(image) || isImageData(image) || isCanvas(image))) {
 				// create texture
 				const texture = canvasGL.textureCreate();
 
 				// udpate texture in gl canvas
-				canvasGL.textureUpdate(texture, image);
+				canvasGL.textureUpdate(texture, image, { filter });
 
 				// update state we now have a texture
 				Textures.set(image, texture);
@@ -7602,7 +8231,7 @@ function instance$G($$self, $$props, $$invalidate) {
 					const texture = canvasGL.textureCreate();
 
 					// udpate texture in gl canvas
-					canvasGL.textureUpdate(texture, data);
+					canvasGL.textureUpdate(texture, data, { filter });
 
 					// update state we now have a texture
 					Textures.set(image, texture);
@@ -7619,81 +8248,82 @@ function instance$G($$self, $$props, $$invalidate) {
 	};
 
 	const getTextTexture = shape => {
-		let { text, textAlign, fontFamily, fontSize, fontWeight, fontVariant, fontStyle, lineHeight, width } = shape;
+		// no text, texture not necessary
+		if (!shape.text.length) {
+			PlaceholderTextures.delete(shape.id);
+			return undefined;
+		}
 
-		// we need this context to correctly wrap text
-		updateTextContext(TEXT_TEXTURE_MEASURE_CONTEXT, {
-			fontSize,
+		let { text, textAlign, fontFamily, fontSize, fontWeight, fontVariant, fontStyle, lineHeight, width, height } = shape;
+		const { lastCharPosition, size } = textMeasure(text, shape);
+
+		const textUID = objectUID({
+			text,
+			textAlign,
 			fontFamily,
+			fontSize,
 			fontWeight,
 			fontVariant,
 			fontStyle,
-			textAlign
+			lineHeight,
+			height: height
+			? Math.min(lastCharPosition.y, Math.ceil(height / lineHeight) * lineHeight)
+			: "auto",
+			xOffset: lastCharPosition.x,
+			yOffset: lastCharPosition.y
 		});
-
-		// wrap the text
-		const textString = width
-		? wrapText(TEXT_TEXTURE_MEASURE_CONTEXT, text, width)
-		: text;
-
-		// create UID for this texture so we can cache it and fetch it later on
-		const textUID = shapeTextUID({ ...shape, text: textString });
 
 		// get texture unit assigned to this specific text shape
 		if (!Textures.has(textUID)) {
-			// TODO: Create power of 2 texture and update texture instead of delete -> replace
-			// we need to create a new texture
-			const ctx = createSimpleContext();
+			// is in loading state when is same as source
+			Textures.set(textUID, text);
 
-			updateTextContext(ctx, {
+			// get size of text box
+			const widthRounded = width && Math.round(width);
+
+			const heightRounded = height && Math.round(height);
+			const textureSize = sizeApply(sizeClone(size), v => Math.min(Math.round(v), getWebGLTextureSizeLimit()));
+
+			// create texture
+			textToImage(text, {
 				fontSize,
 				fontFamily,
 				fontWeight,
 				fontVariant,
 				fontStyle,
-				textAlign
-			});
-
-			// calculate canvas height
-			resizeContextToFitText(ctx, textString, {
-				fontSize,
-				fontFamily,
-				fontWeight,
-				fontVariant,
-				fontStyle,
-				textAlign,
-				lineHeight
-			});
-
-			const contextMinWidth = ctx.canvas.width;
-
-			// scale context to account for italic styles
-			ctx.canvas.width += textPadding;
-
-			// context resized, we now need to re-apply style
-			updateTextContext(ctx, {
-				fontSize,
-				fontFamily,
-				fontWeight,
-				fontVariant,
-				fontStyle,
-				textAlign,
-				color: [1, 0, 1], // color we'll replace in the shader
-				
-			});
-
-			// if so, draw text and update texture
-			drawText$1(ctx, textString, {
-				fontSize,
 				textAlign,
 				lineHeight,
-				lineWidth: contextMinWidth
-			});
+				color: [1, 0, 1], // purple will be replaced in render method
+				width: widthRounded,
+				height: heightRounded,
+				imageWidth: textureSize.width,
+				imageHeight: heightRounded
+				? Math.ceil(heightRounded / lineHeight) * lineHeight
+				: textureSize.height,
+				willRequestResource
+			}).then(image => {
+				// create texture
+				const texture = canvasGL.textureCreate();
 
-			Textures.set(textUID, canvasGL.textureUpdate(canvasGL.textureCreate(), ctx.canvas));
+				// update texture in gl canvas
+				canvasGL.textureUpdate(texture, image, { filter: canvasGL.textureFilterLinear });
+
+				// update state we now have a texture
+				Textures.set(textUID, texture);
+
+				// use as fallback texture for next update
+				PlaceholderTextures.set(shape.id, texture);
+
+				// need to redraw because texture is now available
+				requestAnimationFrame(drawUpdate);
+			}).catch(console.error);
 		}
 
-		return Textures.get(textUID);
+		const texture = Textures.get(textUID);
+
+		return isTexture(texture)
+		? texture
+		: PlaceholderTextures.get(shape.id);
 	};
 
 	const getShapeTexture = shape => {
@@ -7701,8 +8331,9 @@ function instance$G($$self, $$props, $$invalidate) {
 
 		// let's create textures for backgrounds and texts
 		if (shape.backgroundImage) {
-			texture = getImageTexture(shape.backgroundImage);
-		} else if (isString(shape.text)) {
+			texture = getImageTexture(shape.backgroundImage, shape.backgroundImageRendering);
+		} else // is text texture
+		if (isString(shape.text)) {
 			if (shape.width && shape.width < 1 || shape.height && shape.height < 1) return undefined;
 			texture = getTextTexture(shape);
 		}
@@ -7710,12 +8341,17 @@ function instance$G($$self, $$props, $$invalidate) {
 		return texture;
 	};
 
+	const isTexture = texture => texture instanceof WebGLTexture;
+
 	const releaseUnusedTextures = usedTextures => {
 		Textures.forEach((registeredTexture, key) => {
 			const isUsed = !!usedTextures.find(usedTexture => usedTexture === registeredTexture);
 
 			// stil used, no need to release
-			if (isUsed) return;
+			if (isUsed || !isTexture(registeredTexture)) return;
+
+			// skip if used as placeholder texture
+			if (Array.from(PlaceholderTextures.values()).includes(registeredTexture)) return;
 
 			// remove this texture
 			Textures.delete(key);
@@ -7726,7 +8362,7 @@ function instance$G($$self, $$props, $$invalidate) {
 
 	//#endregion
 	//#region drawing
-	const drawImageHelper = ({ data, size, origin, translation, rotation, scale, colorMatrix, opacity, convolutionMatrix, gamma, vignette, maskFeather, maskCornerRadius, backgroundColor, overlayColor, enableShapes }) => {
+	const drawImageHelper = ({ data, size, origin, translation, rotation, scale, colorMatrix, opacity, convolutionMatrix, gamma, vignette, maskFeather, maskCornerRadius, backgroundColor, overlayColor, enableShapes, enableBlend }) => {
 		// calculate opaque backgroundColor if backgroundColor is transparent and visible
 		if (backgroundColor && backgroundColor[3] < 1 && backgroundColor[3] > 0) {
 			backgroundColor = blendWithCanvasBackground($background, backgroundColor);
@@ -7736,28 +8372,61 @@ function instance$G($$self, $$props, $$invalidate) {
 		const texture = getImageTexture(data);
 
 		// draw the image
-		canvasGL.drawImage(texture, size, origin.x, origin.y, translation.x, translation.y, rotation.x, rotation.y, rotation.z, scale, colorMatrix, clamp(opacity, 0, 1), convolutionMatrix, gamma, vignette, maskFeather, maskCornerRadius, backgroundColor, overlayColor, enableShapes);
+		canvasGL.drawImage(texture, size, origin.x, origin.y, translation.x, translation.y, rotation.x, rotation.y, rotation.z, scale, colorMatrix, clamp(opacity, 0, 1), convolutionMatrix, gamma, vignette, maskFeather, maskCornerRadius, backgroundColor, overlayColor, enableShapes, enableBlend);
 
 		return texture;
 	};
 
-	const drawShapes = (shapes = []) => {
+	const backgroundCornersToUVMap = ([tl, tr, br, bl]) => {
+		// tl, tr, br, bl -> bl, tl, br, tr
+		// prettier-ignore
+		// B   D
+		// | \ |
+		// A  C
+		return [bl.x, bl.y, tl.x, tl.y, br.x, br.y, tr.x, tr.y];
+	};
+
+	const EmptyVector = vectorCreateEmpty();
+
+	const drawShapes = (shapes = [], maxSize) => {
 		return shapes.map(shape => {
-			let texture = getShapeTexture(shape);
+			// only show texture if shape is finished loading
+			let shapeTexture = !shape._isLoading && getShapeTexture(shape);
+
+			// get the webgl texture
+			let texture = isTexture(shapeTexture) ? shapeTexture : undefined;
+
+			// transforms
+			const scalar = shape._scale || 1;
+
+			const translation = shape._translate || EmptyVector;
+			const strokeWidth = shape.strokeWidth && shape.strokeWidth * scalar;
 
 			if (isArray(shape.points)) {
+				// transform points
+				shape.points.forEach(point => {
+					point.x *= scalar;
+					point.y *= scalar;
+					point.x += translation.x;
+					point.y += translation.y;
+				});
+
 				// is triangle
 				if (shape.points.length === 3 && shape.backgroundColor) {
-					canvasGL.drawTriangle(shape.points, shape.rotation, shape.flipX, shape.flipY, shape.backgroundColor, shape.strokeWidth, shape.strokeColor, shape.opacity);
+					canvasGL.drawTriangle(shape.points, shape.rotation, shape.flipX, shape.flipY, shape.backgroundColor, strokeWidth, shape.strokeColor, shape.opacity);
 				} else // is normal path
 				{
-					canvasGL.drawPath(shape.points, shape.strokeWidth, shape.strokeColor, shape.opacity);
+					canvasGL.drawPath(shape.points, strokeWidth, shape.strokeColor, shape.pathClose, shape.opacity);
 				}
-			} else // is ellipse 
+			} else // is ellipse
 			if (isNumber(shape.rx) && isNumber(shape.ry)) {
-				let backgroundSize;
-				let backgroundPosition;
-				canvasGL.drawEllipse(shape, shape.rx, shape.ry, shape.rotation, shape.flipX, shape.flipY, shape.backgroundColor, texture, backgroundSize, backgroundPosition, shape.strokeWidth, shape.strokeColor, shape.opacity, shape.inverted);
+				let x = shape.x;
+				let y = shape.y;
+				x *= scalar;
+				y *= scalar;
+				x += translation.x;
+				y += translation.y;
+				canvasGL.drawEllipse(vectorCreate(x, y), shape.rx * scalar, shape.ry * scalar, shape.rotation, shape.flipX, shape.flipY, shape.backgroundColor, texture, undefined, undefined, shape.backgroundCorners && backgroundCornersToUVMap(shape.backgroundCorners), strokeWidth, shape.strokeColor, shape.opacity, shape.inverted);
 			} else // is rect
 			if (isString(shape.text) && texture || shape.width) {
 				const textureSize = texture && canvasGL.textureSize(texture);
@@ -7769,15 +8438,27 @@ function instance$G($$self, $$props, $$invalidate) {
 					shape.cornerRadius,
 					shape.cornerRadius,
 					shape.cornerRadius
-				];
+				].map(v => v * scalar);
 
 				if (shape.width) {
-					shapeRect = shape;
+					shapeRect = rectCreateFromAny(shape);
 				} else {
 					shapeRect = { x: shape.x, y: shape.y, ...textureSize };
 				}
 
+				// apply shape transforms
+				if (scalar && translation) {
+					shapeRect.x *= scalar;
+					shapeRect.y *= scalar;
+					shapeRect.x += translation.x;
+					shapeRect.y += translation.y;
+					shapeRect.width *= scalar;
+					shapeRect.height *= scalar;
+				}
+
+				// get texture
 				let backgroundSize;
+
 				let backgroundPosition;
 
 				if (textureSize) {
@@ -7788,60 +8469,92 @@ function instance$G($$self, $$props, $$invalidate) {
 
 						// adjust position of background
 						if (shape.backgroundSize === "contain") {
-							const rect = rectContainRect(shape, textureAspectRatio, shapeRect);
+							const rect = rectContainRect(shapeRect, textureAspectRatio, shapeRect);
 							backgroundSize = sizeCreateFromRect(rect);
-							backgroundPosition = vectorCreate((shape.width - backgroundSize.width) * 0.5, (shape.height - backgroundSize.height) * 0.5);
+							backgroundPosition = vectorCreate((shapeRect.width - backgroundSize.width) * 0.5, (shapeRect.height - backgroundSize.height) * 0.5);
 						} else if (shape.backgroundSize === "cover") {
-							const rect = rectCoverRect(shape, textureAspectRatio, shapeRect);
+							const rect = rectCoverRect(shapeRect, textureAspectRatio, shapeRect);
 							backgroundSize = sizeCreateFromRect(rect);
 							backgroundPosition = vectorCreate(rect.x, rect.y);
-							backgroundPosition = vectorCreate((shape.width - backgroundSize.width) * 0.5, (shape.height - backgroundSize.height) * 0.5);
+							backgroundPosition = vectorCreate((shapeRect.width - backgroundSize.width) * 0.5, (shapeRect.height - backgroundSize.height) * 0.5);
+						} else {
+							backgroundSize = shape.backgroundSize;
+							backgroundPosition = shape.backgroundPosition;
 						}
 					} else // is text, "background" should be texture size and be positioned based on alignment
-					if (shape.text && shape.width) {
+					if (shape.text) {
+						//
+						const pixelTextureSize = {
+							width: textureSize.width / TextPixelRatio,
+							height: textureSize.height / TextPixelRatio
+						};
+
 						// position texture based on text alignment
-						backgroundSize = textureSize;
-
-						backgroundPosition = vectorCreate(0, 0);
-
-						// auto height
-						if (!shape.height) shape.height = textureSize.height;
-
-						// textPadding so text doesn't clip on left and right edges
-						shape.x -= textPadding;
-
-						shape.width += textPadding * 2;
-
-						if (shape.textAlign === "left") {
-							backgroundPosition.x = textPadding;
-						}
-
-						if (shape.textAlign === "center") {
-							backgroundPosition.x = textPadding * 0.5 + (shape.width - textureSize.width) * 0.5;
-						}
-
-						if (shape.textAlign === "right") {
-							backgroundPosition.x = shape.width - textureSize.width;
-						}
-					} else if (shape.text) {
 						backgroundPosition = vectorCreate(0, 0);
 
 						backgroundSize = {
-							width: shapeRect.width,
-							height: shapeRect.height
+							width: pixelTextureSize.width * scalar,
+							height: pixelTextureSize.height * scalar
 						};
 
-						// texture is slightly larger because of text padding, need to compensate for this in single line mode
-						shapeRect.width -= textPadding;
-					}
+						// draw background
+						if (shape.backgroundColor) {
+							canvasGL.drawRect(
+								{
+									...shapeRect,
+									height: shapeRect.height || textureSize.height * scalar
+								},
+								shape.rotation,
+								shape.flipX,
+								shape.flipY,
+								shapeCornerRadius,
+								shape.backgroundColor,
+								undefined,
+								undefined,
+								undefined,
+								undefined,
+								strokeWidth,
+								shape.strokeColor,
+								shape.opacity,
+								undefined,
+								undefined,
+								shape.inverted
+							);
+						}
 
-					if (shape.text) colorize = shape.color;
+						shape.backgroundColor = undefined;
+
+						// Apply TextPadding so text doesn't clip on left and right edges
+						shapeRect.x -= TextPadding * scalar;
+
+						// The text texture needs to be colorized
+						colorize = shape.color;
+
+						// adjust width
+						if (shape.width) {
+							// auto scale height if is auto-height field
+							shapeRect.height = shapeRect.height || pixelTextureSize.height * scalar;
+
+							// adjust width so we can still render characters outside of box
+							shapeRect.width += TextPadding * 2 * scalar;
+
+							// adjust when text alignment is different
+							if (shape.textAlign === "center") {
+								backgroundPosition.x = (shapeRect.width - backgroundSize.width) * 0.5;
+							} else if (shape.textAlign === "right") {
+								backgroundPosition.x = shapeRect.width - backgroundSize.width;
+							}
+						}
+
+						// make color transparent
+						if (shape._prerender) colorize[3] = 0;
+					}
 				}
 
-				canvasGL.drawRect(shapeRect, shape.rotation, shape.flipX, shape.flipY, shapeCornerRadius, shape.backgroundColor, texture, backgroundSize, backgroundPosition, shape.strokeWidth, shape.strokeColor, shape.opacity, undefined, colorize);
+				canvasGL.drawRect(shapeRect, shape.rotation, shape.flipX, shape.flipY, shapeCornerRadius, shape.backgroundColor, texture, backgroundSize, backgroundPosition, shape.backgroundCorners && backgroundCornersToUVMap(shape.backgroundCorners), strokeWidth, shape.strokeColor, shape.opacity, undefined, colorize, shape.inverted);
 			}
 
-			return texture;
+			return shapeTexture;
 		}).filter(Boolean);
 	};
 
@@ -7856,7 +8569,7 @@ function instance$G($$self, $$props, $$invalidate) {
 		const imagesTop = images[0];
 
 		// allow dev to inject more shapes
-		let { annotationShapes, interfaceShapes, decorationShapes } = willRender({
+		const { blendShapes, annotationShapes, interfaceShapes, decorationShapes, frameShapes } = willRender({
 			// top image state shortcut
 			opacity: imagesTop.opacity,
 			rotation: imagesTop.rotation,
@@ -7876,7 +8589,10 @@ function instance$G($$self, $$props, $$invalidate) {
 		const imagesSize = imagesTop.size;
 		const imagesBackgroundColor = imagesTop.backgroundColor;
 
-		// no need to draw to framebuffer is no annotations
+		// no need to draw to blend framebuffer if no redactions
+		const hasBlendShapes = blendShapes.length > 0;
+
+		// no need to draw to markup framebuffer if no annotations
 		const hasAnnotations = annotationShapes.length > 0;
 
 		// if image has background color
@@ -7903,11 +8619,19 @@ function instance$G($$self, $$props, $$invalidate) {
 
 		canvasGL.setCanvasColor(canvasBackgroundColor);
 
+		// if has blend shapes draw blend shapes to framebuffer
+		// TODO: only run this if blend shapes have changed
+		if (hasBlendShapes) {
+			canvasGL.disableMask();
+			canvasGL.drawToImageBlendBuffer(imagesSize);
+			usedTextures.push(...drawShapes(blendShapes));
+		}
+
 		// if has annotations draw annotation shapes to framebuffer
 		// TODO: only run this if annotations have changed
 		if (hasAnnotations) {
 			canvasGL.disableMask();
-			canvasGL.drawToFramebuffer(imagesSize);
+			canvasGL.drawToImageOverlayBuffer(imagesSize);
 			usedTextures.push(...drawShapes(annotationShapes));
 		}
 
@@ -7924,8 +8648,10 @@ function instance$G($$self, $$props, $$invalidate) {
 		usedTextures.push(...[...images].reverse().map(image => {
 			return drawImageHelper({
 				...image,
-				// enable drawing markup framebuffer on image
+				// enable drawing markup if defined
 				enableShapes: hasAnnotations,
+				// enable drawing redactions if defined
+				enableBlend: hasBlendShapes,
 				// mask and overlay positions
 				mask: imagesMask,
 				maskOpacity: imagesMaskOpacity,
@@ -7935,11 +8661,39 @@ function instance$G($$self, $$props, $$invalidate) {
 
 		// TODO: move vignette here (draw with colorized circular gradient texture instead of in shader)
 		// draw decorations shapes relative to crop
+		canvasGL.enableMask(imagesMask, 1);
+
 		usedTextures.push(...drawShapes(decorationShapes));
+
+		// draw frames
+		if (frameShapes.length) {
+			const shapesInside = frameShapes.filter(shape => !shape.expandsCanvas);
+			const shapesOutside = frameShapes.filter(shape => shape.expandsCanvas);
+
+			if (shapesInside.length) {
+				usedTextures.push(...drawShapes(shapesInside));
+			}
+
+			if (shapesOutside.length) {
+				// the half pixel helps mask the outside shapes at the correct position
+				canvasGL.enableMask(
+					{
+						x: imagesMask.x + 0.5,
+						y: imagesMask.y + 0.5,
+						width: imagesMask.width - 1,
+						height: imagesMask.height - 1
+					},
+					$maskFrameOpacityStore
+				);
+
+				usedTextures.push(...drawShapes(shapesOutside));
+			}
+		}
 
 		// crop mask not used for interface
 		canvasGL.disableMask();
 
+		// frames rendered on the outside
 		// draw custom interface shapes
 		usedTextures.push(...drawShapes(interfaceShapes));
 
@@ -7988,7 +8742,7 @@ function instance$G($$self, $$props, $$invalidate) {
 	afterUpdate(() => drawUpdate());
 
 	// hook up canvas to WebGL drawer
-	onMount(() => $$invalidate(17, canvasGL = createWebGLCanvas(canvas)));
+	onMount(() => $$invalidate(20, canvasGL = createWebGLCanvas(canvas)));
 
 	// clean up canvas
 	onDestroy(() => {
@@ -7998,8 +8752,10 @@ function instance$G($$self, $$props, $$invalidate) {
 		// done drawing
 		canvasGL.release();
 
-		// force release canvas for Safari
-		releaseCanvas(TEXT_TEXTURE_MEASURE_CONTEXT.canvas);
+		// remove reference
+		$$invalidate(20, canvasGL = undefined);
+
+		$$invalidate(2, canvas = undefined);
 	});
 
 	function canvas_1_binding($$value) {
@@ -8016,31 +8772,37 @@ function instance$G($$self, $$props, $$invalidate) {
 	};
 
 	$$self.$$set = $$props => {
-		if ("animate" in $$props) $$invalidate(8, animate = $$props.animate);
-		if ("maskRect" in $$props) $$invalidate(9, maskRect = $$props.maskRect);
-		if ("maskOpacity" in $$props) $$invalidate(10, maskOpacity = $$props.maskOpacity);
-		if ("pixelRatio" in $$props) $$invalidate(11, pixelRatio = $$props.pixelRatio);
-		if ("backgroundColor" in $$props) $$invalidate(12, backgroundColor = $$props.backgroundColor);
-		if ("willRender" in $$props) $$invalidate(13, willRender = $$props.willRender);
-		if ("loadImageData" in $$props) $$invalidate(14, loadImageData = $$props.loadImageData);
-		if ("images" in $$props) $$invalidate(15, images = $$props.images);
-		if ("interfaceImages" in $$props) $$invalidate(16, interfaceImages = $$props.interfaceImages);
+		if ("animate" in $$props) $$invalidate(9, animate = $$props.animate);
+		if ("maskRect" in $$props) $$invalidate(10, maskRect = $$props.maskRect);
+		if ("maskOpacity" in $$props) $$invalidate(11, maskOpacity = $$props.maskOpacity);
+		if ("maskFrameOpacity" in $$props) $$invalidate(12, maskFrameOpacity = $$props.maskFrameOpacity);
+		if ("pixelRatio" in $$props) $$invalidate(13, pixelRatio = $$props.pixelRatio);
+		if ("backgroundColor" in $$props) $$invalidate(14, backgroundColor = $$props.backgroundColor);
+		if ("willRender" in $$props) $$invalidate(15, willRender = $$props.willRender);
+		if ("willRequestResource" in $$props) $$invalidate(16, willRequestResource = $$props.willRequestResource);
+		if ("loadImageData" in $$props) $$invalidate(17, loadImageData = $$props.loadImageData);
+		if ("images" in $$props) $$invalidate(18, images = $$props.images);
+		if ("interfaceImages" in $$props) $$invalidate(19, interfaceImages = $$props.interfaceImages);
 	};
 
 	$$self.$$.update = () => {
-		if ($$self.$$.dirty[0] & /*backgroundColor*/ 4096) {
+		if ($$self.$$.dirty[0] & /*backgroundColor*/ 16384) {
 			backgroundColor && updateSpring(background, backgroundColor);
 		}
 
-		if ($$self.$$.dirty[0] & /*maskOpacity*/ 1024) {
+		if ($$self.$$.dirty[0] & /*maskOpacity*/ 2048) {
 			updateSpring(maskOpacityStore, isNumber(maskOpacity) ? maskOpacity : 1);
 		}
 
-		if ($$self.$$.dirty[0] & /*maskRect*/ 512) {
+		if ($$self.$$.dirty[0] & /*maskFrameOpacity*/ 4096) {
+			updateSpring(maskFrameOpacityStore, isNumber(maskFrameOpacity) ? maskFrameOpacity : 1);
+		}
+
+		if ($$self.$$.dirty[0] & /*maskRect*/ 1024) {
 			maskRect && mask.set(maskRect);
 		}
 
-		if ($$self.$$.dirty[0] & /*$background, $maskOpacityStore*/ 786432) {
+		if ($$self.$$.dirty[0] & /*$background, $maskOpacityStore*/ 6291456) {
 			$background && imageOverlayColor.set([
 				$background[0],
 				$background[1],
@@ -8049,22 +8811,22 @@ function instance$G($$self, $$props, $$invalidate) {
 			]);
 		}
 
-		if ($$self.$$.dirty[0] & /*canvasGL, width, height, images*/ 163843) {
+		if ($$self.$$.dirty[0] & /*canvasGL, width, height, images*/ 1310723) {
 			// can draw view
-			$$invalidate(21, canDraw = !!(canvasGL && width && height && images.length));
+			$$invalidate(24, canDraw = !!(canvasGL && width && height && images.length));
 		}
 
-		if ($$self.$$.dirty[0] & /*width, height, canvasGL, pixelRatio*/ 133123) {
+		if ($$self.$$.dirty[0] & /*width, height, canvasGL, pixelRatio*/ 1056771) {
 			// observe width and height changes and resize the canvas proportionally
 			width && height && canvasGL && canvasGL.resize(width, height, pixelRatio);
 		}
 
-		if ($$self.$$.dirty[0] & /*canDraw*/ 2097152) {
+		if ($$self.$$.dirty[0] & /*canDraw*/ 16777216) {
 			// switch to draw method when can draw
-			$$invalidate(20, drawUpdate = canDraw ? selectFittingRenderFunction() : noop$1);
+			$$invalidate(23, drawUpdate = canDraw ? selectFittingRenderFunction() : noop$1);
 		}
 
-		if ($$self.$$.dirty[0] & /*canDraw, drawUpdate*/ 3145728) {
+		if ($$self.$$.dirty[0] & /*canDraw, drawUpdate*/ 25165824) {
 			// if can draw state is updated and we have a draw update function, time to redraw
 			canDraw && drawUpdate && drawUpdate();
 		}
@@ -8077,14 +8839,17 @@ function instance$G($$self, $$props, $$invalidate) {
 		dispatch,
 		background,
 		maskOpacityStore,
+		maskFrameOpacityStore,
 		mask,
 		imageOverlayColor,
 		animate,
 		maskRect,
 		maskOpacity,
+		maskFrameOpacity,
 		pixelRatio,
 		backgroundColor,
 		willRender,
+		willRequestResource,
 		loadImageData,
 		images,
 		interfaceImages,
@@ -8105,19 +8870,21 @@ class Canvas extends SvelteComponent {
 		init(
 			this,
 			options,
-			instance$G,
-			create_fragment$G,
+			instance$N,
+			create_fragment$N,
 			safe_not_equal,
 			{
-				animate: 8,
-				maskRect: 9,
-				maskOpacity: 10,
-				pixelRatio: 11,
-				backgroundColor: 12,
-				willRender: 13,
-				loadImageData: 14,
-				images: 15,
-				interfaceImages: 16
+				animate: 9,
+				maskRect: 10,
+				maskOpacity: 11,
+				maskFrameOpacity: 12,
+				pixelRatio: 13,
+				backgroundColor: 14,
+				willRender: 15,
+				willRequestResource: 16,
+				loadImageData: 17,
+				images: 18,
+				interfaceImages: 19
 			},
 			[-1, -1]
 		);
@@ -8137,8 +8904,8 @@ function get_each_context$9(ctx, list, i) {
 const get_default_slot_changes$1 = dirty => ({ tab: dirty & /*tabNodes*/ 4 });
 const get_default_slot_context$1 = ctx => ({ tab: /*tab*/ ctx[17] });
 
-// (73:0) {#if shouldRender}
-function create_if_block$c(ctx) {
+// (52:0) {#if shouldRender}
+function create_if_block$e(ctx) {
 	let ul;
 	let each_blocks = [];
 	let each_1_lookup = new Map();
@@ -8219,7 +8986,7 @@ function create_if_block$c(ctx) {
 	};
 }
 
-// (75:4) {#each tabNodes as tab (tab.id) }
+// (59:8) {#each tabNodes as tab (tab.id)}
 function create_each_block$9(key_1, ctx) {
 	let li;
 	let button;
@@ -8320,10 +9087,10 @@ function create_each_block$9(key_1, ctx) {
 	};
 }
 
-function create_fragment$F(ctx) {
+function create_fragment$M(ctx) {
 	let if_block_anchor;
 	let current;
-	let if_block = /*shouldRender*/ ctx[4] && create_if_block$c(ctx);
+	let if_block = /*shouldRender*/ ctx[4] && create_if_block$e(ctx);
 
 	return {
 		c() {
@@ -8344,7 +9111,7 @@ function create_fragment$F(ctx) {
 						transition_in(if_block, 1);
 					}
 				} else {
-					if_block = create_if_block$c(ctx);
+					if_block = create_if_block$e(ctx);
 					if_block.c();
 					transition_in(if_block, 1);
 					if_block.m(if_block_anchor.parentNode, if_block_anchor);
@@ -8375,7 +9142,7 @@ function create_fragment$F(ctx) {
 	};
 }
 
-function instance$F($$self, $$props, $$invalidate) {
+function instance$M($$self, $$props, $$invalidate) {
 	let tabNodes;
 	let shouldRender;
 	let { $$slots: slots = {}, $$scope } = $$props;
@@ -8471,7 +9238,7 @@ class TabList extends SvelteComponent {
 	constructor(options) {
 		super();
 
-		init(this, options, instance$F, create_fragment$F, safe_not_equal, {
+		init(this, options, instance$M, create_fragment$M, safe_not_equal, {
 			class: 0,
 			name: 7,
 			selected: 8,
@@ -8511,7 +9278,7 @@ const get_default_slot_context = ctx => ({
 	panelIsActive: !/*hidden*/ ctx[19]
 });
 
-// (75:0) {:else}
+// (56:0) {:else}
 function create_else_block$5(ctx) {
 	let div1;
 	let div0;
@@ -8587,8 +9354,8 @@ function create_else_block$5(ctx) {
 	};
 }
 
-// (66:0) {#if shouldRender}
-function create_if_block$b(ctx) {
+// (35:0) {#if shouldRender}
+function create_if_block$d(ctx) {
 	let div;
 	let each_blocks = [];
 	let each_1_lookup = new Map();
@@ -8628,7 +9395,7 @@ function create_if_block$b(ctx) {
 			if (!mounted) {
 				dispose = [
 					listen(div, "measure", /*measure_handler*/ ctx[12]),
-					action_destroyer(measurable.call(null, div))
+					action_destroyer(measurable.call(null, div, { observePosition: true }))
 				];
 
 				mounted = true;
@@ -8679,8 +9446,8 @@ function create_if_block$b(ctx) {
 	};
 }
 
-// (71:8) {#if draw}
-function create_if_block_1$d(ctx) {
+// (52:16) {#if draw}
+function create_if_block_1$e(ctx) {
 	let current;
 	const default_slot_template = /*#slots*/ ctx[11].default;
 	const default_slot = create_slot(default_slot_template, ctx, /*$$scope*/ ctx[10], get_default_slot_context);
@@ -8718,7 +9485,7 @@ function create_if_block_1$d(ctx) {
 	};
 }
 
-// (69:4) {#each panelNodes as { id, draw, panelId, tabindex, labelledBy, hidden, visible }
+// (43:8) {#each panelNodes as { id, draw, panelId, tabindex, labelledBy, hidden, visible }
 function create_each_block$8(key_1, ctx) {
 	let div;
 	let t;
@@ -8729,7 +9496,7 @@ function create_each_block$8(key_1, ctx) {
 	let div_aria_labelledby_value;
 	let div_data_inert_value;
 	let current;
-	let if_block = /*draw*/ ctx[15] && create_if_block_1$d(ctx);
+	let if_block = /*draw*/ ctx[15] && create_if_block_1$e(ctx);
 
 	return {
 		key: key_1,
@@ -8763,7 +9530,7 @@ function create_each_block$8(key_1, ctx) {
 						transition_in(if_block, 1);
 					}
 				} else {
-					if_block = create_if_block_1$d(ctx);
+					if_block = create_if_block_1$e(ctx);
 					if_block.c();
 					transition_in(if_block, 1);
 					if_block.m(div, t);
@@ -8818,12 +9585,12 @@ function create_each_block$8(key_1, ctx) {
 	};
 }
 
-function create_fragment$E(ctx) {
+function create_fragment$L(ctx) {
 	let current_block_type_index;
 	let if_block;
 	let if_block_anchor;
 	let current;
-	const if_block_creators = [create_if_block$b, create_else_block$5];
+	const if_block_creators = [create_if_block$d, create_else_block$5];
 	const if_blocks = [];
 
 	function select_block_type(ctx, dirty) {
@@ -8887,7 +9654,7 @@ function create_fragment$E(ctx) {
 	};
 }
 
-function instance$E($$self, $$props, $$invalidate) {
+function instance$L($$self, $$props, $$invalidate) {
 	let panelNodes;
 	let shouldRender;
 	let { $$slots: slots = {}, $$scope } = $$props;
@@ -8967,7 +9734,7 @@ class TabPanels extends SvelteComponent {
 	constructor(options) {
 		super();
 
-		init(this, options, instance$E, create_fragment$E, safe_not_equal, {
+		init(this, options, instance$L, create_fragment$L, safe_not_equal, {
 			class: 0,
 			name: 6,
 			selected: 7,
@@ -8981,19 +9748,19 @@ class TabPanels extends SvelteComponent {
 
 /* src/core/ui/components/Panel.svelte generated by Svelte v3.37.0 */
 
-function create_fragment$D(ctx) {
+function create_fragment$K(ctx) {
 	let div;
 	let switch_instance;
 	let updating_name;
 	let div_class_value;
 	let current;
-	const switch_instance_spread_levels = [/*componentProps*/ ctx[6]];
+	const switch_instance_spread_levels = [/*componentProps*/ ctx[7]];
 
 	function switch_instance_name_binding(value) {
 		/*switch_instance_name_binding*/ ctx[19](value);
 	}
 
-	var switch_value = /*componentView*/ ctx[10];
+	var switch_value = /*componentView*/ ctx[11];
 
 	function switch_props(ctx) {
 		let switch_instance_props = {};
@@ -9002,8 +9769,8 @@ function create_fragment$D(ctx) {
 			switch_instance_props = assign(switch_instance_props, switch_instance_spread_levels[i]);
 		}
 
-		if (/*panelName*/ ctx[4] !== void 0) {
-			switch_instance_props.name = /*panelName*/ ctx[4];
+		if (/*panelName*/ ctx[5] !== void 0) {
+			switch_instance_props.name = /*panelName*/ ctx[5];
 		}
 
 		return { props: switch_instance_props };
@@ -9020,9 +9787,9 @@ function create_fragment$D(ctx) {
 		c() {
 			div = element("div");
 			if (switch_instance) create_component(switch_instance.$$.fragment);
-			attr(div, "data-util", /*panelName*/ ctx[4]);
-			attr(div, "class", div_class_value = arrayJoin(["PinturaPanel", /*klass*/ ctx[1]]));
-			attr(div, "style", /*style*/ ctx[5]);
+			attr(div, "data-util", /*panelName*/ ctx[5]);
+			attr(div, "class", div_class_value = arrayJoin(["PinturaPanel", /*klass*/ ctx[2]]));
+			attr(div, "style", /*style*/ ctx[6]);
 		},
 		m(target, anchor) {
 			insert(target, div, anchor);
@@ -9034,17 +9801,17 @@ function create_fragment$D(ctx) {
 			current = true;
 		},
 		p(ctx, [dirty]) {
-			const switch_instance_changes = (dirty & /*componentProps*/ 64)
-			? get_spread_update(switch_instance_spread_levels, [get_spread_object(/*componentProps*/ ctx[6])])
+			const switch_instance_changes = (dirty & /*componentProps*/ 128)
+			? get_spread_update(switch_instance_spread_levels, [get_spread_object(/*componentProps*/ ctx[7])])
 			: {};
 
-			if (!updating_name && dirty & /*panelName*/ 16) {
+			if (!updating_name && dirty & /*panelName*/ 32) {
 				updating_name = true;
-				switch_instance_changes.name = /*panelName*/ ctx[4];
+				switch_instance_changes.name = /*panelName*/ ctx[5];
 				add_flush_callback(() => updating_name = false);
 			}
 
-			if (switch_value !== (switch_value = /*componentView*/ ctx[10])) {
+			if (switch_value !== (switch_value = /*componentView*/ ctx[11])) {
 				if (switch_instance) {
 					group_outros();
 					const old_component = switch_instance;
@@ -9071,16 +9838,16 @@ function create_fragment$D(ctx) {
 				switch_instance.$set(switch_instance_changes);
 			}
 
-			if (!current || dirty & /*panelName*/ 16) {
-				attr(div, "data-util", /*panelName*/ ctx[4]);
+			if (!current || dirty & /*panelName*/ 32) {
+				attr(div, "data-util", /*panelName*/ ctx[5]);
 			}
 
-			if (!current || dirty & /*klass*/ 2 && div_class_value !== (div_class_value = arrayJoin(["PinturaPanel", /*klass*/ ctx[1]]))) {
+			if (!current || dirty & /*klass*/ 4 && div_class_value !== (div_class_value = arrayJoin(["PinturaPanel", /*klass*/ ctx[2]]))) {
 				attr(div, "class", div_class_value);
 			}
 
-			if (!current || dirty & /*style*/ 32) {
-				attr(div, "style", /*style*/ ctx[5]);
+			if (!current || dirty & /*style*/ 64) {
+				attr(div, "style", /*style*/ ctx[6]);
 			}
 		},
 		i(local) {
@@ -9100,7 +9867,7 @@ function create_fragment$D(ctx) {
 	};
 }
 
-function instance$D($$self, $$props, $$invalidate) {
+function instance$K($$self, $$props, $$invalidate) {
 	let style;
 	let componentProps;
 	let $opacityClamped;
@@ -9165,12 +9932,12 @@ function instance$D($$self, $$props, $$invalidate) {
 	let hasBeenMounted = false;
 
 	onMount(() => {
-		$$invalidate(3, hasBeenMounted = true);
+		$$invalidate(4, hasBeenMounted = true);
 	});
 
 	function switch_instance_name_binding(value) {
 		panelName = value;
-		$$invalidate(4, panelName);
+		$$invalidate(5, panelName);
 	}
 
 	function switch_instance_binding($$value) {
@@ -9181,28 +9948,28 @@ function instance$D($$self, $$props, $$invalidate) {
 	}
 
 	const measure_handler = e => {
-		if (!hasBeenMounted) return;
-		$$invalidate(2, rect = e.detail);
+		if (!hasBeenMounted || !isActive) return;
+		$$invalidate(3, rect = e.detail);
 		dispatch("measure", { ...rect });
 	};
 
 	$$self.$$set = $$props => {
-		if ("isActive" in $$props) $$invalidate(11, isActive = $$props.isActive);
+		if ("isActive" in $$props) $$invalidate(1, isActive = $$props.isActive);
 		if ("isAnimated" in $$props) $$invalidate(12, isAnimated = $$props.isAnimated);
 		if ("stores" in $$props) $$invalidate(13, stores = $$props.stores);
 		if ("content" in $$props) $$invalidate(14, content = $$props.content);
 		if ("component" in $$props) $$invalidate(0, component = $$props.component);
 		if ("locale" in $$props) $$invalidate(15, locale = $$props.locale);
-		if ("class" in $$props) $$invalidate(1, klass = $$props.class);
+		if ("class" in $$props) $$invalidate(2, klass = $$props.class);
 	};
 
 	$$self.$$.update = () => {
-		if ($$self.$$.dirty & /*rect, isActive, component*/ 2053) {
+		if ($$self.$$.dirty & /*rect, isActive, component*/ 11) {
 			// when the view rect changes and the panel is in active state or became active, dispatch measure event
 			if (rect && isActive && component) dispatch("measure", rect);
 		}
 
-		if ($$self.$$.dirty & /*isActive, isAnimated*/ 6144) {
+		if ($$self.$$.dirty & /*isActive, isAnimated*/ 4098) {
 			opacity.set(isActive ? 1 : 0, { hard: !isAnimated });
 		}
 
@@ -9214,7 +9981,7 @@ function instance$D($$self, $$props, $$invalidate) {
 			}
 		}
 
-		if ($$self.$$.dirty & /*hasBeenMounted, isHidden*/ 131080) {
+		if ($$self.$$.dirty & /*hasBeenMounted, isHidden*/ 131088) {
 			hasBeenMounted && dispatch(isHidden ? "hide" : "show");
 		}
 
@@ -9224,17 +9991,17 @@ function instance$D($$self, $$props, $$invalidate) {
 
 		if ($$self.$$.dirty & /*$opacityClamped*/ 262144) {
 			// only set opacity prop if is below 0
-			$$invalidate(5, style = $opacityClamped < 1
+			$$invalidate(6, style = $opacityClamped < 1
 			? `opacity: ${$opacityClamped}`
 			: undefined);
 		}
 
-		if ($$self.$$.dirty & /*isActive*/ 2048) {
+		if ($$self.$$.dirty & /*isActive*/ 2) {
 			set_store_value(isActivePrivateStore, $isActivePrivateStore = isActive, $isActivePrivateStore);
 		}
 
 		if ($$self.$$.dirty & /*stores, locale*/ 40960) {
-			$$invalidate(6, componentProps = {
+			$$invalidate(7, componentProps = {
 				...componentComputedProps,
 				...componentComputedStateProps,
 				stores,
@@ -9245,6 +10012,7 @@ function instance$D($$self, $$props, $$invalidate) {
 
 	return [
 		component,
+		isActive,
 		klass,
 		rect,
 		hasBeenMounted,
@@ -9255,7 +10023,6 @@ function instance$D($$self, $$props, $$invalidate) {
 		opacityClamped,
 		isActivePrivateStore,
 		componentView,
-		isActive,
 		isAnimated,
 		stores,
 		content,
@@ -9273,14 +10040,14 @@ class Panel extends SvelteComponent {
 	constructor(options) {
 		super();
 
-		init(this, options, instance$D, create_fragment$D, safe_not_equal, {
-			isActive: 11,
+		init(this, options, instance$K, create_fragment$K, safe_not_equal, {
+			isActive: 1,
 			isAnimated: 12,
 			stores: 13,
 			content: 14,
 			component: 0,
 			locale: 15,
-			class: 1,
+			class: 2,
 			opacity: 16
 		});
 	}
@@ -9292,7 +10059,7 @@ class Panel extends SvelteComponent {
 
 /* src/core/ui/components/Icon.svelte generated by Svelte v3.37.0 */
 
-function create_fragment$C(ctx) {
+function create_fragment$J(ctx) {
 	let svg;
 	let svg_viewBox_value;
 	let current;
@@ -9366,7 +10133,7 @@ function create_fragment$C(ctx) {
 	};
 }
 
-function instance$C($$self, $$props, $$invalidate) {
+function instance$J($$self, $$props, $$invalidate) {
 	let { $$slots: slots = {}, $$scope } = $$props;
 	let { width = 24 } = $$props;
 	let { height = 24 } = $$props;
@@ -9387,7 +10154,7 @@ function instance$C($$self, $$props, $$invalidate) {
 class Icon extends SvelteComponent {
 	constructor(options) {
 		super();
-		init(this, options, instance$C, create_fragment$C, safe_not_equal, { width: 0, height: 1, style: 2, class: 3 });
+		init(this, options, instance$J, create_fragment$J, safe_not_equal, { width: 0, height: 1, style: 2, class: 3 });
 	}
 }
 
@@ -9395,14 +10162,14 @@ var isEventTarget = (e, element) => element === e.target || element.contains(e.t
 
 /* src/core/ui/components/Button.svelte generated by Svelte v3.37.0 */
 
-function create_if_block_1$c(ctx) {
+function create_if_block_1$d(ctx) {
 	let icon_1;
 	let current;
 
 	icon_1 = new Icon({
 			props: {
 				class: "PinturaButtonIcon",
-				$$slots: { default: [create_default_slot$c] },
+				$$slots: { default: [create_default_slot$h] },
 				$$scope: { ctx }
 			}
 		});
@@ -9439,8 +10206,8 @@ function create_if_block_1$c(ctx) {
 	};
 }
 
-// (40:16) <Icon class="PinturaButtonIcon">
-function create_default_slot$c(ctx) {
+// (44:16) <Icon class="PinturaButtonIcon">
+function create_default_slot$h(ctx) {
 	let g;
 
 	return {
@@ -9459,8 +10226,8 @@ function create_default_slot$c(ctx) {
 	};
 }
 
-// (46:12) {#if label}
-function create_if_block$a(ctx) {
+// (50:12) {#if label}
+function create_if_block$c(ctx) {
 	let span;
 	let t;
 
@@ -9487,13 +10254,13 @@ function create_if_block$a(ctx) {
 	};
 }
 
-// (37:10)          
+// (41:10)          
 function fallback_block$2(ctx) {
 	let span;
 	let t;
 	let current;
-	let if_block0 = /*icon*/ ctx[1] && create_if_block_1$c(ctx);
-	let if_block1 = /*label*/ ctx[0] && create_if_block$a(ctx);
+	let if_block0 = /*icon*/ ctx[1] && create_if_block_1$d(ctx);
+	let if_block1 = /*label*/ ctx[0] && create_if_block$c(ctx);
 
 	return {
 		c() {
@@ -9519,7 +10286,7 @@ function fallback_block$2(ctx) {
 						transition_in(if_block0, 1);
 					}
 				} else {
-					if_block0 = create_if_block_1$c(ctx);
+					if_block0 = create_if_block_1$d(ctx);
 					if_block0.c();
 					transition_in(if_block0, 1);
 					if_block0.m(span, t);
@@ -9538,7 +10305,7 @@ function fallback_block$2(ctx) {
 				if (if_block1) {
 					if_block1.p(ctx, dirty);
 				} else {
-					if_block1 = create_if_block$a(ctx);
+					if_block1 = create_if_block$c(ctx);
 					if_block1.c();
 					if_block1.m(span, null);
 				}
@@ -9568,7 +10335,7 @@ function fallback_block$2(ctx) {
 	};
 }
 
-function create_fragment$B(ctx) {
+function create_fragment$I(ctx) {
 	let button;
 	let current;
 	let mounted;
@@ -9663,7 +10430,7 @@ function create_fragment$B(ctx) {
 	};
 }
 
-function instance$B($$self, $$props, $$invalidate) {
+function instance$I($$self, $$props, $$invalidate) {
 	let elButtonInnerClass;
 	let elButtonClass;
 	let elLabelClass;
@@ -9754,7 +10521,7 @@ class Button extends SvelteComponent {
 	constructor(options) {
 		super();
 
-		init(this, options, instance$B, create_fragment$B, safe_not_equal, {
+		init(this, options, instance$I, create_fragment$I, safe_not_equal, {
 			class: 12,
 			label: 0,
 			labelClass: 13,
@@ -9814,10 +10581,14 @@ var interactable = (node, options = {}) => {
     }
     //#region pointer registry
     const pointers = [];
+    const getPointerTimestamp = (e) => {
+        return e.timeStamp === 0 ? Date.now() : e.timeStamp;
+    };
     const addPointer = (e) => {
+        const timeStamp = getPointerTimestamp(e);
         const pointer = {
-            timeStamp: e.timeStamp,
-            timeStampInitial: e.timeStamp,
+            timeStamp,
+            timeStampInitial: timeStamp,
             position: getEventPosition(e),
             origin: getEventPosition(e),
             velocity: vectorCreateEmpty(),
@@ -9844,7 +10615,7 @@ var interactable = (node, options = {}) => {
         const pointer = getPointer(e);
         if (!pointer)
             return;
-        const { timeStamp } = e;
+        const timeStamp = getPointerTimestamp(e);
         // position
         const eventPosition = getEventPosition(e);
         // duration between previous interaction and new interaction, an interaction duration cannot be faster than 1 millisecond
@@ -9943,7 +10714,7 @@ var interactable = (node, options = {}) => {
         e.preventDefault();
         // update pointer state
         updatePointer(e);
-        let translation = vectorClone(pointers[0].translation);
+        const translation = vectorClone(pointers[0].translation);
         let scalar = currentScale;
         if (pinch && isMultiTouching()) {
             // current pinch distance
@@ -9954,8 +10725,6 @@ var interactable = (node, options = {}) => {
             scalar *= pinchScalar;
             // current offset
             vectorAdd(translation, pointers[1].translation);
-            // multiply original by scalar
-            // vectorMultiply(translation, 0.5 * (1 / scalar));
         }
         translation.x += currentTranslation.x;
         translation.y += currentTranslation.y;
@@ -10085,8 +10854,8 @@ var nudgeable = (element, options = {}) => {
     const handleKeydown = (e) => {
         const { key } = e;
         const isShift = e.shiftKey;
-        const isHorizontalAction = /up|down/i.test(key);
-        const isVerticalAction = /left|right/i.test(key);
+        const isVerticalAction = /up|down/i.test(key);
+        const isHorizontalAction = /left|right/i.test(key);
         // no directional key
         if (!isHorizontalAction && !isVerticalAction)
             return;
@@ -10165,9 +10934,16 @@ var getWheelDelta = (e) => {
     return d;
 };
 
+var ArrowKeys = {
+    Up: 38,
+    Down: 40,
+    Left: 37,
+    Right: 39,
+};
+
 /* src/core/ui/components/Scrollable.svelte generated by Svelte v3.37.0 */
 
-function create_fragment$A(ctx) {
+function create_fragment$H(ctx) {
 	let div1;
 	let div0;
 	let div1_class_value;
@@ -10279,7 +11055,7 @@ function create_fragment$A(ctx) {
 	};
 }
 
-function instance$A($$self, $$props, $$invalidate) {
+function instance$H($$self, $$props, $$invalidate) {
 	let size;
 	let axis;
 	let containerStyle;
@@ -10291,6 +11067,7 @@ function instance$A($$self, $$props, $$invalidate) {
 	let $keysPressedStore;
 	let { $$slots: slots = {}, $$scope } = $$props;
 	const dispatch = createEventDispatcher();
+	const ArrowKeyCodes = Object.values(ArrowKeys);
 	const keysPressedStore = getContext("keysPressed");
 	component_subscribe($$self, keysPressedStore, value => $$invalidate(46, $keysPressedStore = value));
 	let scrollState = "idle";
@@ -10322,7 +11099,7 @@ function instance$A($$self, $$props, $$invalidate) {
 	let scrollAtRest = true;
 
 	// triggers onscroll callback
-	scrollOffset.subscribe(value => {
+	const scrollOffsetUnsub = scrollOffset.subscribe(value => {
 		const pos = vectorCreateEmpty();
 		pos[scrollDirection] = value;
 		onscroll(pos);
@@ -10454,7 +11231,10 @@ function instance$A($$self, $$props, $$invalidate) {
 		if (!overflows) return;
 
 		// ignore this handler if is dragging
-		if (!scrollReleased && !$keysPressedStore.length) return;
+		if (!scrollReleased) return;
+
+		// ignore this handler if is pressing arrow key
+		if ($keysPressedStore.some(key => ArrowKeyCodes.includes(key))) return;
 
 		let target = e.target;
 
@@ -10481,8 +11261,8 @@ function instance$A($$self, $$props, $$invalidate) {
 	};
 
 	const handleScroll = () => {
-		// the scroll handler corrects auto browser scroll, 
-		// is triggered when browser tries to focus an 
+		// the scroll handler corrects auto browser scroll,
+		// is triggered when browser tries to focus an
 		// element outside of the scrollcontiner
 		$$invalidate(3, container[scrollDirection === "x" ? "scrollLeft" : "scrollTop"] = 0, container);
 	};
@@ -10492,6 +11272,10 @@ function instance$A($$self, $$props, $$invalidate) {
 		const offset = get_store_value(scrollOffset);
 		setScrollOffset(offset + delta * scrollStep, { animate: true });
 	};
+
+	onDestroy(() => {
+		scrollOffsetUnsub();
+	});
 
 	const measure_handler = e => $$invalidate(2, scrollRect = e.detail);
 
@@ -10537,7 +11321,7 @@ function instance$A($$self, $$props, $$invalidate) {
 
 		if ($$self.$$.dirty[0] & /*scrollContainerRect, scrollRect, size, maskFeatherStartOpacity, maskFeatherEndOpacity*/ 1611399172 | $$self.$$.dirty[1] & /*$scrollOffset, containerFeatherSize*/ 12) {
 			if ($scrollOffset != null && scrollContainerRect && containerFeatherSize != null && scrollRect) {
-				const startOffset = -$scrollOffset / containerFeatherSize;
+				const startOffset = -1 * $scrollOffset / containerFeatherSize;
 				const endOffset = -(scrollContainerRect[size] - scrollRect[size] - $scrollOffset) / containerFeatherSize;
 				$$invalidate(18, maskFeatherStartOpacity = clamp(1 - startOffset, 0, 1));
 				$$invalidate(19, maskFeatherEndOpacity = clamp(1 - endOffset, 0, 1));
@@ -10621,8 +11405,8 @@ class Scrollable extends SvelteComponent {
 		init(
 			this,
 			options,
-			instance$A,
-			create_fragment$A,
+			instance$H,
+			create_fragment$H,
 			safe_not_equal,
 			{
 				class: 0,
@@ -10655,7 +11439,7 @@ function fade$1(node, { delay = 0, duration = 400, easing = identity } = {}) {
 
 /* src/core/ui/components/StatusMessage.svelte generated by Svelte v3.37.0 */
 
-function create_fragment$z(ctx) {
+function create_fragment$G(ctx) {
 	let span;
 	let t;
 	let span_transition;
@@ -10713,7 +11497,7 @@ function create_fragment$z(ctx) {
 	};
 }
 
-function instance$z($$self, $$props, $$invalidate) {
+function instance$G($$self, $$props, $$invalidate) {
 	let { text } = $$props;
 	let { onmeasure = noop$1 } = $$props;
 
@@ -10728,13 +11512,13 @@ function instance$z($$self, $$props, $$invalidate) {
 class StatusMessage extends SvelteComponent {
 	constructor(options) {
 		super();
-		init(this, options, instance$z, create_fragment$z, safe_not_equal, { text: 0, onmeasure: 1 });
+		init(this, options, instance$G, create_fragment$G, safe_not_equal, { text: 0, onmeasure: 1 });
 	}
 }
 
 /* src/core/ui/components/ProgressIndicator.svelte generated by Svelte v3.37.0 */
 
-function create_fragment$y(ctx) {
+function create_fragment$F(ctx) {
 	let span1;
 	let svg;
 	let g;
@@ -10814,7 +11598,7 @@ function create_fragment$y(ctx) {
 	};
 }
 
-function instance$y($$self, $$props, $$invalidate) {
+function instance$F($$self, $$props, $$invalidate) {
 	let formattedValue;
 	let circleValue;
 	let circleOpacity;
@@ -10829,8 +11613,12 @@ function instance$y($$self, $$props, $$invalidate) {
 	const animatedProgressClamped = derived([animatedValue], $animatedValue => clamp($animatedValue, min, max));
 	component_subscribe($$self, animatedProgressClamped, value => $$invalidate(9, $animatedProgressClamped = value));
 
-	animatedProgressClamped.subscribe(value => {
+	const animatedProgressClampedUnsub = animatedProgressClamped.subscribe(value => {
 		if (progress === 1 && Math.round(value) >= 100) dispatch("complete");
+	});
+
+	onDestroy(() => {
+		animatedProgressClampedUnsub();
 	});
 
 	$$self.$$set = $$props => {
@@ -10886,7 +11674,7 @@ class ProgressIndicator extends SvelteComponent {
 	constructor(options) {
 		super();
 
-		init(this, options, instance$y, create_fragment$y, safe_not_equal, {
+		init(this, options, instance$F, create_fragment$F, safe_not_equal, {
 			progress: 5,
 			min: 6,
 			max: 7,
@@ -10897,7 +11685,7 @@ class ProgressIndicator extends SvelteComponent {
 
 /* src/core/ui/components/StatusAside.svelte generated by Svelte v3.37.0 */
 
-function create_fragment$x(ctx) {
+function create_fragment$E(ctx) {
 	let span;
 	let span_class_value;
 	let current;
@@ -10951,7 +11739,7 @@ function create_fragment$x(ctx) {
 	};
 }
 
-function instance$x($$self, $$props, $$invalidate) {
+function instance$E($$self, $$props, $$invalidate) {
 	let style;
 	let { $$slots: slots = {}, $$scope } = $$props;
 	let { offset = 0 } = $$props;
@@ -10977,7 +11765,279 @@ function instance$x($$self, $$props, $$invalidate) {
 class StatusAside extends SvelteComponent {
 	constructor(options) {
 		super();
-		init(this, options, instance$x, create_fragment$x, safe_not_equal, { offset: 2, opacity: 3, class: 0 });
+		init(this, options, instance$E, create_fragment$E, safe_not_equal, { offset: 2, opacity: 3, class: 0 });
+	}
+}
+
+/* src/core/ui/components/Tag.svelte generated by Svelte v3.37.0 */
+
+function create_if_block_2$9(ctx) {
+	let label;
+	let label_for_value;
+	let current;
+	const default_slot_template = /*#slots*/ ctx[3].default;
+	const default_slot = create_slot(default_slot_template, ctx, /*$$scope*/ ctx[2], null);
+	let label_levels = [{ for: label_for_value = "_" }, /*attributes*/ ctx[1]];
+	let label_data = {};
+
+	for (let i = 0; i < label_levels.length; i += 1) {
+		label_data = assign(label_data, label_levels[i]);
+	}
+
+	return {
+		c() {
+			label = element("label");
+			if (default_slot) default_slot.c();
+			set_attributes(label, label_data);
+		},
+		m(target, anchor) {
+			insert(target, label, anchor);
+
+			if (default_slot) {
+				default_slot.m(label, null);
+			}
+
+			current = true;
+		},
+		p(ctx, dirty) {
+			if (default_slot) {
+				if (default_slot.p && dirty & /*$$scope*/ 4) {
+					update_slot(default_slot, default_slot_template, ctx, /*$$scope*/ ctx[2], dirty, null, null);
+				}
+			}
+
+			set_attributes(label, label_data = get_spread_update(label_levels, [
+				{ for: label_for_value },
+				dirty & /*attributes*/ 2 && /*attributes*/ ctx[1]
+			]));
+		},
+		i(local) {
+			if (current) return;
+			transition_in(default_slot, local);
+			current = true;
+		},
+		o(local) {
+			transition_out(default_slot, local);
+			current = false;
+		},
+		d(detaching) {
+			if (detaching) detach(label);
+			if (default_slot) default_slot.d(detaching);
+		}
+	};
+}
+
+// (12:26) 
+function create_if_block_1$c(ctx) {
+	let div;
+	let current;
+	const default_slot_template = /*#slots*/ ctx[3].default;
+	const default_slot = create_slot(default_slot_template, ctx, /*$$scope*/ ctx[2], null);
+	let div_levels = [/*attributes*/ ctx[1]];
+	let div_data = {};
+
+	for (let i = 0; i < div_levels.length; i += 1) {
+		div_data = assign(div_data, div_levels[i]);
+	}
+
+	return {
+		c() {
+			div = element("div");
+			if (default_slot) default_slot.c();
+			set_attributes(div, div_data);
+		},
+		m(target, anchor) {
+			insert(target, div, anchor);
+
+			if (default_slot) {
+				default_slot.m(div, null);
+			}
+
+			current = true;
+		},
+		p(ctx, dirty) {
+			if (default_slot) {
+				if (default_slot.p && dirty & /*$$scope*/ 4) {
+					update_slot(default_slot, default_slot_template, ctx, /*$$scope*/ ctx[2], dirty, null, null);
+				}
+			}
+
+			set_attributes(div, div_data = get_spread_update(div_levels, [dirty & /*attributes*/ 2 && /*attributes*/ ctx[1]]));
+		},
+		i(local) {
+			if (current) return;
+			transition_in(default_slot, local);
+			current = true;
+		},
+		o(local) {
+			transition_out(default_slot, local);
+			current = false;
+		},
+		d(detaching) {
+			if (detaching) detach(div);
+			if (default_slot) default_slot.d(detaching);
+		}
+	};
+}
+
+// (8:0) {#if name === 'div'}
+function create_if_block$b(ctx) {
+	let div;
+	let current;
+	const default_slot_template = /*#slots*/ ctx[3].default;
+	const default_slot = create_slot(default_slot_template, ctx, /*$$scope*/ ctx[2], null);
+	let div_levels = [/*attributes*/ ctx[1]];
+	let div_data = {};
+
+	for (let i = 0; i < div_levels.length; i += 1) {
+		div_data = assign(div_data, div_levels[i]);
+	}
+
+	return {
+		c() {
+			div = element("div");
+			if (default_slot) default_slot.c();
+			set_attributes(div, div_data);
+		},
+		m(target, anchor) {
+			insert(target, div, anchor);
+
+			if (default_slot) {
+				default_slot.m(div, null);
+			}
+
+			current = true;
+		},
+		p(ctx, dirty) {
+			if (default_slot) {
+				if (default_slot.p && dirty & /*$$scope*/ 4) {
+					update_slot(default_slot, default_slot_template, ctx, /*$$scope*/ ctx[2], dirty, null, null);
+				}
+			}
+
+			set_attributes(div, div_data = get_spread_update(div_levels, [dirty & /*attributes*/ 2 && /*attributes*/ ctx[1]]));
+		},
+		i(local) {
+			if (current) return;
+			transition_in(default_slot, local);
+			current = true;
+		},
+		o(local) {
+			transition_out(default_slot, local);
+			current = false;
+		},
+		d(detaching) {
+			if (detaching) detach(div);
+			if (default_slot) default_slot.d(detaching);
+		}
+	};
+}
+
+function create_fragment$D(ctx) {
+	let current_block_type_index;
+	let if_block;
+	let if_block_anchor;
+	let current;
+	const if_block_creators = [create_if_block$b, create_if_block_1$c, create_if_block_2$9];
+	const if_blocks = [];
+
+	function select_block_type(ctx, dirty) {
+		if (/*name*/ ctx[0] === "div") return 0;
+		if (/*name*/ ctx[0] === "span") return 1;
+		if (/*name*/ ctx[0] === "label") return 2;
+		return -1;
+	}
+
+	if (~(current_block_type_index = select_block_type(ctx))) {
+		if_block = if_blocks[current_block_type_index] = if_block_creators[current_block_type_index](ctx);
+	}
+
+	return {
+		c() {
+			if (if_block) if_block.c();
+			if_block_anchor = empty();
+		},
+		m(target, anchor) {
+			if (~current_block_type_index) {
+				if_blocks[current_block_type_index].m(target, anchor);
+			}
+
+			insert(target, if_block_anchor, anchor);
+			current = true;
+		},
+		p(ctx, [dirty]) {
+			let previous_block_index = current_block_type_index;
+			current_block_type_index = select_block_type(ctx);
+
+			if (current_block_type_index === previous_block_index) {
+				if (~current_block_type_index) {
+					if_blocks[current_block_type_index].p(ctx, dirty);
+				}
+			} else {
+				if (if_block) {
+					group_outros();
+
+					transition_out(if_blocks[previous_block_index], 1, 1, () => {
+						if_blocks[previous_block_index] = null;
+					});
+
+					check_outros();
+				}
+
+				if (~current_block_type_index) {
+					if_block = if_blocks[current_block_type_index];
+
+					if (!if_block) {
+						if_block = if_blocks[current_block_type_index] = if_block_creators[current_block_type_index](ctx);
+						if_block.c();
+					} else {
+						if_block.p(ctx, dirty);
+					}
+
+					transition_in(if_block, 1);
+					if_block.m(if_block_anchor.parentNode, if_block_anchor);
+				} else {
+					if_block = null;
+				}
+			}
+		},
+		i(local) {
+			if (current) return;
+			transition_in(if_block);
+			current = true;
+		},
+		o(local) {
+			transition_out(if_block);
+			current = false;
+		},
+		d(detaching) {
+			if (~current_block_type_index) {
+				if_blocks[current_block_type_index].d(detaching);
+			}
+
+			if (detaching) detach(if_block_anchor);
+		}
+	};
+}
+
+function instance$D($$self, $$props, $$invalidate) {
+	let { $$slots: slots = {}, $$scope } = $$props;
+	let { name = "div" } = $$props;
+	let { attributes = {} } = $$props;
+
+	$$self.$$set = $$props => {
+		if ("name" in $$props) $$invalidate(0, name = $$props.name);
+		if ("attributes" in $$props) $$invalidate(1, attributes = $$props.attributes);
+		if ("$$scope" in $$props) $$invalidate(2, $$scope = $$props.$$scope);
+	};
+
+	return [name, attributes, $$scope, slots];
+}
+
+class Tag extends SvelteComponent {
+	constructor(options) {
+		super();
+		init(this, options, instance$D, create_fragment$D, safe_not_equal, { name: 0, attributes: 1 });
 	}
 }
 
@@ -10987,7 +12047,7 @@ var getDevicePixelRatio = () => (isBrowser() && window.devicePixelRatio) || 1;
 let fn = null;
 var snapToPixel = (v) => {
     if (fn === null)
-        fn = getDevicePixelRatio() === 1 ? (v) => Math.round(v) : (v) => v;
+        fn = getDevicePixelRatio() === 1 ? Math.round : (v) => v;
     return fn(v);
 };
 
@@ -10997,11 +12057,11 @@ const get_details_slot_context = ctx => ({});
 const get_label_slot_changes = dirty => ({});
 const get_label_slot_context = ctx => ({});
 
-// (151:0) <Button bind:this={buttonComponent}      class={arrayJoin(['PinturaDetailsButton', buttonClass])}      onkeydown={handleButtonKeydown}      onclick={handleClick}>
-function create_default_slot$b(ctx) {
+// (177:0) <Button     bind:this={buttonComponent}     class={arrayJoin(['PinturaDetailsButton', buttonClass])}     onkeydown={handleButtonKeydown}     onclick={handleClick} >
+function create_default_slot$g(ctx) {
 	let current;
-	const label_slot_template = /*#slots*/ ctx[30].label;
-	const label_slot = create_slot(label_slot_template, ctx, /*$$scope*/ ctx[34], get_label_slot_context);
+	const label_slot_template = /*#slots*/ ctx[35].label;
+	const label_slot = create_slot(label_slot_template, ctx, /*$$scope*/ ctx[39], get_label_slot_context);
 
 	return {
 		c() {
@@ -11016,8 +12076,8 @@ function create_default_slot$b(ctx) {
 		},
 		p(ctx, dirty) {
 			if (label_slot) {
-				if (label_slot.p && dirty[1] & /*$$scope*/ 8) {
-					update_slot(label_slot, label_slot_template, ctx, /*$$scope*/ ctx[34], dirty, get_label_slot_changes, get_label_slot_context);
+				if (label_slot.p && dirty[1] & /*$$scope*/ 256) {
+					update_slot(label_slot, label_slot_template, ctx, /*$$scope*/ ctx[39], dirty, get_label_slot_changes, get_label_slot_context);
 				}
 			}
 		},
@@ -11036,20 +12096,26 @@ function create_default_slot$b(ctx) {
 	};
 }
 
-// (158:0) {#if isVisible}
+// (186:0) {#if isVisible}
 function create_if_block_1$b(ctx) {
 	let div;
+	let t;
+	let span;
 	let div_class_value;
 	let current;
 	let mounted;
 	let dispose;
-	const details_slot_template = /*#slots*/ ctx[30].details;
-	const details_slot = create_slot(details_slot_template, ctx, /*$$scope*/ ctx[34], get_details_slot_context);
+	const details_slot_template = /*#slots*/ ctx[35].details;
+	const details_slot = create_slot(details_slot_template, ctx, /*$$scope*/ ctx[39], get_details_slot_context);
 
 	return {
 		c() {
 			div = element("div");
 			if (details_slot) details_slot.c();
+			t = space();
+			span = element("span");
+			attr(span, "class", "PinturaDetailsPanelTip");
+			attr(span, "style", /*tipStyle*/ ctx[7]);
 			attr(div, "class", div_class_value = arrayJoin(["PinturaDetailsPanel", /*panelClass*/ ctx[1]]));
 			attr(div, "tabindex", "-1");
 			attr(div, "style", /*style*/ ctx[6]);
@@ -11061,13 +12127,15 @@ function create_if_block_1$b(ctx) {
 				details_slot.m(div, null);
 			}
 
-			/*div_binding*/ ctx[32](div);
+			append(div, t);
+			append(div, span);
+			/*div_binding*/ ctx[37](div);
 			current = true;
 
 			if (!mounted) {
 				dispose = [
-					listen(div, "keydown", /*handlePanelKeydown*/ ctx[16]),
-					listen(div, "measure", /*measure_handler*/ ctx[33]),
+					listen(div, "keydown", /*handlePanelKeydown*/ ctx[17]),
+					listen(div, "measure", /*measure_handler*/ ctx[38]),
 					action_destroyer(measurable.call(null, div))
 				];
 
@@ -11076,9 +12144,13 @@ function create_if_block_1$b(ctx) {
 		},
 		p(ctx, dirty) {
 			if (details_slot) {
-				if (details_slot.p && dirty[1] & /*$$scope*/ 8) {
-					update_slot(details_slot, details_slot_template, ctx, /*$$scope*/ ctx[34], dirty, get_details_slot_changes, get_details_slot_context);
+				if (details_slot.p && dirty[1] & /*$$scope*/ 256) {
+					update_slot(details_slot, details_slot_template, ctx, /*$$scope*/ ctx[39], dirty, get_details_slot_changes, get_details_slot_context);
 				}
+			}
+
+			if (!current || dirty[0] & /*tipStyle*/ 128) {
+				attr(span, "style", /*tipStyle*/ ctx[7]);
 			}
 
 			if (!current || dirty[0] & /*panelClass*/ 2 && div_class_value !== (div_class_value = arrayJoin(["PinturaDetailsPanel", /*panelClass*/ ctx[1]]))) {
@@ -11101,14 +12173,14 @@ function create_if_block_1$b(ctx) {
 		d(detaching) {
 			if (detaching) detach(div);
 			if (details_slot) details_slot.d(detaching);
-			/*div_binding*/ ctx[32](null);
+			/*div_binding*/ ctx[37](null);
 			mounted = false;
 			run_all(dispose);
 		}
 	};
 }
 
-function create_fragment$w(ctx) {
+function create_fragment$C(ctx) {
 	let t0;
 	let button;
 	let t1;
@@ -11120,14 +12192,14 @@ function create_fragment$w(ctx) {
 
 	let button_props = {
 		class: arrayJoin(["PinturaDetailsButton", /*buttonClass*/ ctx[0]]),
-		onkeydown: /*handleButtonKeydown*/ ctx[15],
-		onclick: /*handleClick*/ ctx[14],
-		$$slots: { default: [create_default_slot$b] },
+		onkeydown: /*handleButtonKeydown*/ ctx[16],
+		onclick: /*handleClick*/ ctx[15],
+		$$slots: { default: [create_default_slot$g] },
 		$$scope: { ctx }
 	};
 
 	button = new Button({ props: button_props });
-	/*button_binding*/ ctx[31](button);
+	/*button_binding*/ ctx[36](button);
 	let if_block0 = /*isVisible*/ ctx[5] && create_if_block_1$b(ctx);
 	let if_block1 = false ;
 
@@ -11152,10 +12224,10 @@ function create_fragment$w(ctx) {
 			if (!mounted) {
 				dispose = [
 					listen(document.body, "pointerdown", function () {
-						if (is_function(/*handleDown*/ ctx[7])) /*handleDown*/ ctx[7].apply(this, arguments);
+						if (is_function(/*handleDown*/ ctx[8])) /*handleDown*/ ctx[8].apply(this, arguments);
 					}),
 					listen(document.body, "pointerup", function () {
-						if (is_function(/*handleUp*/ ctx[8])) /*handleUp*/ ctx[8].apply(this, arguments);
+						if (is_function(/*handleUp*/ ctx[9])) /*handleUp*/ ctx[9].apply(this, arguments);
 					})
 				];
 
@@ -11167,7 +12239,7 @@ function create_fragment$w(ctx) {
 			const button_changes = {};
 			if (dirty[0] & /*buttonClass*/ 1) button_changes.class = arrayJoin(["PinturaDetailsButton", /*buttonClass*/ ctx[0]]);
 
-			if (dirty[1] & /*$$scope*/ 8) {
+			if (dirty[1] & /*$$scope*/ 256) {
 				button_changes.$$scope = { dirty, ctx };
 			}
 
@@ -11211,7 +12283,7 @@ function create_fragment$w(ctx) {
 		},
 		d(detaching) {
 			if (detaching) detach(t0);
-			/*button_binding*/ ctx[31](null);
+			/*button_binding*/ ctx[36](null);
 			destroy_component(button, detaching);
 			if (detaching) detach(t1);
 			if (if_block0) if_block0.d(detaching);
@@ -11225,18 +12297,22 @@ function create_fragment$w(ctx) {
 
 let panelMargin = 12;
 
-function instance$w($$self, $$props, $$invalidate) {
+function instance$C($$self, $$props, $$invalidate) {
 	let buttonElement;
+	let offsetProgress;
 	let isVisible;
 	let isAnimating;
 	let transform;
 	let style;
+	let tipScale;
+	let tipOpacity;
+	let tipStyle;
 	let handleDown;
 	let handleUp;
+	let $offset;
 	let $portalRootRect;
 	let $position;
 	let $opacity;
-	let $offset;
 	let $portal;
 	let { $$slots: slots = {}, $$scope } = $$props;
 	let { buttonClass = undefined } = $$props;
@@ -11244,19 +12320,26 @@ function instance$w($$self, $$props, $$invalidate) {
 	let { isActive = false } = $$props;
 	let { onshow = ({ panel }) => panel.focus() } = $$props;
 	const portal = getContext("rootPortal");
-	component_subscribe($$self, portal, value => $$invalidate(29, $portal = value));
+	component_subscribe($$self, portal, value => $$invalidate(34, $portal = value));
 	const portalRootRect = getContext("rootRect");
-	component_subscribe($$self, portalRootRect, value => $$invalidate(23, $portalRootRect = value));
+	component_subscribe($$self, portalRootRect, value => $$invalidate(27, $portalRootRect = value));
 	let panelSize;
 	let buttonComponent;
 	let buttonRect;
 	let dir = vectorCreateEmpty();
 	let opacity = spring(0);
-	component_subscribe($$self, opacity, value => $$invalidate(25, $opacity = value));
+	component_subscribe($$self, opacity, value => $$invalidate(29, $opacity = value));
+	let shift = vectorCreateEmpty();
 	const position = writable({ x: 0, y: 0 });
-	component_subscribe($$self, position, value => $$invalidate(24, $position = value));
-	const offset = spring(-5);
-	component_subscribe($$self, offset, value => $$invalidate(28, $offset = value));
+	component_subscribe($$self, position, value => $$invalidate(28, $position = value));
+
+	const offset = spring(-5, {
+		stiffness: 0.1,
+		damping: 0.35,
+		precision: 0.001
+	});
+
+	component_subscribe($$self, offset, value => $$invalidate(26, $offset = value));
 	const isTargetSelf = e => isEventTarget(e, $portal) || buttonComponent.isEventTarget(e);
 	let downOutsidePanel = false;
 
@@ -11267,26 +12350,26 @@ function instance$w($$self, $$props, $$invalidate) {
 
 	// test keydown press to open
 	const handleClick = e => {
-		if (!isActive) $$invalidate(19, buttonRect = buttonElement.getBoundingClientRect());
-		$$invalidate(22, trigger = e);
-		$$invalidate(17, isActive = !isActive);
+		if (!isActive) $$invalidate(20, buttonRect = buttonElement.getBoundingClientRect());
+		$$invalidate(24, trigger = e);
+		$$invalidate(18, isActive = !isActive);
 	};
 
 	const handleButtonKeydown = e => {
 		if (!(/down/i).test(e.key)) return;
-		$$invalidate(17, isActive = true);
-		$$invalidate(22, trigger = e);
+		$$invalidate(18, isActive = true);
+		$$invalidate(24, trigger = e);
 	};
 
 	const handlePanelKeydown = e => {
 		if (!(/esc/i).test(e.key)) return;
-		$$invalidate(17, isActive = false);
+		$$invalidate(18, isActive = false);
 		buttonElement.focus();
 	};
 
 	// clean up panel if it was appended to a portal
 	onDestroy(() => {
-		if (!$portal || !detailPanel) return;
+		if (!$portal || !detailPanel || detailPanel.parentNode) return;
 		$portal.removeChild(detailPanel);
 	});
 
@@ -11309,9 +12392,9 @@ function instance$w($$self, $$props, $$invalidate) {
 	$$self.$$set = $$props => {
 		if ("buttonClass" in $$props) $$invalidate(0, buttonClass = $$props.buttonClass);
 		if ("panelClass" in $$props) $$invalidate(1, panelClass = $$props.panelClass);
-		if ("isActive" in $$props) $$invalidate(17, isActive = $$props.isActive);
-		if ("onshow" in $$props) $$invalidate(18, onshow = $$props.onshow);
-		if ("$$scope" in $$props) $$invalidate(34, $$scope = $$props.$$scope);
+		if ("isActive" in $$props) $$invalidate(18, isActive = $$props.isActive);
+		if ("onshow" in $$props) $$invalidate(19, onshow = $$props.onshow);
+		if ("$$scope" in $$props) $$invalidate(39, $$scope = $$props.$$scope);
 	};
 
 	$$self.$$.update = () => {
@@ -11319,26 +12402,30 @@ function instance$w($$self, $$props, $$invalidate) {
 			buttonElement = buttonComponent && buttonComponent.getElement();
 		}
 
-		if ($$self.$$.dirty[0] & /*isActive, downOutsidePanel*/ 2228224) {
-			$$invalidate(8, handleUp = isActive
+		if ($$self.$$.dirty[0] & /*isActive, downOutsidePanel*/ 8650752) {
+			$$invalidate(9, handleUp = isActive
 			? e => {
 					if (!downOutsidePanel) return;
-					$$invalidate(21, downOutsidePanel = false);
+					$$invalidate(23, downOutsidePanel = false);
 					if (isTargetSelf(e)) return;
-					$$invalidate(17, isActive = false);
+					$$invalidate(18, isActive = false);
 				}
 			: undefined);
 		}
 
-		if ($$self.$$.dirty[0] & /*isActive*/ 131072) {
+		if ($$self.$$.dirty[0] & /*isActive*/ 262144) {
 			opacity.set(isActive ? 1 : 0);
 		}
 
-		if ($$self.$$.dirty[0] & /*isActive*/ 131072) {
+		if ($$self.$$.dirty[0] & /*isActive*/ 262144) {
 			offset.set(isActive ? 0 : -5);
 		}
 
-		if ($$self.$$.dirty[0] & /*$portalRootRect, panelSize, buttonRect*/ 8912900) {
+		if ($$self.$$.dirty[0] & /*$offset*/ 67108864) {
+			$$invalidate(25, offsetProgress = 1 - $offset / -5);
+		}
+
+		if ($$self.$$.dirty[0] & /*$portalRootRect, panelSize, buttonRect*/ 135266308) {
 			if ($portalRootRect && panelSize && buttonRect) {
 				// as a starting point we'll align panel to center of button and position below
 				let x = buttonRect.x - $portalRootRect.x + buttonRect.width * 0.5 - panelSize.width * 0.5;
@@ -11355,72 +12442,89 @@ function instance$w($$self, $$props, $$invalidate) {
 
 				// move to right
 				if (panelLeft < parentLeft) {
+					$$invalidate(22, shift.x = panelLeft - parentLeft, shift);
 					x = parentLeft;
 				}
 
 				// move to left
 				if (panelRight > parentRight) {
+					$$invalidate(22, shift.x = panelRight - parentRight, shift);
 					x = parentRight - panelSize.width;
 				}
 
 				if (panelBottom > parentBottom) {
 					// doesn't fit vertically, push up
-					$$invalidate(20, dir.y = -1, dir);
+					$$invalidate(21, dir.y = -1, dir);
 
 					const positionedAboveButtonY = y - panelSize.height - buttonRect.height;
 					const panelFitsAboveButton = parentTop < positionedAboveButtonY;
 
 					if (panelFitsAboveButton) {
+						$$invalidate(22, shift.y = 0, shift);
 						y -= panelSize.height + buttonRect.height;
 					} else {
 						// overlap with button
+						$$invalidate(22, shift.y = y - (panelBottom - parentBottom), shift);
+
 						y -= panelBottom - parentBottom;
 					}
 				} else {
 					// all is fine
-					$$invalidate(20, dir.y = 1, dir);
+					$$invalidate(21, dir.y = 1, dir);
 				}
 
 				set_store_value(position, $position = vectorApply(vectorCreate(x, y), snapToPixel), $position);
 			}
 		}
 
-		if ($$self.$$.dirty[0] & /*$opacity*/ 33554432) {
+		if ($$self.$$.dirty[0] & /*$opacity*/ 536870912) {
 			$$invalidate(5, isVisible = $opacity > 0);
 		}
 
-		if ($$self.$$.dirty[0] & /*$opacity*/ 33554432) {
-			$$invalidate(26, isAnimating = $opacity < 1);
+		if ($$self.$$.dirty[0] & /*$opacity*/ 536870912) {
+			$$invalidate(30, isAnimating = $opacity < 1);
 		}
 
-		if ($$self.$$.dirty[0] & /*$position, dir, $offset*/ 286261248) {
-			$$invalidate(27, transform = `translateX(${$position.x + dir.x * panelMargin}px) translateY(${$position.y + dir.y * panelMargin + dir.y * $offset}px)`);
+		if ($$self.$$.dirty[0] & /*$position, dir, $offset*/ 337641472) {
+			$$invalidate(31, transform = `translateX(${$position.x + dir.x * panelMargin}px) translateY(${$position.y + dir.y * panelMargin + dir.y * $offset}px)`);
 		}
 
-		if ($$self.$$.dirty[0] & /*isAnimating, $opacity, transform*/ 234881024) {
+		if ($$self.$$.dirty[0] & /*isAnimating, $opacity*/ 1610612736 | $$self.$$.dirty[1] & /*transform*/ 1) {
 			$$invalidate(6, style = isAnimating
 			? `opacity: ${$opacity}; pointer-events: ${$opacity < 1 ? "none" : "all"}; transform: ${transform};`
 			: `transform: ${transform}`);
 		}
 
-		if ($$self.$$.dirty[0] & /*isActive*/ 131072) {
-			$$invalidate(7, handleDown = isActive
+		if ($$self.$$.dirty[0] & /*offsetProgress*/ 33554432) {
+			$$invalidate(32, tipScale = 0.5 + offsetProgress * 0.5);
+		}
+
+		if ($$self.$$.dirty[0] & /*offsetProgress*/ 33554432) {
+			$$invalidate(33, tipOpacity = offsetProgress);
+		}
+
+		if ($$self.$$.dirty[0] & /*$position, panelSize, dir, shift*/ 274726916 | $$self.$$.dirty[1] & /*tipOpacity, tipScale*/ 6) {
+			$$invalidate(7, tipStyle = $position && panelSize && `opacity:${tipOpacity};transform:scaleX(${tipScale})rotate(45deg);top:${dir.y < 0 ? shift.y + panelSize.height : 0}px;left:${shift.x + panelSize.width * 0.5}px`);
+		}
+
+		if ($$self.$$.dirty[0] & /*isActive*/ 262144) {
+			$$invalidate(8, handleDown = isActive
 			? e => {
 					if (isTargetSelf(e)) return;
-					$$invalidate(21, downOutsidePanel = true);
+					$$invalidate(23, downOutsidePanel = true);
 				}
 			: undefined);
 		}
 
-		if ($$self.$$.dirty[0] & /*isVisible, $portal, detailPanel*/ 536870960) {
+		if ($$self.$$.dirty[0] & /*isVisible, detailPanel*/ 48 | $$self.$$.dirty[1] & /*$portal*/ 8) {
 			if (isVisible && $portal && detailPanel && detailPanel.parentNode !== $portal) $portal.appendChild(detailPanel);
 		}
 
-		if ($$self.$$.dirty[0] & /*isActive*/ 131072) {
-			if (!isActive) $$invalidate(22, trigger = undefined);
+		if ($$self.$$.dirty[0] & /*isActive*/ 262144) {
+			if (!isActive) $$invalidate(24, trigger = undefined);
 		}
 
-		if ($$self.$$.dirty[0] & /*isVisible, detailPanel, onshow, trigger*/ 4456496) {
+		if ($$self.$$.dirty[0] & /*isVisible, detailPanel, onshow, trigger*/ 17301552) {
 			if (isVisible && detailPanel) onshow({ e: trigger, panel: detailPanel });
 		}
 	};
@@ -11433,6 +12537,7 @@ function instance$w($$self, $$props, $$invalidate) {
 		detailPanel,
 		isVisible,
 		style,
+		tipStyle,
 		handleDown,
 		handleUp,
 		portal,
@@ -11447,14 +12552,18 @@ function instance$w($$self, $$props, $$invalidate) {
 		onshow,
 		buttonRect,
 		dir,
+		shift,
 		downOutsidePanel,
 		trigger,
+		offsetProgress,
+		$offset,
 		$portalRootRect,
 		$position,
 		$opacity,
 		isAnimating,
 		transform,
-		$offset,
+		tipScale,
+		tipOpacity,
 		$portal,
 		slots,
 		button_binding,
@@ -11471,14 +12580,14 @@ class Details extends SvelteComponent {
 		init(
 			this,
 			options,
-			instance$w,
-			create_fragment$w,
+			instance$C,
+			create_fragment$C,
 			safe_not_equal,
 			{
 				buttonClass: 0,
 				panelClass: 1,
-				isActive: 17,
-				onshow: 18
+				isActive: 18,
+				onshow: 19
 			},
 			[-1, -1]
 		);
@@ -11487,7 +12596,7 @@ class Details extends SvelteComponent {
 
 /* src/core/ui/components/RadioItem.svelte generated by Svelte v3.37.0 */
 
-function create_fragment$v(ctx) {
+function create_fragment$B(ctx) {
 	let li;
 	let input;
 	let t;
@@ -11606,7 +12715,7 @@ function create_fragment$v(ctx) {
 	};
 }
 
-function instance$v($$self, $$props, $$invalidate) {
+function instance$B($$self, $$props, $$invalidate) {
 	let inputId;
 	let $keysPressedStored;
 	let { $$slots: slots = {}, $$scope } = $$props;
@@ -11619,6 +12728,7 @@ function instance$v($$self, $$props, $$invalidate) {
 	let { onkeydown } = $$props;
 	let { onclick } = $$props;
 	let { disabled = false } = $$props;
+	const ArrowKeyCodes = Object.values(ArrowKeys);
 	const keysPressedStored = getContext("keysPressed");
 	component_subscribe($$self, keysPressedStored, value => $$invalidate(16, $keysPressedStored = value));
 
@@ -11627,7 +12737,10 @@ function instance$v($$self, $$props, $$invalidate) {
 	};
 
 	const handleClick = e => {
-		if ($keysPressedStored.length) return;
+		// if pressed arrow key -> ignore so navigation with arrow keys works
+		if ($keysPressedStored.some(key => ArrowKeyCodes.includes(key))) return;
+
+		// just a normal click
 		onclick(e);
 	};
 
@@ -11678,7 +12791,7 @@ class RadioItem extends SvelteComponent {
 	constructor(options) {
 		super();
 
-		init(this, options, instance$v, create_fragment$v, safe_not_equal, {
+		init(this, options, instance$B, create_fragment$B, safe_not_equal, {
 			name: 0,
 			class: 1,
 			label: 2,
@@ -11767,6 +12880,14 @@ const localizeOptions = (options, locale) => options.map(([value, label, props])
 });
 var localizeOptions$1 = (options, locale) => localizeOptions(options, locale);
 
+var isConfirmKey = (key) => /enter| /i.test(key);
+
+var isDeepEqual = (a, b) => {
+    if (Array.isArray(a) && Array.isArray(b))
+        return arrayEqual(a, b);
+    return a === b;
+};
+
 /* src/core/ui/components/RadioGroup.svelte generated by Svelte v3.37.0 */
 
 function get_each_context$7(ctx, list, i) {
@@ -11799,7 +12920,7 @@ const get_group_slot_changes = dirty => ({
 
 const get_group_slot_context = ctx => ({ option: /*option*/ ctx[27] });
 
-// (69:0) {#if localizedOptions.length}
+// (78:0) {#if localizedOptions.length}
 function create_if_block_1$a(ctx) {
 	let fieldset;
 	let t;
@@ -11906,7 +13027,7 @@ function create_if_block_1$a(ctx) {
 	};
 }
 
-// (71:4) {#if label}
+// (80:8) {#if label}
 function create_if_block_7$1(ctx) {
 	let legend;
 	let t;
@@ -11935,7 +13056,7 @@ function create_if_block_7$1(ctx) {
 	};
 }
 
-// (101:8) {:else}
+// (115:16) {:else}
 function create_else_block$4(ctx) {
 	let radioitem;
 	let current;
@@ -11997,7 +13118,7 @@ function create_else_block$4(ctx) {
 	};
 }
 
-// (76:8) {#if option.options}
+// (85:16) {#if option.options}
 function create_if_block_2$8(ctx) {
 	let li;
 	let t0;
@@ -12103,7 +13224,7 @@ function create_if_block_2$8(ctx) {
 	};
 }
 
-// (112:16) {#if option.icon}
+// (127:28) {#if option.icon}
 function create_if_block_6$2(ctx) {
 	let icon;
 	let current;
@@ -12147,7 +13268,7 @@ function create_if_block_6$2(ctx) {
 	};
 }
 
-// (113:16) <Icon>
+// (128:32) <Icon>
 function create_default_slot_3$2(ctx) {
 	let g;
 	let raw_value = /*option*/ ctx[27].icon + "";
@@ -12168,7 +13289,7 @@ function create_default_slot_3$2(ctx) {
 	};
 }
 
-// (115:16) {#if !option.hideLabel}
+// (130:28) {#if !option.hideLabel}
 function create_if_block_5$4(ctx) {
 	let span;
 	let t_value = /*option*/ ctx[27].label + "";
@@ -12197,7 +13318,7 @@ function create_if_block_5$4(ctx) {
 	};
 }
 
-// (111:76)                  
+// (126:54)                              
 function fallback_block_2(ctx) {
 	let t0;
 	let t1;
@@ -12274,7 +13395,7 @@ function fallback_block_2(ctx) {
 	};
 }
 
-// (102:8) <RadioItem              {name}              label={option.label}             id={option.id}             value={option.value}             disabled={option.disabled}             class={optionClass}             checked={getOptionIndex(option) === selectedIndex}             onkeydown={handleRadioKeydown(option)}             onclick={handleRadioClick(option)}>
+// (116:20) <RadioItem                         {name}                         label={option.label}                         id={option.id}                         value={option.value}                         disabled={option.disabled}                         class={optionClass}                         checked={getOptionIndex(option) === selectedIndex}                         onkeydown={handleRadioKeydown(option)}                         onclick={handleRadioClick(option)}                         >
 function create_default_slot_2$4(ctx) {
 	let current;
 	const option_slot_template = /*#slots*/ ctx[22].option;
@@ -12318,7 +13439,7 @@ function create_default_slot_2$4(ctx) {
 	};
 }
 
-// (78:47) <span class="PinturaRadioGroupOptionGroupLabel">
+// (88:29) <span class="PinturaRadioGroupOptionGroupLabel">
 function fallback_block_1(ctx) {
 	let span;
 	let t_value = /*option*/ ctx[27].label + "";
@@ -12343,8 +13464,8 @@ function fallback_block_1(ctx) {
 	};
 }
 
-// (91:24) {#if option.icon}
-function create_if_block_4$5(ctx) {
+// (104:40) {#if option.icon}
+function create_if_block_4$6(ctx) {
 	let icon;
 	let current;
 
@@ -12387,7 +13508,7 @@ function create_if_block_4$5(ctx) {
 	};
 }
 
-// (92:24) <Icon>
+// (105:44) <Icon>
 function create_default_slot_1$7(ctx) {
 	let g;
 	let raw_value = /*option*/ ctx[27].icon + "";
@@ -12408,8 +13529,8 @@ function create_default_slot_1$7(ctx) {
 	};
 }
 
-// (94:24) {#if !option.hideLabel}
-function create_if_block_3$5(ctx) {
+// (107:40) {#if !option.hideLabel}
+function create_if_block_3$7(ctx) {
 	let span;
 	let t_value = /*option*/ ctx[27].label + "";
 	let t;
@@ -12437,13 +13558,13 @@ function create_if_block_3$5(ctx) {
 	};
 }
 
-// (90:84)                          
+// (103:66)                                          
 function fallback_block$1(ctx) {
 	let t0;
 	let t1;
 	let current;
-	let if_block0 = /*option*/ ctx[27].icon && create_if_block_4$5(ctx);
-	let if_block1 = !/*option*/ ctx[27].hideLabel && create_if_block_3$5(ctx);
+	let if_block0 = /*option*/ ctx[27].icon && create_if_block_4$6(ctx);
+	let if_block1 = !/*option*/ ctx[27].hideLabel && create_if_block_3$7(ctx);
 
 	return {
 		c() {
@@ -12468,7 +13589,7 @@ function fallback_block$1(ctx) {
 						transition_in(if_block0, 1);
 					}
 				} else {
-					if_block0 = create_if_block_4$5(ctx);
+					if_block0 = create_if_block_4$6(ctx);
 					if_block0.c();
 					transition_in(if_block0, 1);
 					if_block0.m(t0.parentNode, t0);
@@ -12487,7 +13608,7 @@ function fallback_block$1(ctx) {
 				if (if_block1) {
 					if_block1.p(ctx, dirty);
 				} else {
-					if_block1 = create_if_block_3$5(ctx);
+					if_block1 = create_if_block_3$7(ctx);
 					if_block1.c();
 					if_block1.m(t1.parentNode, t1);
 				}
@@ -12514,8 +13635,8 @@ function fallback_block$1(ctx) {
 	};
 }
 
-// (81:16) <RadioItem                      {name}                      label={option.label}                     id={option.id}                     value={option.value}                     disabled={option.disabled}                     class={optionClass}                     checked={getOptionIndex(option) === selectedIndex}                     onkeydown={handleRadioKeydown(option)}                     onclick={handleRadioClick(option)}>
-function create_default_slot$a(ctx) {
+// (93:32) <RadioItem                                     {name}                                     label={option.label}                                     id={option.id}                                     value={option.value}                                     disabled={option.disabled}                                     class={optionClass}                                     checked={getOptionIndex(option) === selectedIndex}                                     onkeydown={handleRadioKeydown(option)}                                     onclick={handleRadioClick(option)}                                     >
+function create_default_slot$f(ctx) {
 	let current;
 	const option_slot_template = /*#slots*/ ctx[22].option;
 	const option_slot = create_slot(option_slot_template, ctx, /*$$scope*/ ctx[23], get_option_slot_context);
@@ -12558,7 +13679,7 @@ function create_default_slot$a(ctx) {
 	};
 }
 
-// (80:16) {#each option.options as option (option.id) }
+// (92:28) {#each option.options as option (option.id)}
 function create_each_block_1(key_1, ctx) {
 	let first;
 	let radioitem;
@@ -12575,7 +13696,7 @@ function create_each_block_1(key_1, ctx) {
 				checked: /*getOptionIndex*/ ctx[12](/*option*/ ctx[27]) === /*selectedIndex*/ ctx[0],
 				onkeydown: /*handleRadioKeydown*/ ctx[13](/*option*/ ctx[27]),
 				onclick: /*handleRadioClick*/ ctx[14](/*option*/ ctx[27]),
-				$$slots: { default: [create_default_slot$a] },
+				$$slots: { default: [create_default_slot$f] },
 				$$scope: { ctx }
 			}
 		});
@@ -12628,7 +13749,7 @@ function create_each_block_1(key_1, ctx) {
 	};
 }
 
-// (75:8) {#each mappedOptions as option (option.id) }
+// (84:12) {#each mappedOptions as option (option.id)}
 function create_each_block$7(key_1, ctx) {
 	let first;
 	let current_block_type_index;
@@ -12706,7 +13827,7 @@ function create_each_block$7(key_1, ctx) {
 	};
 }
 
-function create_fragment$u(ctx) {
+function create_fragment$A(ctx) {
 	let t;
 	let if_block1_anchor;
 	let current;
@@ -12768,7 +13889,7 @@ function create_fragment$u(ctx) {
 	};
 }
 
-function instance$u($$self, $$props, $$invalidate) {
+function instance$A($$self, $$props, $$invalidate) {
 	let localizedOptions;
 	let mappedOptions;
 	let flattenedOptions;
@@ -12790,25 +13911,25 @@ function instance$u($$self, $$props, $$invalidate) {
 	let { locale = undefined } = $$props;
 	let { optionClass = undefined } = $$props;
 	let { optionGroupClass = undefined } = $$props;
+	const getUndefinedOptionIndex = options => options.findIndex(option => option[0] === undefined);
 	const getOptionIndex = option => flattenedOptions.findIndex(flattenedOption => flattenedOption.id === option.id);
-	const isConfirm = key => (/enter| /i).test(key);
 
-	const changeSelection = option => {
+	const changeSelection = (option, e) => {
 		$$invalidate(0, selectedIndex = getOptionIndex(option));
 		const payload = { index: selectedIndex, ...option };
-		opop(onchange, payload);
+		opop(onchange, payload, e);
 		dispatch("change", payload);
 	};
 
 	const handleRadioKeydown = option => e => {
 		// is confirm key ([enter] or [space])
-		if (!isConfirm(e.key)) return;
+		if (!isConfirmKey(e.key)) return;
 
-		changeSelection(option);
+		changeSelection(option, e);
 	};
 
 	const handleRadioClick = option => e => {
-		changeSelection(option);
+		changeSelection(option, e);
 	};
 
 	$$self.$$set = $$props => {
@@ -12844,10 +13965,14 @@ function instance$u($$self, $$props, $$invalidate) {
 			$$invalidate(21, flattenedOptions = flattenOptions(mappedOptions));
 		}
 
-		if ($$self.$$.dirty[0] & /*value, selectedIndex, flattenedOptions*/ 2621441) {
+		if ($$self.$$.dirty[0] & /*selectedIndex, flattenedOptions, value, options*/ 2654209) {
 			// can optionally pass value to have radio button group try to auto-select the right option
-			if (value && selectedIndex < 0) {
-				$$invalidate(0, selectedIndex = flattenedOptions.findIndex(option => option.value === value));
+			if (selectedIndex < 0) {
+				$$invalidate(0, selectedIndex = flattenedOptions.findIndex(option => isDeepEqual(option.value, value)));
+
+				if (selectedIndex < 0) {
+					$$invalidate(0, selectedIndex = getUndefinedOptionIndex(options));
+				}
 			}
 		}
 	};
@@ -12887,8 +14012,8 @@ class RadioGroup extends SvelteComponent {
 		init(
 			this,
 			options,
-			instance$u,
-			create_fragment$u,
+			instance$A,
+			create_fragment$A,
 			safe_not_equal,
 			{
 				label: 1,
@@ -12912,12 +14037,6 @@ class RadioGroup extends SvelteComponent {
 		);
 	}
 }
-
-var isDeepEqual = (a, b) => {
-    if (Array.isArray(a) && Array.isArray(b))
-        return arrayEqual(a, b);
-    return a === b;
-};
 
 /* src/core/ui/components/Dropdown.svelte generated by Svelte v3.37.0 */
 
@@ -12965,7 +14084,7 @@ function create_if_block_1$9(ctx) {
 	};
 }
 
-// (159:8) <Icon class="PinturaButtonIcon">
+// (97:12) <Icon class="PinturaButtonIcon">
 function create_default_slot_1$6(ctx) {
 	let g;
 
@@ -12985,8 +14104,8 @@ function create_default_slot_1$6(ctx) {
 	};
 }
 
-// (157:4) 
-function create_label_slot$1(ctx) {
+// (91:4) 
+function create_label_slot$2(ctx) {
 	let span1;
 	let t0;
 	let span0;
@@ -13082,7 +14201,7 @@ function create_label_slot$1(ctx) {
 	};
 }
 
-// (177:12) 
+// (118:12) 
 function create_group_slot$1(ctx) {
 	let span;
 	let t_value = /*option*/ ctx[28].label + "";
@@ -13107,8 +14226,8 @@ function create_group_slot$1(ctx) {
 	};
 }
 
-// (179:16) {#if option.icon}
-function create_if_block$9(ctx) {
+// (120:16) {#if option.icon}
+function create_if_block$a(ctx) {
 	let icon_1;
 	let current;
 
@@ -13117,7 +14236,7 @@ function create_if_block$9(ctx) {
 				style: isFunction(/*optionIconStyle*/ ctx[13])
 				? /*optionIconStyle*/ ctx[13](/*option*/ ctx[28].value)
 				: /*optionIconStyle*/ ctx[13],
-				$$slots: { default: [create_default_slot$9] },
+				$$slots: { default: [create_default_slot$e] },
 				$$scope: { ctx }
 			}
 		});
@@ -13158,8 +14277,8 @@ function create_if_block$9(ctx) {
 	};
 }
 
-// (180:16) <Icon style={isFunction(optionIconStyle) ? optionIconStyle(option.value) : optionIconStyle}>
-function create_default_slot$9(ctx) {
+// (121:20) <Icon                         style={isFunction(optionIconStyle)                             ? optionIconStyle(option.value)                             : optionIconStyle}>
+function create_default_slot$e(ctx) {
 	let g;
 	let raw_value = /*option*/ ctx[28].icon + "";
 
@@ -13179,8 +14298,8 @@ function create_default_slot$9(ctx) {
 	};
 }
 
-// (178:12) 
-function create_option_slot$3(ctx) {
+// (119:12) 
+function create_option_slot$4(ctx) {
 	let span1;
 	let t0;
 	let span0;
@@ -13189,7 +14308,7 @@ function create_option_slot$3(ctx) {
 	let span0_style_value;
 	let span0_class_value;
 	let current;
-	let if_block = /*option*/ ctx[28].icon && create_if_block$9(ctx);
+	let if_block = /*option*/ ctx[28].icon && create_if_block$a(ctx);
 
 	return {
 		c() {
@@ -13223,7 +14342,7 @@ function create_option_slot$3(ctx) {
 						transition_in(if_block, 1);
 					}
 				} else {
-					if_block = create_if_block$9(ctx);
+					if_block = create_if_block$a(ctx);
 					if_block.c();
 					transition_in(if_block, 1);
 					if_block.m(span1, t0);
@@ -13266,8 +14385,8 @@ function create_option_slot$3(ctx) {
 	};
 }
 
-// (164:4) 
-function create_details_slot$1(ctx) {
+// (104:4) 
+function create_details_slot$2(ctx) {
 	let div;
 	let radiogroup;
 	let current;
@@ -13288,7 +14407,7 @@ function create_details_slot$1(ctx) {
 				onchange: /*handleSelect*/ ctx[19],
 				$$slots: {
 					option: [
-						create_option_slot$3,
+						create_option_slot$4,
 						({ option }) => ({ 28: option }),
 						({ option }) => option ? 268435456 : 0
 					],
@@ -13353,7 +14472,7 @@ function create_details_slot$1(ctx) {
 	};
 }
 
-function create_fragment$t(ctx) {
+function create_fragment$z(ctx) {
 	let details;
 	let updating_isActive;
 	let current;
@@ -13370,8 +14489,8 @@ function create_fragment$t(ctx) {
 			/*hideLabel*/ ctx[5] && "PinturaDropdownIconOnly"
 		]),
 		$$slots: {
-			details: [create_details_slot$1],
-			label: [create_label_slot$1]
+			details: [create_details_slot$2],
+			label: [create_label_slot$2]
 		},
 		$$scope: { ctx }
 	};
@@ -13427,7 +14546,7 @@ function create_fragment$t(ctx) {
 	};
 }
 
-function instance$t($$self, $$props, $$invalidate) {
+function instance$z($$self, $$props, $$invalidate) {
 	let localizedOptions;
 	let selectedLabel;
 	let { class: klass = undefined } = $$props;
@@ -13447,12 +14566,12 @@ function instance$t($$self, $$props, $$invalidate) {
 	let { optionIconStyle = undefined } = $$props;
 	let { optionLabelStyle = undefined } = $$props;
 	let { locale = undefined } = $$props;
-	let { onchange = undefined } = $$props;
+	let { onchange = noop$1 } = $$props;
 	let { onload = noop$1 } = $$props;
 	let { ondestroy = noop$1 } = $$props;
 
 	const getUndefinedOptionLabel = options => {
-		const option = localizedOptions.find(option => option[0] === undefined);
+		const option = options.find(option => option[0] === undefined);
 		if (!option) return undefined;
 		return option[1];
 	};
@@ -13512,19 +14631,20 @@ function instance$t($$self, $$props, $$invalidate) {
 	};
 
 	$$self.$$.update = () => {
-		if ($$self.$$.dirty & /*options, locale*/ 4227072) {
-			$$invalidate(16, localizedOptions = localizeOptions$1(options, locale));
+		if ($$self.$$.dirty & /*locale, options*/ 4227072) {
+			$$invalidate(16, localizedOptions = locale ? localizeOptions$1(options, locale) : options);
 		}
 
 		if ($$self.$$.dirty & /*localizedOptions, value*/ 66048) {
 			$$invalidate(18, selectedLabel = localizedOptions.reduce(
 				(prev, curr) => {
 					if (prev) return prev;
-					const [optionValue, optionLabel] = curr;
+					const item = Array.isArray(curr) ? curr : [curr, curr];
+					const [optionValue, optionLabel] = item;
 					if (isDeepEqual(optionValue, value)) return optionLabel;
 				},
 				undefined
-			) || getUndefinedOptionLabel());
+			) || getUndefinedOptionLabel(localizedOptions) || value);
 		}
 	};
 
@@ -13563,7 +14683,7 @@ class Dropdown extends SvelteComponent {
 	constructor(options) {
 		super();
 
-		init(this, options, instance$t, create_fragment$t, safe_not_equal, {
+		init(this, options, instance$z, create_fragment$z, safe_not_equal, {
 			class: 0,
 			title: 1,
 			label: 2,
@@ -13588,6 +14708,823 @@ class Dropdown extends SvelteComponent {
 	}
 }
 
+var numberRoundTo = (value, fraction) => {
+    fraction = 1 / fraction;
+    return Math.round(value * fraction) / fraction;
+};
+
+var toFraction = (value, min, max) => (value - min) / (max - min);
+
+/* src/core/ui/components/Slider.svelte generated by Svelte v3.37.0 */
+
+function create_default_slot_1$5(ctx) {
+	let path;
+
+	return {
+		c() {
+			path = svg_element("path");
+			attr(path, "d", "M8 12 h8 M12 8 v8");
+		},
+		m(target, anchor) {
+			insert(target, path, anchor);
+		},
+		d(detaching) {
+			if (detaching) detach(path);
+		}
+	};
+}
+
+// (153:8) <Icon>
+function create_default_slot$d(ctx) {
+	let path;
+
+	return {
+		c() {
+			path = svg_element("path");
+			attr(path, "d", "M9 12 h6");
+		},
+		m(target, anchor) {
+			insert(target, path, anchor);
+		},
+		d(detaching) {
+			if (detaching) detach(path);
+		}
+	};
+}
+
+function create_fragment$y(ctx) {
+	let div4;
+	let div3;
+	let input_1;
+	let t0;
+	let div0;
+	let t1;
+	let div2;
+	let div1;
+	let t2;
+	let button0;
+	let icon0;
+	let t3;
+	let button1;
+	let icon1;
+	let div4_class_value;
+	let current;
+	let mounted;
+	let dispose;
+
+	icon0 = new Icon({
+			props: {
+				$$slots: { default: [create_default_slot_1$5] },
+				$$scope: { ctx }
+			}
+		});
+
+	icon1 = new Icon({
+			props: {
+				$$slots: { default: [create_default_slot$d] },
+				$$scope: { ctx }
+			}
+		});
+
+	return {
+		c() {
+			div4 = element("div");
+			div3 = element("div");
+			input_1 = element("input");
+			t0 = space();
+			div0 = element("div");
+			t1 = space();
+			div2 = element("div");
+			div1 = element("div");
+			t2 = space();
+			button0 = element("button");
+			create_component(icon0.$$.fragment);
+			t3 = space();
+			button1 = element("button");
+			create_component(icon1.$$.fragment);
+			attr(input_1, "type", "range");
+			attr(input_1, "id", /*id*/ ctx[3]);
+			attr(input_1, "min", /*min*/ ctx[0]);
+			attr(input_1, "max", /*max*/ ctx[1]);
+			attr(input_1, "step", /*step*/ ctx[2]);
+			input_1.value = /*numberValue*/ ctx[8];
+			attr(div0, "class", "PinturaSliderTrack");
+			attr(div0, "style", /*trackStyle*/ ctx[4]);
+			attr(div1, "class", "PinturaSliderKnob");
+			attr(div1, "style", /*knobStyle*/ ctx[5]);
+			attr(div2, "class", "PinturaSliderKnobController");
+			attr(div2, "style", /*knobControllerStyle*/ ctx[10]);
+			attr(div3, "class", "PinturaSliderControl");
+			attr(button0, "type", "button");
+			attr(button0, "aria-label", "Increase");
+			attr(button1, "type", "button");
+			attr(button1, "aria-label", "Decrease");
+			attr(div4, "class", div4_class_value = arrayJoin(["PinturaSlider", /*klass*/ ctx[7]]));
+			attr(div4, "data-direction", /*direction*/ ctx[6]);
+		},
+		m(target, anchor) {
+			insert(target, div4, anchor);
+			append(div4, div3);
+			append(div3, input_1);
+			/*input_1_binding*/ ctx[22](input_1);
+			append(div3, t0);
+			append(div3, div0);
+			append(div3, t1);
+			append(div3, div2);
+			append(div2, div1);
+			append(div4, t2);
+			append(div4, button0);
+			mount_component(icon0, button0, null);
+			append(div4, t3);
+			append(div4, button1);
+			mount_component(icon1, button1, null);
+			current = true;
+
+			if (!mounted) {
+				dispose = [
+					listen(input_1, "pointerdown", /*handlePointerDown*/ ctx[13]),
+					listen(input_1, "input", /*handleInput*/ ctx[11]),
+					listen(input_1, "nudge", /*handleNudge*/ ctx[12]),
+					action_destroyer(nudgeable.call(null, input_1)),
+					listen(button0, "pointerdown", /*handleUpdaterDown*/ ctx[14](1)),
+					listen(button1, "pointerdown", /*handleUpdaterDown*/ ctx[14](-1))
+				];
+
+				mounted = true;
+			}
+		},
+		p(ctx, dirty) {
+			if (!current || dirty[0] & /*id*/ 8) {
+				attr(input_1, "id", /*id*/ ctx[3]);
+			}
+
+			if (!current || dirty[0] & /*min*/ 1) {
+				attr(input_1, "min", /*min*/ ctx[0]);
+			}
+
+			if (!current || dirty[0] & /*max*/ 2) {
+				attr(input_1, "max", /*max*/ ctx[1]);
+			}
+
+			if (!current || dirty[0] & /*step*/ 4) {
+				attr(input_1, "step", /*step*/ ctx[2]);
+			}
+
+			if (!current || dirty[0] & /*numberValue*/ 256) {
+				input_1.value = /*numberValue*/ ctx[8];
+			}
+
+			if (!current || dirty[0] & /*trackStyle*/ 16) {
+				attr(div0, "style", /*trackStyle*/ ctx[4]);
+			}
+
+			if (!current || dirty[0] & /*knobStyle*/ 32) {
+				attr(div1, "style", /*knobStyle*/ ctx[5]);
+			}
+
+			if (!current || dirty[0] & /*knobControllerStyle*/ 1024) {
+				attr(div2, "style", /*knobControllerStyle*/ ctx[10]);
+			}
+
+			const icon0_changes = {};
+
+			if (dirty[1] & /*$$scope*/ 512) {
+				icon0_changes.$$scope = { dirty, ctx };
+			}
+
+			icon0.$set(icon0_changes);
+			const icon1_changes = {};
+
+			if (dirty[1] & /*$$scope*/ 512) {
+				icon1_changes.$$scope = { dirty, ctx };
+			}
+
+			icon1.$set(icon1_changes);
+
+			if (!current || dirty[0] & /*klass*/ 128 && div4_class_value !== (div4_class_value = arrayJoin(["PinturaSlider", /*klass*/ ctx[7]]))) {
+				attr(div4, "class", div4_class_value);
+			}
+
+			if (!current || dirty[0] & /*direction*/ 64) {
+				attr(div4, "data-direction", /*direction*/ ctx[6]);
+			}
+		},
+		i(local) {
+			if (current) return;
+			transition_in(icon0.$$.fragment, local);
+			transition_in(icon1.$$.fragment, local);
+			current = true;
+		},
+		o(local) {
+			transition_out(icon0.$$.fragment, local);
+			transition_out(icon1.$$.fragment, local);
+			current = false;
+		},
+		d(detaching) {
+			if (detaching) detach(div4);
+			/*input_1_binding*/ ctx[22](null);
+			destroy_component(icon0);
+			destroy_component(icon1);
+			mounted = false;
+			run_all(dispose);
+		}
+	};
+}
+
+function instance$y($$self, $$props, $$invalidate) {
+	let numberValue;
+	let range;
+	let position;
+	let axis;
+	let dimension;
+	let offsetSizeProp;
+	let offsetAxisProp;
+	let pageAxisProp;
+	let knobControllerStyle;
+	let { min = 0 } = $$props;
+	let { max = 100 } = $$props;
+	let { step = 1 } = $$props;
+	let { id = undefined } = $$props;
+	let { value = 0 } = $$props;
+	let { trackStyle = undefined } = $$props;
+	let { knobStyle = undefined } = $$props;
+	let { onchange = undefined } = $$props;
+	let { direction = "x" } = $$props;
+	let { getValue = passthrough } = $$props;
+	let { setValue = passthrough } = $$props;
+	let { class: klass = undefined } = $$props;
+	let input;
+	let inputSize;
+	let inputOffset;
+	let pageOffset;
+	let valuePrev;
+	const formatValue = value => setValue(numberRoundTo(clamp(value, min, max), step));
+
+	const setValueByOffset = (offset, size) => {
+		$$invalidate(15, value = formatValue(min + offset / size * range));
+		if (value === valuePrev) return;
+		valuePrev = value;
+		onchange(value);
+	};
+
+	const handleInput = e => {
+		// already handled by pointer events
+		if (inputSize) return;
+
+		$$invalidate(15, value = setValue(parseFloat(e.target.value)));
+		if (value === valuePrev) return;
+		valuePrev = value;
+		onchange(value);
+	};
+
+	const handleNudge = e => {
+		const size = input[offsetSizeProp];
+		const offset = numberValue / range * size;
+		setValueByOffset(offset + e.detail[direction], size);
+	};
+
+	const handlePointerDown = e => {
+		e.stopPropagation();
+		inputSize = input[offsetSizeProp];
+		inputOffset = e[offsetAxisProp];
+		pageOffset = e[pageAxisProp];
+		setValueByOffset(inputOffset, inputSize);
+		document.documentElement.addEventListener("pointermove", handlePointerMove);
+		document.documentElement.addEventListener("pointerup", handlePointerUp);
+	};
+
+	const handlePointerMove = e => {
+		const d = e[pageAxisProp] - pageOffset;
+		setValueByOffset(inputOffset + d, inputSize);
+	};
+
+	const handlePointerUp = e => {
+		inputSize = undefined;
+		document.documentElement.removeEventListener("pointermove", handlePointerMove);
+		document.documentElement.removeEventListener("pointerup", handlePointerUp);
+		onchange(value);
+	};
+
+	const update = () => {
+		$$invalidate(15, value = formatValue(numberValue + updateDir * step));
+		onchange(value);
+	};
+
+	let updateTimer;
+	let updateDir = 1;
+	let didUpdate = false;
+
+	const handleUpdaterDown = dir => e => {
+		updateDir = dir;
+		didUpdate = false;
+
+		updateTimer = setInterval(
+			() => {
+				didUpdate = true;
+				update();
+			},
+			100
+		);
+
+		document.addEventListener("pointercancel", handleUpdaterUp);
+		document.addEventListener("pointerup", handleUpdaterUp);
+	};
+
+	const handleUpdaterUp = e => {
+		clearTimeout(updateTimer);
+		if (!didUpdate) update();
+		document.removeEventListener("pointerup", handleUpdaterUp);
+	};
+
+	function input_1_binding($$value) {
+		binding_callbacks[$$value ? "unshift" : "push"](() => {
+			input = $$value;
+			$$invalidate(9, input);
+		});
+	}
+
+	$$self.$$set = $$props => {
+		if ("min" in $$props) $$invalidate(0, min = $$props.min);
+		if ("max" in $$props) $$invalidate(1, max = $$props.max);
+		if ("step" in $$props) $$invalidate(2, step = $$props.step);
+		if ("id" in $$props) $$invalidate(3, id = $$props.id);
+		if ("value" in $$props) $$invalidate(15, value = $$props.value);
+		if ("trackStyle" in $$props) $$invalidate(4, trackStyle = $$props.trackStyle);
+		if ("knobStyle" in $$props) $$invalidate(5, knobStyle = $$props.knobStyle);
+		if ("onchange" in $$props) $$invalidate(16, onchange = $$props.onchange);
+		if ("direction" in $$props) $$invalidate(6, direction = $$props.direction);
+		if ("getValue" in $$props) $$invalidate(17, getValue = $$props.getValue);
+		if ("setValue" in $$props) $$invalidate(18, setValue = $$props.setValue);
+		if ("class" in $$props) $$invalidate(7, klass = $$props.class);
+	};
+
+	$$self.$$.update = () => {
+		if ($$self.$$.dirty[0] & /*value, getValue*/ 163840) {
+			$$invalidate(8, numberValue = value !== undefined ? getValue(value) : 0);
+		}
+
+		if ($$self.$$.dirty[0] & /*max, min*/ 3) {
+			range = max - min;
+		}
+
+		if ($$self.$$.dirty[0] & /*numberValue, min, max*/ 259) {
+			$$invalidate(19, position = toFraction(numberValue, min, max) * 100);
+		}
+
+		if ($$self.$$.dirty[0] & /*direction*/ 64) {
+			$$invalidate(20, axis = direction.toUpperCase());
+		}
+
+		if ($$self.$$.dirty[0] & /*direction*/ 64) {
+			$$invalidate(21, dimension = direction === "x" ? "Width" : "Height");
+		}
+
+		if ($$self.$$.dirty[0] & /*dimension*/ 2097152) {
+			offsetSizeProp = `offset${dimension}`;
+		}
+
+		if ($$self.$$.dirty[0] & /*axis*/ 1048576) {
+			offsetAxisProp = `offset${axis}`;
+		}
+
+		if ($$self.$$.dirty[0] & /*axis*/ 1048576) {
+			pageAxisProp = `page${axis}`;
+		}
+
+		if ($$self.$$.dirty[0] & /*axis, position*/ 1572864) {
+			$$invalidate(10, knobControllerStyle = `transform: translate${axis}(${position}%)`);
+		}
+	};
+
+	return [
+		min,
+		max,
+		step,
+		id,
+		trackStyle,
+		knobStyle,
+		direction,
+		klass,
+		numberValue,
+		input,
+		knobControllerStyle,
+		handleInput,
+		handleNudge,
+		handlePointerDown,
+		handleUpdaterDown,
+		value,
+		onchange,
+		getValue,
+		setValue,
+		position,
+		axis,
+		dimension,
+		input_1_binding
+	];
+}
+
+class Slider extends SvelteComponent {
+	constructor(options) {
+		super();
+
+		init(
+			this,
+			options,
+			instance$y,
+			create_fragment$y,
+			safe_not_equal,
+			{
+				min: 0,
+				max: 1,
+				step: 2,
+				id: 3,
+				value: 15,
+				trackStyle: 4,
+				knobStyle: 5,
+				onchange: 16,
+				direction: 6,
+				getValue: 17,
+				setValue: 18,
+				class: 7
+			},
+			[-1, -1]
+		);
+	}
+}
+
+/* src/core/ui/components/ToggleSlider.svelte generated by Svelte v3.37.0 */
+
+function create_if_block$9(ctx) {
+	let icon_1;
+	let current;
+
+	icon_1 = new Icon({
+			props: {
+				class: "PinturaButtonIcon",
+				$$slots: { default: [create_default_slot$c] },
+				$$scope: { ctx }
+			}
+		});
+
+	return {
+		c() {
+			create_component(icon_1.$$.fragment);
+		},
+		m(target, anchor) {
+			mount_component(icon_1, target, anchor);
+			current = true;
+		},
+		p(ctx, dirty) {
+			const icon_1_changes = {};
+
+			if (dirty & /*$$scope, icon*/ 262148) {
+				icon_1_changes.$$scope = { dirty, ctx };
+			}
+
+			icon_1.$set(icon_1_changes);
+		},
+		i(local) {
+			if (current) return;
+			transition_in(icon_1.$$.fragment, local);
+			current = true;
+		},
+		o(local) {
+			transition_out(icon_1.$$.fragment, local);
+			current = false;
+		},
+		d(detaching) {
+			destroy_component(icon_1, detaching);
+		}
+	};
+}
+
+// (51:12) <Icon class="PinturaButtonIcon">
+function create_default_slot$c(ctx) {
+	let g;
+
+	return {
+		c() {
+			g = svg_element("g");
+		},
+		m(target, anchor) {
+			insert(target, g, anchor);
+			g.innerHTML = /*icon*/ ctx[2];
+		},
+		p(ctx, dirty) {
+			if (dirty & /*icon*/ 4) g.innerHTML = /*icon*/ ctx[2];		},
+		d(detaching) {
+			if (detaching) detach(g);
+		}
+	};
+}
+
+// (45:4) 
+function create_label_slot$1(ctx) {
+	let span1;
+	let t0;
+	let span0;
+	let t1;
+	let span0_class_value;
+	let span1_title_value;
+	let span1_class_value;
+	let current;
+	let if_block = /*icon*/ ctx[2] && create_if_block$9(ctx);
+
+	return {
+		c() {
+			span1 = element("span");
+			if (if_block) if_block.c();
+			t0 = space();
+			span0 = element("span");
+			t1 = text(/*currentLabel*/ ctx[8]);
+
+			attr(span0, "class", span0_class_value = arrayJoin([
+				"PinturaButtonLabel",
+				/*labelClass*/ ctx[3],
+				/*hideLabel*/ ctx[5] && "implicit"
+			]));
+
+			attr(span1, "slot", "label");
+			attr(span1, "title", span1_title_value = localize(/*title*/ ctx[1], /*locale*/ ctx[6]));
+			attr(span1, "class", span1_class_value = arrayJoin(["PinturaButtonInner", /*innerClass*/ ctx[4]]));
+		},
+		m(target, anchor) {
+			insert(target, span1, anchor);
+			if (if_block) if_block.m(span1, null);
+			append(span1, t0);
+			append(span1, span0);
+			append(span0, t1);
+			current = true;
+		},
+		p(ctx, dirty) {
+			if (/*icon*/ ctx[2]) {
+				if (if_block) {
+					if_block.p(ctx, dirty);
+
+					if (dirty & /*icon*/ 4) {
+						transition_in(if_block, 1);
+					}
+				} else {
+					if_block = create_if_block$9(ctx);
+					if_block.c();
+					transition_in(if_block, 1);
+					if_block.m(span1, t0);
+				}
+			} else if (if_block) {
+				group_outros();
+
+				transition_out(if_block, 1, 1, () => {
+					if_block = null;
+				});
+
+				check_outros();
+			}
+
+			if (!current || dirty & /*currentLabel*/ 256) set_data(t1, /*currentLabel*/ ctx[8]);
+
+			if (!current || dirty & /*labelClass, hideLabel*/ 40 && span0_class_value !== (span0_class_value = arrayJoin([
+				"PinturaButtonLabel",
+				/*labelClass*/ ctx[3],
+				/*hideLabel*/ ctx[5] && "implicit"
+			]))) {
+				attr(span0, "class", span0_class_value);
+			}
+
+			if (!current || dirty & /*title, locale*/ 66 && span1_title_value !== (span1_title_value = localize(/*title*/ ctx[1], /*locale*/ ctx[6]))) {
+				attr(span1, "title", span1_title_value);
+			}
+
+			if (!current || dirty & /*innerClass*/ 16 && span1_class_value !== (span1_class_value = arrayJoin(["PinturaButtonInner", /*innerClass*/ ctx[4]]))) {
+				attr(span1, "class", span1_class_value);
+			}
+		},
+		i(local) {
+			if (current) return;
+			transition_in(if_block);
+			current = true;
+		},
+		o(local) {
+			transition_out(if_block);
+			current = false;
+		},
+		d(detaching) {
+			if (detaching) detach(span1);
+			if (if_block) if_block.d();
+		}
+	};
+}
+
+// (58:4) 
+function create_details_slot$1(ctx) {
+	let div;
+	let slider;
+	let current;
+	let mounted;
+	let dispose;
+
+	const slider_spread_levels = [
+		/*$$restProps*/ ctx[11],
+		{ value: /*value*/ ctx[7] },
+		{ onchange: /*handleChangeValue*/ ctx[10] }
+	];
+
+	let slider_props = {};
+
+	for (let i = 0; i < slider_spread_levels.length; i += 1) {
+		slider_props = assign(slider_props, slider_spread_levels[i]);
+	}
+
+	slider = new Slider({ props: slider_props });
+
+	return {
+		c() {
+			div = element("div");
+			create_component(slider.$$.fragment);
+			attr(div, "slot", "details");
+		},
+		m(target, anchor) {
+			insert(target, div, anchor);
+			mount_component(slider, div, null);
+			current = true;
+
+			if (!mounted) {
+				dispose = listen(div, "keydown", /*handleKeydown*/ ctx[9]);
+				mounted = true;
+			}
+		},
+		p(ctx, dirty) {
+			const slider_changes = (dirty & /*$$restProps, value, handleChangeValue*/ 3200)
+			? get_spread_update(slider_spread_levels, [
+					dirty & /*$$restProps*/ 2048 && get_spread_object(/*$$restProps*/ ctx[11]),
+					dirty & /*value*/ 128 && { value: /*value*/ ctx[7] },
+					dirty & /*handleChangeValue*/ 1024 && { onchange: /*handleChangeValue*/ ctx[10] }
+				])
+			: {};
+
+			slider.$set(slider_changes);
+		},
+		i(local) {
+			if (current) return;
+			transition_in(slider.$$.fragment, local);
+			current = true;
+		},
+		o(local) {
+			transition_out(slider.$$.fragment, local);
+			current = false;
+		},
+		d(detaching) {
+			if (detaching) detach(div);
+			destroy_component(slider);
+			mounted = false;
+			dispose();
+		}
+	};
+}
+
+function create_fragment$x(ctx) {
+	let details;
+	let current;
+
+	details = new Details({
+			props: {
+				panelClass: "PinturaSliderPanel",
+				buttonClass: arrayJoin([
+					"PinturaSliderButton",
+					/*klass*/ ctx[0],
+					/*hideLabel*/ ctx[5] && "PinturaSliderIconOnly"
+				]),
+				$$slots: {
+					details: [create_details_slot$1],
+					label: [create_label_slot$1]
+				},
+				$$scope: { ctx }
+			}
+		});
+
+	return {
+		c() {
+			create_component(details.$$.fragment);
+		},
+		m(target, anchor) {
+			mount_component(details, target, anchor);
+			current = true;
+		},
+		p(ctx, [dirty]) {
+			const details_changes = {};
+
+			if (dirty & /*klass, hideLabel*/ 33) details_changes.buttonClass = arrayJoin([
+				"PinturaSliderButton",
+				/*klass*/ ctx[0],
+				/*hideLabel*/ ctx[5] && "PinturaSliderIconOnly"
+			]);
+
+			if (dirty & /*$$scope, $$restProps, value, title, locale, innerClass, labelClass, hideLabel, currentLabel, icon*/ 264702) {
+				details_changes.$$scope = { dirty, ctx };
+			}
+
+			details.$set(details_changes);
+		},
+		i(local) {
+			if (current) return;
+			transition_in(details.$$.fragment, local);
+			current = true;
+		},
+		o(local) {
+			transition_out(details.$$.fragment, local);
+			current = false;
+		},
+		d(detaching) {
+			destroy_component(details, detaching);
+		}
+	};
+}
+
+function instance$x($$self, $$props, $$invalidate) {
+	const omit_props_names = [
+		"class","title","label","icon","labelClass","innerClass","hideLabel","locale","value","onchange"
+	];
+
+	let $$restProps = compute_rest_props($$props, omit_props_names);
+	let { class: klass = undefined } = $$props;
+	let { title = undefined } = $$props;
+	let { label = Math.round } = $$props;
+	let { icon = undefined } = $$props;
+	let { labelClass = undefined } = $$props;
+	let { innerClass = undefined } = $$props;
+	let { hideLabel = false } = $$props;
+	let { locale = undefined } = $$props;
+	let { value = undefined } = $$props;
+	let { onchange = noop$1 } = $$props;
+	const { min, max, getValue = passthrough } = $$restProps;
+
+	const handleKeydown = e => {
+		// don't allow tabbing ([tab] is also blocked in normal <select>)
+		if ((/tab/i).test(e.key)) e.preventDefault();
+	};
+
+	const getLabel = value => isFunction(label)
+	? label(getValue(value), min, max)
+	: label;
+
+	let currentLabel = getLabel(value);
+
+	const handleChangeValue = value => {
+		$$invalidate(8, currentLabel = getLabel(value));
+		onchange(value);
+	};
+
+	$$self.$$set = $$new_props => {
+		$$props = assign(assign({}, $$props), exclude_internal_props($$new_props));
+		$$invalidate(11, $$restProps = compute_rest_props($$props, omit_props_names));
+		if ("class" in $$new_props) $$invalidate(0, klass = $$new_props.class);
+		if ("title" in $$new_props) $$invalidate(1, title = $$new_props.title);
+		if ("label" in $$new_props) $$invalidate(12, label = $$new_props.label);
+		if ("icon" in $$new_props) $$invalidate(2, icon = $$new_props.icon);
+		if ("labelClass" in $$new_props) $$invalidate(3, labelClass = $$new_props.labelClass);
+		if ("innerClass" in $$new_props) $$invalidate(4, innerClass = $$new_props.innerClass);
+		if ("hideLabel" in $$new_props) $$invalidate(5, hideLabel = $$new_props.hideLabel);
+		if ("locale" in $$new_props) $$invalidate(6, locale = $$new_props.locale);
+		if ("value" in $$new_props) $$invalidate(7, value = $$new_props.value);
+		if ("onchange" in $$new_props) $$invalidate(13, onchange = $$new_props.onchange);
+	};
+
+	return [
+		klass,
+		title,
+		icon,
+		labelClass,
+		innerClass,
+		hideLabel,
+		locale,
+		value,
+		currentLabel,
+		handleKeydown,
+		handleChangeValue,
+		$$restProps,
+		label,
+		onchange
+	];
+}
+
+class ToggleSlider extends SvelteComponent {
+	constructor(options) {
+		super();
+
+		init(this, options, instance$x, create_fragment$x, safe_not_equal, {
+			class: 0,
+			title: 1,
+			label: 12,
+			icon: 2,
+			labelClass: 3,
+			innerClass: 4,
+			hideLabel: 5,
+			locale: 6,
+			value: 7,
+			onchange: 13
+		});
+	}
+}
+
 /* src/core/ui/components/DynamicComponentTree.svelte generated by Svelte v3.37.0 */
 
 function get_each_context$6(ctx, list, i) {
@@ -13595,11 +15532,11 @@ function get_each_context$6(ctx, list, i) {
 	child_ctx[7] = list[i][0];
 	child_ctx[8] = list[i][1];
 	child_ctx[9] = list[i][2];
-	child_ctx[0] = list[i][3] !== undefined ? list[i][3] : [];
+	child_ctx[0] = list[i][3];
 	return child_ctx;
 }
 
-// (50:4) {:else}
+// (54:4) {:else}
 function create_else_block$3(ctx) {
 	let switch_instance;
 	let switch_instance_anchor;
@@ -13679,110 +15616,82 @@ function create_else_block$3(ctx) {
 	};
 }
 
-// (42:4) {#if !isComponent(node)}
+// (44:4) {#if !isComponent(node)}
 function create_if_block$8(ctx) {
-	let div;
-	let current_block_type_index;
-	let if_block;
-	let t;
+	let tag;
 	let current;
-	const if_block_creators = [create_if_block_1$8, create_if_block_2$7];
-	const if_blocks = [];
 
-	function select_block_type_1(ctx, dirty) {
-		if (/*children*/ ctx[0].length) return 0;
-		if (/*props*/ ctx[9].textContent) return 1;
-		return -1;
-	}
-
-	if (~(current_block_type_index = select_block_type_1(ctx))) {
-		if_block = if_blocks[current_block_type_index] = if_block_creators[current_block_type_index](ctx);
-	}
-
-	let div_levels = [/*getElementAttributes*/ ctx[2](/*props*/ ctx[9])];
-	let div_data = {};
-
-	for (let i = 0; i < div_levels.length; i += 1) {
-		div_data = assign(div_data, div_levels[i]);
-	}
+	tag = new Tag({
+			props: {
+				name: /*node*/ ctx[7],
+				attributes: /*getElementAttributes*/ ctx[2](/*props*/ ctx[9]),
+				$$slots: { default: [create_default_slot$b] },
+				$$scope: { ctx }
+			}
+		});
 
 	return {
 		c() {
-			div = element("div");
-			if (if_block) if_block.c();
-			t = space();
-			set_attributes(div, div_data);
+			create_component(tag.$$.fragment);
 		},
 		m(target, anchor) {
-			insert(target, div, anchor);
-
-			if (~current_block_type_index) {
-				if_blocks[current_block_type_index].m(div, null);
-			}
-
-			append(div, t);
+			mount_component(tag, target, anchor);
 			current = true;
 		},
 		p(ctx, dirty) {
-			let previous_block_index = current_block_type_index;
-			current_block_type_index = select_block_type_1(ctx);
+			const tag_changes = {};
+			if (dirty & /*children*/ 1) tag_changes.name = /*node*/ ctx[7];
+			if (dirty & /*children*/ 1) tag_changes.attributes = /*getElementAttributes*/ ctx[2](/*props*/ ctx[9]);
 
-			if (current_block_type_index === previous_block_index) {
-				if (~current_block_type_index) {
-					if_blocks[current_block_type_index].p(ctx, dirty);
-				}
-			} else {
-				if (if_block) {
-					group_outros();
-
-					transition_out(if_blocks[previous_block_index], 1, 1, () => {
-						if_blocks[previous_block_index] = null;
-					});
-
-					check_outros();
-				}
-
-				if (~current_block_type_index) {
-					if_block = if_blocks[current_block_type_index];
-
-					if (!if_block) {
-						if_block = if_blocks[current_block_type_index] = if_block_creators[current_block_type_index](ctx);
-						if_block.c();
-					} else {
-						if_block.p(ctx, dirty);
-					}
-
-					transition_in(if_block, 1);
-					if_block.m(div, t);
-				} else {
-					if_block = null;
-				}
+			if (dirty & /*$$scope, children*/ 4097) {
+				tag_changes.$$scope = { dirty, ctx };
 			}
 
-			set_attributes(div, div_data = get_spread_update(div_levels, [
-				dirty & /*children*/ 1 && /*getElementAttributes*/ ctx[2](/*props*/ ctx[9])
-			]));
+			tag.$set(tag_changes);
 		},
 		i(local) {
 			if (current) return;
-			transition_in(if_block);
+			transition_in(tag.$$.fragment, local);
 			current = true;
 		},
 		o(local) {
-			transition_out(if_block);
+			transition_out(tag.$$.fragment, local);
 			current = false;
 		},
 		d(detaching) {
-			if (detaching) detach(div);
-
-			if (~current_block_type_index) {
-				if_blocks[current_block_type_index].d();
-			}
+			destroy_component(tag, detaching);
 		}
 	};
 }
 
-// (46:40) 
+// (50:38) 
+function create_if_block_3$6(ctx) {
+	let html_tag;
+	let raw_value = /*props*/ ctx[9].innerHTML + "";
+	let html_anchor;
+
+	return {
+		c() {
+			html_anchor = empty();
+			html_tag = new HtmlTag(html_anchor);
+		},
+		m(target, anchor) {
+			html_tag.m(raw_value, target, anchor);
+			insert(target, html_anchor, anchor);
+		},
+		p(ctx, dirty) {
+			if (dirty & /*children*/ 1 && raw_value !== (raw_value = /*props*/ ctx[9].innerHTML + "")) html_tag.p(raw_value);
+		},
+		i: noop,
+		o: noop,
+		d(detaching) {
+			if (detaching) detach(html_anchor);
+			if (detaching) html_tag.d();
+		}
+	};
+}
+
+// (48:40) 
 function create_if_block_2$7(ctx) {
 	let t_value = /*props*/ ctx[9].textContent + "";
 	let t;
@@ -13805,7 +15714,7 @@ function create_if_block_2$7(ctx) {
 	};
 }
 
-// (44:12) {#if children.length}
+// (46:12) {#if children && children.length}
 function create_if_block_1$8(ctx) {
 	let dynamiccomponenttree;
 	let current;
@@ -13845,7 +15754,95 @@ function create_if_block_1$8(ctx) {
 	};
 }
 
-// (41:0) {#each children as [node, key, props, children = []] (key) }
+// (45:8) <Tag name={node} attributes={getElementAttributes(props)}>
+function create_default_slot$b(ctx) {
+	let current_block_type_index;
+	let if_block;
+	let t;
+	let current;
+	const if_block_creators = [create_if_block_1$8, create_if_block_2$7, create_if_block_3$6];
+	const if_blocks = [];
+
+	function select_block_type_1(ctx, dirty) {
+		if (/*children*/ ctx[0] && /*children*/ ctx[0].length) return 0;
+		if (/*props*/ ctx[9].textContent) return 1;
+		if (/*props*/ ctx[9].innerHTML) return 2;
+		return -1;
+	}
+
+	if (~(current_block_type_index = select_block_type_1(ctx))) {
+		if_block = if_blocks[current_block_type_index] = if_block_creators[current_block_type_index](ctx);
+	}
+
+	return {
+		c() {
+			if (if_block) if_block.c();
+			t = space();
+		},
+		m(target, anchor) {
+			if (~current_block_type_index) {
+				if_blocks[current_block_type_index].m(target, anchor);
+			}
+
+			insert(target, t, anchor);
+			current = true;
+		},
+		p(ctx, dirty) {
+			let previous_block_index = current_block_type_index;
+			current_block_type_index = select_block_type_1(ctx);
+
+			if (current_block_type_index === previous_block_index) {
+				if (~current_block_type_index) {
+					if_blocks[current_block_type_index].p(ctx, dirty);
+				}
+			} else {
+				if (if_block) {
+					group_outros();
+
+					transition_out(if_blocks[previous_block_index], 1, 1, () => {
+						if_blocks[previous_block_index] = null;
+					});
+
+					check_outros();
+				}
+
+				if (~current_block_type_index) {
+					if_block = if_blocks[current_block_type_index];
+
+					if (!if_block) {
+						if_block = if_blocks[current_block_type_index] = if_block_creators[current_block_type_index](ctx);
+						if_block.c();
+					} else {
+						if_block.p(ctx, dirty);
+					}
+
+					transition_in(if_block, 1);
+					if_block.m(t.parentNode, t);
+				} else {
+					if_block = null;
+				}
+			}
+		},
+		i(local) {
+			if (current) return;
+			transition_in(if_block);
+			current = true;
+		},
+		o(local) {
+			transition_out(if_block);
+			current = false;
+		},
+		d(detaching) {
+			if (~current_block_type_index) {
+				if_blocks[current_block_type_index].d(detaching);
+			}
+
+			if (detaching) detach(t);
+		}
+	};
+}
+
+// (43:0) {#each children as [node, key, props, children] (key)}
 function create_each_block$6(key_1, ctx) {
 	let first;
 	let show_if;
@@ -13925,7 +15922,7 @@ function create_each_block$6(key_1, ctx) {
 	};
 }
 
-function create_fragment$s(ctx) {
+function create_fragment$w(ctx) {
 	let each_blocks = [];
 	let each_1_lookup = new Map();
 	let each_1_anchor;
@@ -13956,7 +15953,7 @@ function create_fragment$s(ctx) {
 			current = true;
 		},
 		p(ctx, [dirty]) {
-			if (dirty & /*getElementAttributes, children, isComponent, ComponentMap*/ 15) {
+			if (dirty & /*children, getElementAttributes, isComponent, ComponentMap*/ 15) {
 				each_value = /*children*/ ctx[0];
 				group_outros();
 				each_blocks = update_keyed_each(each_blocks, dirty, get_key, 1, ctx, each_value, each_1_lookup, each_1_anchor.parentNode, outro_and_destroy_block, create_each_block$6, each_1_anchor, get_each_context$6);
@@ -13989,11 +15986,11 @@ function create_fragment$s(ctx) {
 	};
 }
 
-function instance$s($$self, $$props, $$invalidate) {
+function instance$w($$self, $$props, $$invalidate) {
 	let children;
 	let { items } = $$props;
 	let { discardEmptyItems = true } = $$props;
-	const ComponentMap = { Button, Dropdown };
+	const ComponentMap = { Button, Dropdown, Slider: ToggleSlider };
 
 	const getElementAttributes = (props = {}) => {
 		const { textContent, innerHTML, ...attributes } = props;
@@ -14013,7 +16010,7 @@ function instance$s($$self, $$props, $$invalidate) {
 		if (isComponent(node)) return true;
 
 		// item is tag, we have to check if it has content
-		return children.some(shouldRenderItem) || props.textContent;
+		return children.some(shouldRenderItem) || props.textContent || props.innerHTML;
 	};
 
 	$$self.$$set = $$props => {
@@ -14042,41 +16039,18 @@ function instance$s($$self, $$props, $$invalidate) {
 class DynamicComponentTree_1 extends SvelteComponent {
 	constructor(options) {
 		super();
-		init(this, options, instance$s, create_fragment$s, safe_not_equal, { items: 4, discardEmptyItems: 5 });
+		init(this, options, instance$w, create_fragment$w, safe_not_equal, { items: 4, discardEmptyItems: 5 });
 	}
 }
 
-const ImageStoreProps = [
-    'file',
-    'size',
-    'loadState',
-    'processState',
-    'cropAspectRatio',
-    'cropLimitToImage',
-    'crop',
-    'cropMinSize',
-    'cropMaxSize',
-    'cropRange',
-    'cropOrigin',
-    'cropRectAspectRatio',
-    'rotation',
-    'rotationRange',
-    'targetSize',
-    'flipX',
-    'flipY',
-    'perspectiveX',
-    'perspectiveY',
-    'perspective',
-    'colorMatrix',
-    'convolutionMatrix',
-    'gamma',
-    'vignette',
-    'noise',
-    'decoration',
-    'annotation',
-    'backgroundColor',
-    'state',
-];
+var smoothstep = (min, max, value, ease = (x) => x * x * (3 - 2 * x)) => ease(Math.max(0, Math.min(1, (value - min) / (max - min))));
+
+var canvasClone = (canvas) => {
+    const clone = h('canvas', { width: canvas.width, height: canvas.height });
+    clone.getContext('2d').drawImage(canvas, 0, 0);
+    return clone;
+};
+
 const proxy = function (get, set, update) {
     let subscribers = [];
     return {
@@ -14097,6 +16071,39 @@ const proxy = function (get, set, update) {
 var createImageProxy = () => {
     let unsubs;
     let image;
+    const ImageStoreProps = [
+        'file',
+        'size',
+        'loadState',
+        'processState',
+        'cropAspectRatio',
+        'cropLimitToImage',
+        'crop',
+        'cropMinSize',
+        'cropMaxSize',
+        'cropRange',
+        'cropOrigin',
+        'cropRectAspectRatio',
+        'rotation',
+        'rotationRange',
+        'targetSize',
+        'flipX',
+        'flipY',
+        'perspectiveX',
+        'perspectiveY',
+        'perspective',
+        'colorMatrix',
+        'convolutionMatrix',
+        'gamma',
+        'vignette',
+        'noise',
+        'redaction',
+        'decoration',
+        'annotation',
+        'frame',
+        'backgroundColor',
+        'state',
+    ];
     const proxyStores = ImageStoreProps.reduce((prev, curr) => {
         prev[curr] = proxy(
         // getter
@@ -14142,6 +16149,10 @@ var createImageProxy = () => {
     return {
         update,
         stores: proxyStores,
+        destroy: () => {
+            if (unsubs)
+                unsubs.forEach((unsub) => unsub());
+        },
     };
 };
 
@@ -14152,6 +16163,15 @@ var createPingRouter = (route, cancel = true) => (e) => {
         e.stopPropagation();
     route(e.detail.type, e.detail.data);
 };
+
+var createPing = (type, data) => new CustomEvent('ping', {
+    detail: {
+        type,
+        data,
+    },
+    cancelable: true,
+    bubbles: true,
+});
 
 var isTextarea = (element) => /textarea/i.test(element.nodeName);
 
@@ -14164,14 +16184,6 @@ var toKebabCase = (str, abbr) => {
         .replace(/([a-z])([A-Z])/g, '$1-$2')
         .replace(/\s+/g, '-')
         .toLowerCase();
-};
-
-let result$5 = null;
-var supportsPointerEvents = () => {
-    if (result$5 === null) {
-        result$5 = isBrowser() && 'onpointerdown' in window;
-    }
-    return result$5;
 };
 
 var matchMedia$1 = (query, cb) => {
@@ -14189,7 +16201,7 @@ var mediaQueryStore = (query, formatValue = passthrough) => {
     const mm = matchMedia$1(query, ({ matches }) => set(formatValue(matches)));
     return {
         subscribe,
-        unsubscribe: mm.destroy
+        destroy: mm.destroy,
     };
 };
 
@@ -14317,7 +16329,6 @@ var historyCreate = (getState, setState) => {
             history.index = 0;
             // set new entries
             const newStateEntries = !Array.isArray(state) ? [state] : state;
-            // if (!Array.isArray(state)) {
             // add new entries
             entries.push(...newStateEntries);
             // move pointer to last added index
@@ -14340,42 +16351,46 @@ var isChrome = () => isBrowser() && !!window['chrome'];
 
 var imageBitmapToImageData = async (imageBitmap) => canvasToImageData(await imageDataToCanvas(imageBitmap));
 
-var blobToImageBitmap = (file, ImageOrienter, canvasMemoryLimit) => new Promise(async (resolve, reject) => {
-    // get orientation of image, should return 1 for normal orientation
-    const orientation = await ImageOrienter.read(file);
-    // helper method to apply orientation fix if needed
-    const toImageData = (file) => blobToImageData(file, canvasMemoryLimit)
-        .then((imageData) => ImageOrienter.apply(imageData, orientation))
-        .then(resolve)
-        .catch(reject);
-    // cannot create image bitmaps in worker
-    if (!canCreateImageBitmap() || isSVGFile(file))
-        return toImageData(file);
-    // create image bitmap in thread
-    let imageBitmap;
-    try {
-        imageBitmap = await thread((file, done) => createImageBitmap(file)
-            .then((bitmap) => done(null, bitmap))
-            .catch(done), [file]);
-    }
-    catch (err) {
-        // fails silently on purpose, we'll try to turn the blob into image data in the main thread
-        // console.error(err);
-    }
-    // no bitmap returned, something went wrong in `createImageBitmap` logic
-    if (!imageBitmap || !imageBitmap.width)
-        return toImageData(file);
-    // if the browser can't orient images, we need to correct the orientation now
-    if (!(await canOrientImages()))
-        return resolve(ImageOrienter.apply(imageBitmap, orientation));
-    // need to convert so oriented image can be used as WebGL texture
-    // converting ImageBitmap to <canvas> (and then optionally to image data) fixes a Chrome render bug where the
-    // ImageBitmap when used in WebGL doesn't render in the correct orientation
-    // https://bugs.chromium.org/p/chromium/issues/detail?id=1082451&q=orientation%20imagebitmap&can=2
-    if (isChrome() && orientation > 1)
-        return resolve(await imageBitmapToImageData(imageBitmap));
-    // yay we got our bitmap
-    resolve(imageBitmap);
+var blobToImageBitmap = (file, ImageOrienter, canvasMemoryLimit) => new Promise((resolve, reject) => {
+    (async () => {
+        // get orientation of image, should return 1 for normal orientation
+        const orientation = await ImageOrienter.read(file);
+        // helper method to apply orientation fix if needed
+        const toImageData = (file) => blobToImageData(file, canvasMemoryLimit)
+            .then((imageData) => ImageOrienter.apply(imageData, orientation))
+            .then(resolve)
+            .catch(reject);
+        // if cannot create image bitmaps in worker
+        // Safari 15 cannot correctly apply orientation, also it will choke on very big images when trying to createImageBitmap in thread, so lets just do it on the main thread
+        // we'll ignore Safari and iOS for now
+        if (isSVGFile(file) || !canCreateImageBitmap() || isSafari$1() || isIOS())
+            return toImageData(file);
+        // create image bitmap in thread
+        let imageBitmap;
+        try {
+            imageBitmap = await thread((file, done) => createImageBitmap(file)
+                .then((bitmap) => done(null, bitmap))
+                .catch(done), [file]);
+        }
+        catch (err) {
+            // fails silently on purpose, we'll try to turn the blob into image data in the main thread
+            // console.error(err);
+        }
+        // no bitmap returned, something went wrong in `createImageBitmap` logic
+        if (!imageBitmap || !imageBitmap.width)
+            return toImageData(file);
+        // if the browser can't orient images, we need to correct the orientation now
+        if (!(await canOrientImages()))
+            return resolve(ImageOrienter.apply(imageBitmap, orientation));
+        // need to convert so oriented image can be used as WebGL texture
+        // converting ImageBitmap to <canvas> (and then optionally to image data) fixes a Chrome render bug where the
+        // ImageBitmap when used in WebGL doesn't render in the correct orientation
+        // https://bugs.chromium.org/p/chromium/issues/detail?id=1082451&q=orientation%20imagebitmap&can=2
+        if (isChrome() && orientation > 1)
+            return resolve(await imageBitmapToImageData(imageBitmap));
+        // yay we got our bitmap
+        resolve(imageBitmap);
+    })();
 });
 
 var imageDataContain = (imageData, size) => new Promise(async (resolve) => {
@@ -14396,17 +16411,6 @@ var imageDataContain = (imageData, size) => new Promise(async (resolve) => {
     ctx.drawImage(data, 0, 0, targetWidth, targetHeight);
     resolve(canvasToImageData(canvas));
 });
-
-let limit = null;
-var getWebGLTextureSizeLimit = () => {
-    if (limit !== null)
-        return limit;
-    const canvas = h('canvas');
-    const gl = getWebGLContext(canvas);
-    limit = gl ? gl.getParameter(gl.MAX_TEXTURE_SIZE) : undefined;
-    releaseCanvas(canvas);
-    return limit;
-};
 
 var hexToRGB = (str) => {
     const [, q, w, e] = str.split('');
@@ -14449,9 +16453,10 @@ var colorStringToColorArray = (color) => {
 let result$4 = null;
 var supportsWebGL = () => {
     if (result$4 === null) {
-        const canvas = h('canvas');
+        let canvas = h('canvas');
         result$4 = !!getWebGLContext(canvas);
         releaseCanvas(canvas);
+        canvas = undefined;
     }
     return result$4;
 };
@@ -14581,16 +16586,36 @@ var storeList = () => {
     };
 };
 
+var isDarkColor = (color) => {
+    return color[0] < 0.25 && color[1] < 0.25 && color[2] < 0.25;
+};
+
+var browse = () => new Promise((resolve) => {
+    // create file input box
+    const fileInput = h('input', {
+        type: 'file',
+        accept: 'image/*',
+        onchange: () => {
+            const [file] = fileInput.files;
+            if (!file)
+                return resolve(undefined);
+            resolve(file);
+        },
+    });
+    // open browse window
+    fileInput.click();
+});
+
 /* src/core/ui/index.svelte generated by Svelte v3.37.0 */
 
-const { window: window_1 } = globals;
+const { window: window_1$1 } = globals;
 
 function create_if_block_1$7(ctx) {
 	let t;
 	let if_block1_anchor;
 	let current;
-	let if_block0 = /*isStatusVisible*/ ctx[25] && create_if_block_6$1(ctx);
-	let if_block1 = /*$imagePreview*/ ctx[22] && !/*isSupportsError*/ ctx[23] && create_if_block_2$6(ctx);
+	let if_block0 = /*isStatusVisible*/ ctx[26] && create_if_block_6$1(ctx);
+	let if_block1 = /*isReady*/ ctx[27] && create_if_block_2$6(ctx);
 
 	return {
 		c() {
@@ -14607,11 +16632,11 @@ function create_if_block_1$7(ctx) {
 			current = true;
 		},
 		p(ctx, dirty) {
-			if (/*isStatusVisible*/ ctx[25]) {
+			if (/*isStatusVisible*/ ctx[26]) {
 				if (if_block0) {
 					if_block0.p(ctx, dirty);
 
-					if (dirty[0] & /*isStatusVisible*/ 33554432) {
+					if (dirty[0] & /*isStatusVisible*/ 67108864) {
 						transition_in(if_block0, 1);
 					}
 				} else {
@@ -14630,11 +16655,11 @@ function create_if_block_1$7(ctx) {
 				check_outros();
 			}
 
-			if (/*$imagePreview*/ ctx[22] && !/*isSupportsError*/ ctx[23]) {
+			if (/*isReady*/ ctx[27]) {
 				if (if_block1) {
 					if_block1.p(ctx, dirty);
 
-					if (dirty[0] & /*$imagePreview, isSupportsError*/ 12582912) {
+					if (dirty[0] & /*isReady*/ 134217728) {
 						transition_in(if_block1, 1);
 					}
 				} else {
@@ -14673,7 +16698,7 @@ function create_if_block_1$7(ctx) {
 	};
 }
 
-// (1781:2) {#if isStatusVisible}
+// (2519:8) {#if isStatusVisible}
 function create_if_block_6$1(ctx) {
 	let div;
 	let p;
@@ -14686,7 +16711,7 @@ function create_if_block_6$1(ctx) {
 
 	function select_block_type(ctx, dirty) {
 		if (/*isSupportsError*/ ctx[23]) return 0;
-		if (/*statusState*/ ctx[12]) return 1;
+		if (/*statusState*/ ctx[13]) return 1;
 		return -1;
 	}
 
@@ -14699,9 +16724,9 @@ function create_if_block_6$1(ctx) {
 			div = element("div");
 			p = element("p");
 			if (if_block) if_block.c();
-			attr(p, "style", /*statusTransform*/ ctx[36]);
+			attr(p, "style", /*statusTransform*/ ctx[39]);
 			attr(div, "class", "PinturaStatus");
-			attr(div, "style", div_style_value = `opacity: ${/*$statusOpacity*/ ctx[24]}`);
+			attr(div, "style", div_style_value = `opacity: ${/*$statusOpacity*/ ctx[25]}`);
 		},
 		m(target, anchor) {
 			insert(target, div, anchor);
@@ -14749,11 +16774,11 @@ function create_if_block_6$1(ctx) {
 				}
 			}
 
-			if (!current || dirty[1] & /*statusTransform*/ 32) {
-				attr(p, "style", /*statusTransform*/ ctx[36]);
+			if (!current || dirty[1] & /*statusTransform*/ 256) {
+				attr(p, "style", /*statusTransform*/ ctx[39]);
 			}
 
-			if (!current || dirty[0] & /*$statusOpacity*/ 16777216 && div_style_value !== (div_style_value = `opacity: ${/*$statusOpacity*/ ctx[24]}`)) {
+			if (!current || dirty[0] & /*$statusOpacity*/ 33554432 && div_style_value !== (div_style_value = `opacity: ${/*$statusOpacity*/ ctx[25]}`)) {
 				attr(div, "style", div_style_value);
 			}
 		},
@@ -14776,7 +16801,7 @@ function create_if_block_6$1(ctx) {
 	};
 }
 
-// (1793:25) 
+// (2532:42) 
 function create_if_block_8(ctx) {
 	let statusmessage;
 	let t;
@@ -14785,12 +16810,12 @@ function create_if_block_8(ctx) {
 
 	statusmessage = new StatusMessage({
 			props: {
-				text: /*statusState*/ ctx[12].text || "",
-				onmeasure: /*offsetProgress*/ ctx[108]
+				text: /*statusState*/ ctx[13].text || "",
+				onmeasure: /*offsetAside*/ ctx[129]
 			}
 		});
 
-	let if_block = /*statusState*/ ctx[12].aside && create_if_block_9(ctx);
+	let if_block = /*statusState*/ ctx[13].aside && create_if_block_9(ctx);
 
 	return {
 		c() {
@@ -14808,14 +16833,14 @@ function create_if_block_8(ctx) {
 		},
 		p(ctx, dirty) {
 			const statusmessage_changes = {};
-			if (dirty[0] & /*statusState*/ 4096) statusmessage_changes.text = /*statusState*/ ctx[12].text || "";
+			if (dirty[0] & /*statusState*/ 8192) statusmessage_changes.text = /*statusState*/ ctx[13].text || "";
 			statusmessage.$set(statusmessage_changes);
 
-			if (/*statusState*/ ctx[12].aside) {
+			if (/*statusState*/ ctx[13].aside) {
 				if (if_block) {
 					if_block.p(ctx, dirty);
 
-					if (dirty[0] & /*statusState*/ 4096) {
+					if (dirty[0] & /*statusState*/ 8192) {
 						transition_in(if_block, 1);
 					}
 				} else {
@@ -14854,7 +16879,7 @@ function create_if_block_8(ctx) {
 	};
 }
 
-// (1785:3) {#if isSupportsError}
+// (2522:20) {#if isSupportsError}
 function create_if_block_7(ctx) {
 	let statusmessage;
 	let t;
@@ -14864,15 +16889,15 @@ function create_if_block_7(ctx) {
 	statusmessage = new StatusMessage({
 			props: {
 				text: /*isSupportsError*/ ctx[23],
-				onmeasure: /*offsetProgress*/ ctx[108]
+				onmeasure: /*offsetAside*/ ctx[129]
 			}
 		});
 
 	statusaside = new StatusAside({
 			props: {
 				class: "PinturaStatusIcon",
-				offset: /*$asideOffset*/ ctx[42],
-				opacity: /*$asideOpacity*/ ctx[43],
+				offset: /*$asideOffset*/ ctx[43],
+				opacity: /*$asideOpacity*/ ctx[44],
 				$$slots: { default: [create_default_slot_4$1] },
 				$$scope: { ctx }
 			}
@@ -14895,10 +16920,10 @@ function create_if_block_7(ctx) {
 			if (dirty[0] & /*isSupportsError*/ 8388608) statusmessage_changes.text = /*isSupportsError*/ ctx[23];
 			statusmessage.$set(statusmessage_changes);
 			const statusaside_changes = {};
-			if (dirty[1] & /*$asideOffset*/ 2048) statusaside_changes.offset = /*$asideOffset*/ ctx[42];
-			if (dirty[1] & /*$asideOpacity*/ 4096) statusaside_changes.opacity = /*$asideOpacity*/ ctx[43];
+			if (dirty[1] & /*$asideOffset*/ 4096) statusaside_changes.offset = /*$asideOffset*/ ctx[43];
+			if (dirty[1] & /*$asideOpacity*/ 8192) statusaside_changes.opacity = /*$asideOpacity*/ ctx[44];
 
-			if (dirty[0] & /*locale*/ 4 | dirty[9] & /*$$scope*/ 33554432) {
+			if (dirty[0] & /*locale*/ 4 | dirty[12] & /*$$scope*/ 2048) {
 				statusaside_changes.$$scope = { dirty, ctx };
 			}
 
@@ -14923,7 +16948,7 @@ function create_if_block_7(ctx) {
 	};
 }
 
-// (1797:4) {#if statusState.aside }
+// (2535:24) {#if statusState.aside}
 function create_if_block_9(ctx) {
 	let statusaside;
 	let current;
@@ -14931,8 +16956,8 @@ function create_if_block_9(ctx) {
 	statusaside = new StatusAside({
 			props: {
 				class: "PinturaStatusButton",
-				offset: /*$asideOffset*/ ctx[42],
-				opacity: /*$asideOpacity*/ ctx[43],
+				offset: /*$asideOffset*/ ctx[43],
+				opacity: /*$asideOpacity*/ ctx[44],
 				$$slots: { default: [create_default_slot_6] },
 				$$scope: { ctx }
 			}
@@ -14948,10 +16973,10 @@ function create_if_block_9(ctx) {
 		},
 		p(ctx, dirty) {
 			const statusaside_changes = {};
-			if (dirty[1] & /*$asideOffset*/ 2048) statusaside_changes.offset = /*$asideOffset*/ ctx[42];
-			if (dirty[1] & /*$asideOpacity*/ 4096) statusaside_changes.opacity = /*$asideOpacity*/ ctx[43];
+			if (dirty[1] & /*$asideOffset*/ 4096) statusaside_changes.offset = /*$asideOffset*/ ctx[43];
+			if (dirty[1] & /*$asideOpacity*/ 8192) statusaside_changes.opacity = /*$asideOpacity*/ ctx[44];
 
-			if (dirty[0] & /*statusState*/ 4096 | dirty[9] & /*$$scope*/ 33554432) {
+			if (dirty[0] & /*statusState*/ 8192 | dirty[12] & /*$$scope*/ 2048) {
 				statusaside_changes.$$scope = { dirty, ctx };
 			}
 
@@ -14972,14 +16997,14 @@ function create_if_block_9(ctx) {
 	};
 }
 
-// (1800:5) {#if statusState.progressIndicator.visible}
+// (2541:32) {#if statusState.progressIndicator.visible}
 function create_if_block_11(ctx) {
 	let progressindicator;
 	let current;
 
 	progressindicator = new ProgressIndicator({
 			props: {
-				progress: /*statusState*/ ctx[12].progressIndicator.progress
+				progress: /*statusState*/ ctx[13].progressIndicator.progress
 			}
 		});
 
@@ -14993,7 +17018,7 @@ function create_if_block_11(ctx) {
 		},
 		p(ctx, dirty) {
 			const progressindicator_changes = {};
-			if (dirty[0] & /*statusState*/ 4096) progressindicator_changes.progress = /*statusState*/ ctx[12].progressIndicator.progress;
+			if (dirty[0] & /*statusState*/ 8192) progressindicator_changes.progress = /*statusState*/ ctx[13].progressIndicator.progress;
 			progressindicator.$set(progressindicator_changes);
 		},
 		i(local) {
@@ -15011,11 +17036,11 @@ function create_if_block_11(ctx) {
 	};
 }
 
-// (1804:5) {#if statusState.error && statusState.text}
+// (2547:32) {#if statusState.closeButton && statusState.text}
 function create_if_block_10(ctx) {
 	let button;
 	let current;
-	const button_spread_levels = [/*statusState*/ ctx[12].closeButton, { hideLabel: true }];
+	const button_spread_levels = [/*statusState*/ ctx[13].closeButton, { hideLabel: true }];
 	let button_props = {};
 
 	for (let i = 0; i < button_spread_levels.length; i += 1) {
@@ -15033,9 +17058,9 @@ function create_if_block_10(ctx) {
 			current = true;
 		},
 		p(ctx, dirty) {
-			const button_changes = (dirty[0] & /*statusState*/ 4096)
+			const button_changes = (dirty[0] & /*statusState*/ 8192)
 			? get_spread_update(button_spread_levels, [
-					get_spread_object(/*statusState*/ ctx[12].closeButton),
+					get_spread_object(/*statusState*/ ctx[13].closeButton),
 					button_spread_levels[1]
 				])
 			: {};
@@ -15057,13 +17082,13 @@ function create_if_block_10(ctx) {
 	};
 }
 
-// (1798:4) <StatusAside class="PinturaStatusButton" offset={$asideOffset} opacity={$asideOpacity}>
+// (2536:28) <StatusAside                                 class="PinturaStatusButton"                                 offset={$asideOffset}                                 opacity={$asideOpacity}                             >
 function create_default_slot_6(ctx) {
 	let t;
 	let if_block1_anchor;
 	let current;
-	let if_block0 = /*statusState*/ ctx[12].progressIndicator.visible && create_if_block_11(ctx);
-	let if_block1 = /*statusState*/ ctx[12].error && /*statusState*/ ctx[12].text && create_if_block_10(ctx);
+	let if_block0 = /*statusState*/ ctx[13].progressIndicator.visible && create_if_block_11(ctx);
+	let if_block1 = /*statusState*/ ctx[13].closeButton && /*statusState*/ ctx[13].text && create_if_block_10(ctx);
 
 	return {
 		c() {
@@ -15080,11 +17105,11 @@ function create_default_slot_6(ctx) {
 			current = true;
 		},
 		p(ctx, dirty) {
-			if (/*statusState*/ ctx[12].progressIndicator.visible) {
+			if (/*statusState*/ ctx[13].progressIndicator.visible) {
 				if (if_block0) {
 					if_block0.p(ctx, dirty);
 
-					if (dirty[0] & /*statusState*/ 4096) {
+					if (dirty[0] & /*statusState*/ 8192) {
 						transition_in(if_block0, 1);
 					}
 				} else {
@@ -15103,11 +17128,11 @@ function create_default_slot_6(ctx) {
 				check_outros();
 			}
 
-			if (/*statusState*/ ctx[12].error && /*statusState*/ ctx[12].text) {
+			if (/*statusState*/ ctx[13].closeButton && /*statusState*/ ctx[13].text) {
 				if (if_block1) {
 					if_block1.p(ctx, dirty);
 
-					if (dirty[0] & /*statusState*/ 4096) {
+					if (dirty[0] & /*statusState*/ 8192) {
 						transition_in(if_block1, 1);
 					}
 				} else {
@@ -15146,7 +17171,7 @@ function create_default_slot_6(ctx) {
 	};
 }
 
-// (1790:5) <Icon>
+// (2530:28) <Icon>
 function create_default_slot_5(ctx) {
 	let g;
 	let raw_value = /*locale*/ ctx[2].iconSupportError + "";
@@ -15167,7 +17192,7 @@ function create_default_slot_5(ctx) {
 	};
 }
 
-// (1789:4) <StatusAside class="PinturaStatusIcon" offset={$asideOffset} opacity={$asideOpacity}>
+// (2525:24) <StatusAside                             class="PinturaStatusIcon"                             offset={$asideOffset}                             opacity={$asideOpacity}                         >
 function create_default_slot_4$1(ctx) {
 	let icon;
 	let current;
@@ -15190,7 +17215,7 @@ function create_default_slot_4$1(ctx) {
 		p(ctx, dirty) {
 			const icon_changes = {};
 
-			if (dirty[0] & /*locale*/ 4 | dirty[9] & /*$$scope*/ 33554432) {
+			if (dirty[0] & /*locale*/ 4 | dirty[12] & /*$$scope*/ 2048) {
 				icon_changes.$$scope = { dirty, ctx };
 			}
 
@@ -15211,7 +17236,7 @@ function create_default_slot_4$1(ctx) {
 	};
 }
 
-// (1816:2) {#if $imagePreview && !isSupportsError}
+// (2557:8) {#if isReady}
 function create_if_block_2$6(ctx) {
 	let t0;
 	let t1;
@@ -15223,12 +17248,12 @@ function create_if_block_2$6(ctx) {
 	let div;
 	let current;
 	let if_block0 = /*enableToolbar*/ ctx[6] && create_if_block_5$3(ctx);
-	let if_block1 = /*shouldRenderTabs*/ ctx[16] && /*showUtils*/ ctx[14] && create_if_block_4$4(ctx);
-	const if_block_creators = [create_if_block_3$4, create_else_block$2];
+	let if_block1 = /*shouldRenderTabs*/ ctx[17] && /*showUtils*/ ctx[15] && create_if_block_4$5(ctx);
+	const if_block_creators = [create_if_block_3$5, create_else_block$2];
 	const if_blocks = [];
 
 	function select_block_type_1(ctx, dirty) {
-		if (/*shouldRenderTabs*/ ctx[16]) return 0;
+		if (/*shouldRenderTabs*/ ctx[17]) return 0;
 		return 1;
 	}
 
@@ -15237,17 +17262,21 @@ function create_if_block_2$6(ctx) {
 
 	canvas = new Canvas({
 			props: {
-				animate: /*$shouldAnimate*/ ctx[17],
-				pixelRatio: /*$pixelRatio*/ ctx[46],
-				backgroundColor: /*$rootBackgroundColor*/ ctx[47],
-				maskRect: /*$imageSelectionRectPresentation*/ ctx[35],
-				maskOpacity: /*imageCanvasState*/ ctx[34]
-				? /*imageCanvasState*/ ctx[34].maskOpacity
+				animate: /*$shouldAnimate*/ ctx[18],
+				pixelRatio: /*$pixelRatio*/ ctx[47],
+				backgroundColor: /*$rootBackgroundColor*/ ctx[48],
+				maskRect: /*$imageSelectionRectPresentation*/ ctx[38],
+				maskOpacity: /*imageCanvasState*/ ctx[37]
+				? /*imageCanvasState*/ ctx[37].maskOpacity
 				: 1,
-				images: /*$activeImages*/ ctx[19],
-				interfaceImages: /*$interfaceImages*/ ctx[48],
+				maskFrameOpacity: /*$utilSelectedStore*/ ctx[49] === "frame" && /*$stagePadded*/ ctx[50]
+				? 0
+				: 0.95,
+				images: /*$activeImages*/ ctx[22],
+				interfaceImages: /*$interfaceImages*/ ctx[51],
 				loadImageData: /*imageSourceToImageData*/ ctx[8],
-				willRender: /*func_2*/ ctx[226]
+				willRequestResource: /*$willRequestResource*/ ctx[52],
+				willRender: /*func_2*/ ctx[286]
 			}
 		});
 
@@ -15274,7 +17303,7 @@ function create_if_block_2$6(ctx) {
 			mount_component(canvas, target, anchor);
 			insert(target, t3, anchor);
 			insert(target, div, anchor);
-			/*div_binding*/ ctx[227](div);
+			/*div_binding*/ ctx[287](div);
 			current = true;
 		},
 		p(ctx, dirty) {
@@ -15301,15 +17330,15 @@ function create_if_block_2$6(ctx) {
 				check_outros();
 			}
 
-			if (/*shouldRenderTabs*/ ctx[16] && /*showUtils*/ ctx[14]) {
+			if (/*shouldRenderTabs*/ ctx[17] && /*showUtils*/ ctx[15]) {
 				if (if_block1) {
 					if_block1.p(ctx, dirty);
 
-					if (dirty[0] & /*shouldRenderTabs, showUtils*/ 81920) {
+					if (dirty[0] & /*shouldRenderTabs, showUtils*/ 163840) {
 						transition_in(if_block1, 1);
 					}
 				} else {
-					if_block1 = create_if_block_4$4(ctx);
+					if_block1 = create_if_block_4$5(ctx);
 					if_block1.c();
 					transition_in(if_block1, 1);
 					if_block1.m(t1.parentNode, t1);
@@ -15351,19 +17380,24 @@ function create_if_block_2$6(ctx) {
 			}
 
 			const canvas_changes = {};
-			if (dirty[0] & /*$shouldAnimate*/ 131072) canvas_changes.animate = /*$shouldAnimate*/ ctx[17];
-			if (dirty[1] & /*$pixelRatio*/ 32768) canvas_changes.pixelRatio = /*$pixelRatio*/ ctx[46];
-			if (dirty[1] & /*$rootBackgroundColor*/ 65536) canvas_changes.backgroundColor = /*$rootBackgroundColor*/ ctx[47];
-			if (dirty[1] & /*$imageSelectionRectPresentation*/ 16) canvas_changes.maskRect = /*$imageSelectionRectPresentation*/ ctx[35];
+			if (dirty[0] & /*$shouldAnimate*/ 262144) canvas_changes.animate = /*$shouldAnimate*/ ctx[18];
+			if (dirty[1] & /*$pixelRatio*/ 65536) canvas_changes.pixelRatio = /*$pixelRatio*/ ctx[47];
+			if (dirty[1] & /*$rootBackgroundColor*/ 131072) canvas_changes.backgroundColor = /*$rootBackgroundColor*/ ctx[48];
+			if (dirty[1] & /*$imageSelectionRectPresentation*/ 128) canvas_changes.maskRect = /*$imageSelectionRectPresentation*/ ctx[38];
 
-			if (dirty[1] & /*imageCanvasState*/ 8) canvas_changes.maskOpacity = /*imageCanvasState*/ ctx[34]
-			? /*imageCanvasState*/ ctx[34].maskOpacity
+			if (dirty[1] & /*imageCanvasState*/ 64) canvas_changes.maskOpacity = /*imageCanvasState*/ ctx[37]
+			? /*imageCanvasState*/ ctx[37].maskOpacity
 			: 1;
 
-			if (dirty[0] & /*$activeImages*/ 524288) canvas_changes.images = /*$activeImages*/ ctx[19];
-			if (dirty[1] & /*$interfaceImages*/ 131072) canvas_changes.interfaceImages = /*$interfaceImages*/ ctx[48];
+			if (dirty[1] & /*$utilSelectedStore, $stagePadded*/ 786432) canvas_changes.maskFrameOpacity = /*$utilSelectedStore*/ ctx[49] === "frame" && /*$stagePadded*/ ctx[50]
+			? 0
+			: 0.95;
+
+			if (dirty[0] & /*$activeImages*/ 4194304) canvas_changes.images = /*$activeImages*/ ctx[22];
+			if (dirty[1] & /*$interfaceImages*/ 1048576) canvas_changes.interfaceImages = /*$interfaceImages*/ ctx[51];
 			if (dirty[0] & /*imageSourceToImageData*/ 256) canvas_changes.loadImageData = /*imageSourceToImageData*/ ctx[8];
-			if (dirty[0] & /*willRenderCanvas*/ 32 | dirty[1] & /*$imageDecoration, $imageAnnotation, $imageOverlay*/ 1835008) canvas_changes.willRender = /*func_2*/ ctx[226];
+			if (dirty[1] & /*$willRequestResource*/ 2097152) canvas_changes.willRequestResource = /*$willRequestResource*/ ctx[52];
+			if (dirty[0] & /*willRenderCanvas, blendShapes*/ 536870944 | dirty[1] & /*$imageAnnotation, $imageDecoration, $imageFrame, $imageOverlay*/ 62914560) canvas_changes.willRender = /*func_2*/ ctx[286];
 			canvas.$set(canvas_changes);
 		},
 		i(local) {
@@ -15391,12 +17425,12 @@ function create_if_block_2$6(ctx) {
 			destroy_component(canvas, detaching);
 			if (detaching) detach(t3);
 			if (detaching) detach(div);
-			/*div_binding*/ ctx[227](null);
+			/*div_binding*/ ctx[287](null);
 		}
 	};
 }
 
-// (1818:3) {#if enableToolbar}
+// (2558:12) {#if enableToolbar}
 function create_if_block_5$3(ctx) {
 	let div;
 	let dynamiccomponenttree;
@@ -15405,7 +17439,7 @@ function create_if_block_5$3(ctx) {
 	let dispose;
 
 	dynamiccomponenttree = new DynamicComponentTree_1({
-			props: { items: /*toolbarItems*/ ctx[39] }
+			props: { items: /*toolbarItems*/ ctx[40] }
 		});
 
 	return {
@@ -15421,7 +17455,7 @@ function create_if_block_5$3(ctx) {
 
 			if (!mounted) {
 				dispose = [
-					listen(div, "measure", /*measure_handler*/ ctx[211]),
+					listen(div, "measure", /*measure_handler*/ ctx[271]),
 					action_destroyer(measurable.call(null, div))
 				];
 
@@ -15430,7 +17464,7 @@ function create_if_block_5$3(ctx) {
 		},
 		p(ctx, dirty) {
 			const dynamiccomponenttree_changes = {};
-			if (dirty[1] & /*toolbarItems*/ 256) dynamiccomponenttree_changes.items = /*toolbarItems*/ ctx[39];
+			if (dirty[1] & /*toolbarItems*/ 512) dynamiccomponenttree_changes.items = /*toolbarItems*/ ctx[40];
 			dynamiccomponenttree.$set(dynamiccomponenttree_changes);
 		},
 		i(local) {
@@ -15451,8 +17485,8 @@ function create_if_block_5$3(ctx) {
 	};
 }
 
-// (1824:3) {#if shouldRenderTabs && showUtils }
-function create_if_block_4$4(ctx) {
+// (2568:12) {#if shouldRenderTabs && showUtils}
+function create_if_block_4$5(ctx) {
 	let div;
 	let scrollable;
 	let current;
@@ -15460,8 +17494,8 @@ function create_if_block_4$4(ctx) {
 	scrollable = new Scrollable({
 			props: {
 				elasticity: /*elasticityMultiplier*/ ctx[4] * scrollElasticity,
-				scrollDirection: /*isLandscape*/ ctx[32] ? "y" : "x",
-				$$slots: { default: [create_default_slot_1$5] },
+				scrollDirection: /*isLandscape*/ ctx[35] ? "y" : "x",
+				$$slots: { default: [create_default_slot_1$4] },
 				$$scope: { ctx }
 			}
 		});
@@ -15480,9 +17514,9 @@ function create_if_block_4$4(ctx) {
 		p(ctx, dirty) {
 			const scrollable_changes = {};
 			if (dirty[0] & /*elasticityMultiplier*/ 16) scrollable_changes.elasticity = /*elasticityMultiplier*/ ctx[4] * scrollElasticity;
-			if (dirty[1] & /*isLandscape*/ 2) scrollable_changes.scrollDirection = /*isLandscape*/ ctx[32] ? "y" : "x";
+			if (dirty[1] & /*isLandscape*/ 16) scrollable_changes.scrollDirection = /*isLandscape*/ ctx[35] ? "y" : "x";
 
-			if (dirty[0] & /*tabsConfig, tabs, utilSelected*/ 805568512 | dirty[9] & /*$$scope*/ 33554432) {
+			if (dirty[0] & /*utilSelected*/ 524288 | dirty[1] & /*tabsConfig, tabs*/ 3 | dirty[12] & /*$$scope*/ 2048) {
 				scrollable_changes.$$scope = { dirty, ctx };
 			}
 
@@ -15504,10 +17538,10 @@ function create_if_block_4$4(ctx) {
 	};
 }
 
-// (1828:6) <Icon>
+// (2580:28) <Icon>
 function create_default_slot_3$1(ctx) {
 	let g;
-	let raw_value = /*tab*/ ctx[303].icon + "";
+	let raw_value = /*tab*/ ctx[382].icon + "";
 
 	return {
 		c() {
@@ -15518,19 +17552,19 @@ function create_default_slot_3$1(ctx) {
 			g.innerHTML = raw_value;
 		},
 		p(ctx, dirty) {
-			if (dirty[9] & /*tab*/ 16777216 && raw_value !== (raw_value = /*tab*/ ctx[303].icon + "")) g.innerHTML = raw_value;		},
+			if (dirty[12] & /*tab*/ 1024 && raw_value !== (raw_value = /*tab*/ ctx[382].icon + "")) g.innerHTML = raw_value;		},
 		d(detaching) {
 			if (detaching) detach(g);
 		}
 	};
 }
 
-// (1827:5) <TabList {...tabsConfig} {tabs} on:select={({ detail }) => utilSelected = detail} let:tab={tab}>
+// (2574:24) <TabList                             {...tabsConfig}                             {tabs}                             on:select={({ detail }) => (utilSelected = detail)}                             let:tab                         >
 function create_default_slot_2$3(ctx) {
 	let icon;
 	let t0;
 	let span;
-	let t1_value = /*tab*/ ctx[303].label + "";
+	let t1_value = /*tab*/ ctx[382].label + "";
 	let t1;
 	let current;
 
@@ -15558,12 +17592,12 @@ function create_default_slot_2$3(ctx) {
 		p(ctx, dirty) {
 			const icon_changes = {};
 
-			if (dirty[9] & /*$$scope, tab*/ 50331648) {
+			if (dirty[12] & /*$$scope, tab*/ 3072) {
 				icon_changes.$$scope = { dirty, ctx };
 			}
 
 			icon.$set(icon_changes);
-			if ((!current || dirty[9] & /*tab*/ 16777216) && t1_value !== (t1_value = /*tab*/ ctx[303].label + "")) set_data(t1, t1_value);
+			if ((!current || dirty[12] & /*tab*/ 1024) && t1_value !== (t1_value = /*tab*/ ctx[382].label + "")) set_data(t1, t1_value);
 		},
 		i(local) {
 			if (current) return;
@@ -15582,18 +17616,18 @@ function create_default_slot_2$3(ctx) {
 	};
 }
 
-// (1826:4) <Scrollable elasticity={elasticityMultiplier * scrollElasticity} scrollDirection={isLandscape ? 'y' : 'x'}>
-function create_default_slot_1$5(ctx) {
+// (2570:20) <Scrollable                         elasticity={elasticityMultiplier * scrollElasticity}                         scrollDirection={isLandscape ? 'y' : 'x'}                     >
+function create_default_slot_1$4(ctx) {
 	let tablist;
 	let current;
-	const tablist_spread_levels = [/*tabsConfig*/ ctx[28], { tabs: /*tabs*/ ctx[29] }];
+	const tablist_spread_levels = [/*tabsConfig*/ ctx[31], { tabs: /*tabs*/ ctx[32] }];
 
 	let tablist_props = {
 		$$slots: {
 			default: [
 				create_default_slot_2$3,
-				({ tab }) => ({ 303: tab }),
-				({ tab }) => [0, 0, 0, 0, 0, 0, 0, 0, 0, tab ? 16777216 : 0]
+				({ tab }) => ({ 382: tab }),
+				({ tab }) => [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, tab ? 1024 : 0]
 			]
 		},
 		$$scope: { ctx }
@@ -15604,7 +17638,7 @@ function create_default_slot_1$5(ctx) {
 	}
 
 	tablist = new TabList({ props: tablist_props });
-	tablist.$on("select", /*select_handler*/ ctx[212]);
+	tablist.$on("select", /*select_handler*/ ctx[272]);
 
 	return {
 		c() {
@@ -15615,14 +17649,14 @@ function create_default_slot_1$5(ctx) {
 			current = true;
 		},
 		p(ctx, dirty) {
-			const tablist_changes = (dirty[0] & /*tabsConfig, tabs*/ 805306368)
+			const tablist_changes = (dirty[1] & /*tabsConfig, tabs*/ 3)
 			? get_spread_update(tablist_spread_levels, [
-					dirty[0] & /*tabsConfig*/ 268435456 && get_spread_object(/*tabsConfig*/ ctx[28]),
-					dirty[0] & /*tabs*/ 536870912 && { tabs: /*tabs*/ ctx[29] }
+					dirty[1] & /*tabsConfig*/ 1 && get_spread_object(/*tabsConfig*/ ctx[31]),
+					dirty[1] & /*tabs*/ 2 && { tabs: /*tabs*/ ctx[32] }
 				])
 			: {};
 
-			if (dirty[9] & /*$$scope, tab*/ 50331648) {
+			if (dirty[12] & /*$$scope, tab*/ 3072) {
 				tablist_changes.$$scope = { dirty, ctx };
 			}
 
@@ -15643,37 +17677,37 @@ function create_default_slot_1$5(ctx) {
 	};
 }
 
-// (1849:3) {:else}
+// (2613:12) {:else}
 function create_else_block$2(ctx) {
 	let panel;
 	let updating_component;
 	let current;
 
 	function panel_component_binding_1(value) {
-		/*panel_component_binding_1*/ ctx[221](value);
+		/*panel_component_binding_1*/ ctx[281](value);
 	}
 
 	let panel_props = {
 		class: "PinturaMain",
 		content: {
-			.../*utilsMerged*/ ctx[20].find(/*func_1*/ ctx[220]),
-			props: /*pluginOptions*/ ctx[7][/*utilSelected*/ ctx[18]]
+			.../*utilsMerged*/ ctx[20].find(/*func_1*/ ctx[280]),
+			props: /*pluginOptions*/ ctx[7][/*utilSelected*/ ctx[19]]
 		},
 		locale: /*locale*/ ctx[2],
-		isAnimated: /*$shouldAnimate*/ ctx[17],
-		stores: /*utilStores*/ ctx[98]
+		isAnimated: /*$shouldAnimate*/ ctx[18],
+		stores: /*utilStores*/ ctx[118]
 	};
 
-	if (/*pluginInterface*/ ctx[0][/*utilSelected*/ ctx[18]] !== void 0) {
-		panel_props.component = /*pluginInterface*/ ctx[0][/*utilSelected*/ ctx[18]];
+	if (/*pluginInterface*/ ctx[0][/*utilSelected*/ ctx[19]] !== void 0) {
+		panel_props.component = /*pluginInterface*/ ctx[0][/*utilSelected*/ ctx[19]];
 	}
 
 	panel = new Panel({ props: panel_props });
 	binding_callbacks.push(() => bind(panel, "component", panel_component_binding_1));
-	panel.$on("measure", /*measure_handler_3*/ ctx[222]);
-	panel.$on("show", /*show_handler_1*/ ctx[223]);
-	panel.$on("hide", /*hide_handler_1*/ ctx[224]);
-	panel.$on("fade", /*fade_handler_1*/ ctx[225]);
+	panel.$on("measure", /*measure_handler_3*/ ctx[282]);
+	panel.$on("show", /*show_handler_1*/ ctx[283]);
+	panel.$on("hide", /*hide_handler_1*/ ctx[284]);
+	panel.$on("fade", /*fade_handler_1*/ ctx[285]);
 
 	return {
 		c() {
@@ -15686,17 +17720,17 @@ function create_else_block$2(ctx) {
 		p(ctx, dirty) {
 			const panel_changes = {};
 
-			if (dirty[0] & /*utilsMerged, utilSelected, pluginOptions*/ 1310848) panel_changes.content = {
-				.../*utilsMerged*/ ctx[20].find(/*func_1*/ ctx[220]),
-				props: /*pluginOptions*/ ctx[7][/*utilSelected*/ ctx[18]]
+			if (dirty[0] & /*utilsMerged, utilSelected, pluginOptions*/ 1572992) panel_changes.content = {
+				.../*utilsMerged*/ ctx[20].find(/*func_1*/ ctx[280]),
+				props: /*pluginOptions*/ ctx[7][/*utilSelected*/ ctx[19]]
 			};
 
 			if (dirty[0] & /*locale*/ 4) panel_changes.locale = /*locale*/ ctx[2];
-			if (dirty[0] & /*$shouldAnimate*/ 131072) panel_changes.isAnimated = /*$shouldAnimate*/ ctx[17];
+			if (dirty[0] & /*$shouldAnimate*/ 262144) panel_changes.isAnimated = /*$shouldAnimate*/ ctx[18];
 
-			if (!updating_component && dirty[0] & /*pluginInterface, utilSelected*/ 262145) {
+			if (!updating_component && dirty[0] & /*pluginInterface, utilSelected*/ 524289) {
 				updating_component = true;
-				panel_changes.component = /*pluginInterface*/ ctx[0][/*utilSelected*/ ctx[18]];
+				panel_changes.component = /*pluginInterface*/ ctx[0][/*utilSelected*/ ctx[19]];
 				add_flush_callback(() => updating_component = false);
 			}
 
@@ -15717,24 +17751,24 @@ function create_else_block$2(ctx) {
 	};
 }
 
-// (1835:3) {#if shouldRenderTabs}
-function create_if_block_3$4(ctx) {
+// (2587:12) {#if shouldRenderTabs}
+function create_if_block_3$5(ctx) {
 	let tabpanels;
 	let current;
 
 	const tabpanels_spread_levels = [
 		{ class: "PinturaMain" },
-		{ visible: /*utilsVisible*/ ctx[26] },
-		/*tabsConfig*/ ctx[28],
-		{ panels: /*panels*/ ctx[30] }
+		{ visible: /*utilsVisible*/ ctx[28] },
+		/*tabsConfig*/ ctx[31],
+		{ panels: /*panels*/ ctx[33] }
 	];
 
 	let tabpanels_props = {
 		$$slots: {
 			default: [
-				create_default_slot$8,
-				({ panel }) => ({ 302: panel }),
-				({ panel }) => [0, 0, 0, 0, 0, 0, 0, 0, 0, panel ? 8388608 : 0]
+				create_default_slot$a,
+				({ panel }) => ({ 381: panel }),
+				({ panel }) => [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, panel ? 512 : 0]
 			]
 		},
 		$$scope: { ctx }
@@ -15745,7 +17779,7 @@ function create_if_block_3$4(ctx) {
 	}
 
 	tabpanels = new TabPanels({ props: tabpanels_props });
-	tabpanels.$on("measure", /*measure_handler_2*/ ctx[219]);
+	tabpanels.$on("measure", /*measure_handler_2*/ ctx[279]);
 
 	return {
 		c() {
@@ -15756,16 +17790,16 @@ function create_if_block_3$4(ctx) {
 			current = true;
 		},
 		p(ctx, dirty) {
-			const tabpanels_changes = (dirty[0] & /*utilsVisible, tabsConfig, panels*/ 1409286144)
+			const tabpanels_changes = (dirty[0] & /*utilsVisible*/ 268435456 | dirty[1] & /*tabsConfig, panels*/ 5)
 			? get_spread_update(tabpanels_spread_levels, [
 					tabpanels_spread_levels[0],
-					dirty[0] & /*utilsVisible*/ 67108864 && { visible: /*utilsVisible*/ ctx[26] },
-					dirty[0] & /*tabsConfig*/ 268435456 && get_spread_object(/*tabsConfig*/ ctx[28]),
-					dirty[0] & /*panels*/ 1073741824 && { panels: /*panels*/ ctx[30] }
+					dirty[0] & /*utilsVisible*/ 268435456 && { visible: /*utilsVisible*/ ctx[28] },
+					dirty[1] & /*tabsConfig*/ 1 && get_spread_object(/*tabsConfig*/ ctx[31]),
+					dirty[1] & /*panels*/ 4 && { panels: /*panels*/ ctx[33] }
 				])
 			: {};
 
-			if (dirty[0] & /*utilsMerged, pluginOptions, locale, utilSelected, $shouldAnimate, pluginInterface, utilsVisible, utilsVisibleFraction*/ 70647941 | dirty[1] & /*$utilRect*/ 16384 | dirty[9] & /*$$scope, panel*/ 41943040) {
+			if (dirty[0] & /*utilsMerged, pluginOptions, locale, utilSelected, $shouldAnimate, pluginInterface, utilsVisible, utilsVisibleFraction*/ 272367749 | dirty[1] & /*$utilRect*/ 32768 | dirty[12] & /*$$scope, panel*/ 2560) {
 				tabpanels_changes.$$scope = { dirty, ctx };
 			}
 
@@ -15786,50 +17820,50 @@ function create_if_block_3$4(ctx) {
 	};
 }
 
-// (1836:3) <TabPanels class="PinturaMain" visible={utilsVisible} {...tabsConfig} {panels} let:panel on:measure={e => $tabRect = e.detail}>
-function create_default_slot$8(ctx) {
+// (2588:16) <TabPanels                     class="PinturaMain"                     visible={utilsVisible}                     {...tabsConfig}                     {panels}                     let:panel                     on:measure={(e) => ($tabRect = e.detail)}                 >
+function create_default_slot$a(ctx) {
 	let panel;
 	let updating_component;
 	let current;
 
 	function func(...args) {
-		return /*func*/ ctx[213](/*panel*/ ctx[302], ...args);
+		return /*func*/ ctx[273](/*panel*/ ctx[381], ...args);
 	}
 
 	function panel_component_binding(value) {
-		/*panel_component_binding*/ ctx[214](value, /*panel*/ ctx[302]);
+		/*panel_component_binding*/ ctx[274](value, /*panel*/ ctx[381]);
 	}
 
 	function show_handler() {
-		return /*show_handler*/ ctx[216](/*panel*/ ctx[302]);
+		return /*show_handler*/ ctx[276](/*panel*/ ctx[381]);
 	}
 
 	function hide_handler() {
-		return /*hide_handler*/ ctx[217](/*panel*/ ctx[302]);
+		return /*hide_handler*/ ctx[277](/*panel*/ ctx[381]);
 	}
 
 	function fade_handler(...args) {
-		return /*fade_handler*/ ctx[218](/*panel*/ ctx[302], ...args);
+		return /*fade_handler*/ ctx[278](/*panel*/ ctx[381], ...args);
 	}
 
 	let panel_props = {
 		content: {
 			.../*utilsMerged*/ ctx[20].find(func),
-			props: /*pluginOptions*/ ctx[7][/*panel*/ ctx[302]]
+			props: /*pluginOptions*/ ctx[7][/*panel*/ ctx[381]]
 		},
 		locale: /*locale*/ ctx[2],
-		isActive: /*panel*/ ctx[302] === /*utilSelected*/ ctx[18],
-		isAnimated: /*$shouldAnimate*/ ctx[17],
-		stores: /*utilStores*/ ctx[98]
+		isActive: /*panel*/ ctx[381] === /*utilSelected*/ ctx[19],
+		isAnimated: /*$shouldAnimate*/ ctx[18],
+		stores: /*utilStores*/ ctx[118]
 	};
 
-	if (/*pluginInterface*/ ctx[0][/*panel*/ ctx[302]] !== void 0) {
-		panel_props.component = /*pluginInterface*/ ctx[0][/*panel*/ ctx[302]];
+	if (/*pluginInterface*/ ctx[0][/*panel*/ ctx[381]] !== void 0) {
+		panel_props.component = /*pluginInterface*/ ctx[0][/*panel*/ ctx[381]];
 	}
 
 	panel = new Panel({ props: panel_props });
 	binding_callbacks.push(() => bind(panel, "component", panel_component_binding));
-	panel.$on("measure", /*measure_handler_1*/ ctx[215]);
+	panel.$on("measure", /*measure_handler_1*/ ctx[275]);
 	panel.$on("show", show_handler);
 	panel.$on("hide", hide_handler);
 	panel.$on("fade", fade_handler);
@@ -15846,18 +17880,18 @@ function create_default_slot$8(ctx) {
 			ctx = new_ctx;
 			const panel_changes = {};
 
-			if (dirty[0] & /*utilsMerged, pluginOptions*/ 1048704 | dirty[9] & /*panel*/ 8388608) panel_changes.content = {
+			if (dirty[0] & /*utilsMerged, pluginOptions*/ 1048704 | dirty[12] & /*panel*/ 512) panel_changes.content = {
 				.../*utilsMerged*/ ctx[20].find(func),
-				props: /*pluginOptions*/ ctx[7][/*panel*/ ctx[302]]
+				props: /*pluginOptions*/ ctx[7][/*panel*/ ctx[381]]
 			};
 
 			if (dirty[0] & /*locale*/ 4) panel_changes.locale = /*locale*/ ctx[2];
-			if (dirty[0] & /*utilSelected*/ 262144 | dirty[9] & /*panel*/ 8388608) panel_changes.isActive = /*panel*/ ctx[302] === /*utilSelected*/ ctx[18];
-			if (dirty[0] & /*$shouldAnimate*/ 131072) panel_changes.isAnimated = /*$shouldAnimate*/ ctx[17];
+			if (dirty[0] & /*utilSelected*/ 524288 | dirty[12] & /*panel*/ 512) panel_changes.isActive = /*panel*/ ctx[381] === /*utilSelected*/ ctx[19];
+			if (dirty[0] & /*$shouldAnimate*/ 262144) panel_changes.isAnimated = /*$shouldAnimate*/ ctx[18];
 
-			if (!updating_component && dirty[0] & /*pluginInterface*/ 1 | dirty[9] & /*panel*/ 8388608) {
+			if (!updating_component && dirty[0] & /*pluginInterface*/ 1 | dirty[12] & /*panel*/ 512) {
 				updating_component = true;
-				panel_changes.component = /*pluginInterface*/ ctx[0][/*panel*/ ctx[302]];
+				panel_changes.component = /*pluginInterface*/ ctx[0][/*panel*/ ctx[381]];
 				add_flush_callback(() => updating_component = false);
 			}
 
@@ -15878,7 +17912,7 @@ function create_default_slot$8(ctx) {
 	};
 }
 
-// (1894:1) {#if $disabledTransition > 0}
+// (2676:4) {#if $disabledTransition > 0}
 function create_if_block$7(ctx) {
 	let span;
 	let span_style_value;
@@ -15887,13 +17921,13 @@ function create_if_block$7(ctx) {
 		c() {
 			span = element("span");
 			attr(span, "class", "PinturaEditorOverlay");
-			attr(span, "style", span_style_value = `opacity:${/*$disabledTransition*/ ctx[52]}`);
+			attr(span, "style", span_style_value = `opacity:${/*$disabledTransition*/ ctx[57]}`);
 		},
 		m(target, anchor) {
 			insert(target, span, anchor);
 		},
 		p(ctx, dirty) {
-			if (dirty[1] & /*$disabledTransition*/ 2097152 && span_style_value !== (span_style_value = `opacity:${/*$disabledTransition*/ ctx[52]}`)) {
+			if (dirty[1] & /*$disabledTransition*/ 67108864 && span_style_value !== (span_style_value = `opacity:${/*$disabledTransition*/ ctx[57]}`)) {
 				attr(span, "style", span_style_value);
 			}
 		},
@@ -15903,15 +17937,15 @@ function create_if_block$7(ctx) {
 	};
 }
 
-function create_fragment$r(ctx) {
+function create_fragment$v(ctx) {
 	let div;
 	let t;
 	let current;
 	let mounted;
 	let dispose;
-	add_render_callback(/*onwindowresize*/ ctx[210]);
-	let if_block0 = /*canRender*/ ctx[40] && create_if_block_1$7(ctx);
-	let if_block1 = /*$disabledTransition*/ ctx[52] > 0 && create_if_block$7(ctx);
+	add_render_callback(/*onwindowresize*/ ctx[270]);
+	let if_block0 = /*canRender*/ ctx[41] && create_if_block_1$7(ctx);
+	let if_block1 = /*$disabledTransition*/ ctx[57] > 0 && create_if_block$7(ctx);
 
 	return {
 		c() {
@@ -15920,42 +17954,41 @@ function create_fragment$r(ctx) {
 			t = space();
 			if (if_block1) if_block1.c();
 			attr(div, "id", /*id*/ ctx[3]);
-			attr(div, "class", /*className*/ ctx[31]);
-			attr(div, "data-env", /*envStr*/ ctx[33]);
+			attr(div, "class", /*className*/ ctx[34]);
+			attr(div, "data-env", /*envStr*/ ctx[36]);
 		},
 		m(target, anchor) {
 			insert(target, div, anchor);
 			if (if_block0) if_block0.m(div, null);
 			append(div, t);
 			if (if_block1) if_block1.m(div, null);
-			/*div_binding_1*/ ctx[228](div);
+			/*div_binding_1*/ ctx[288](div);
 			current = true;
 
 			if (!mounted) {
 				dispose = [
-					listen(window_1, "keydown", /*handleKeydown*/ ctx[110]),
-					listen(window_1, "keyup", /*handleKeyup*/ ctx[111]),
-					listen(window_1, "blur", /*handleWindowBlur*/ ctx[112]),
-					listen(window_1, "paste", /*handlePaste*/ ctx[115]),
-					listen(window_1, "resize", /*onwindowresize*/ ctx[210]),
+					listen(window_1$1, "keydown", /*handleKeydown*/ ctx[134]),
+					listen(window_1$1, "keyup", /*handleKeyup*/ ctx[135]),
+					listen(window_1$1, "blur", /*handleWindowBlur*/ ctx[136]),
+					listen(window_1$1, "paste", /*handlePaste*/ ctx[140]),
+					listen(window_1$1, "resize", /*onwindowresize*/ ctx[270]),
 					listen(div, "ping", function () {
-						if (is_function(/*routePing*/ ctx[41])) /*routePing*/ ctx[41].apply(this, arguments);
+						if (is_function(/*routePing*/ ctx[42])) /*routePing*/ ctx[42].apply(this, arguments);
 					}),
-					listen(div, "contextmenu", /*handleContextMenu*/ ctx[113]),
-					listen(
-						div,
-						"touchstart",
-						function () {
-							if (is_function(/*handleTouchStart*/ ctx[37])) /*handleTouchStart*/ ctx[37].apply(this, arguments);
-						},
-						{ passive: false }
-					),
-					listen(div, "touchmove", function () {
-						if (is_function(/*handleTouchMove*/ ctx[38])) /*handleTouchMove*/ ctx[38].apply(this, arguments);
+					listen(div, "contextmenu", /*handleContextMenu*/ ctx[137]),
+					listen(div, "touchstart", /*handleTouchStart*/ ctx[130], { passive: false }),
+					listen(div, "touchmove", /*handleTouchMove*/ ctx[131]),
+					listen(div, "pointermove", /*handlePointerMove*/ ctx[132]),
+					listen(div, "transitionend", /*handleTransitionEnd*/ ctx[119]),
+					listen(div, "dropfiles", /*handleDropFiles*/ ctx[138]),
+					listen(div, "measure", /*measure_handler_4*/ ctx[289]),
+					listen(div, "click", function () {
+						if (is_function(/*isWaitingForImage*/ ctx[24]
+						? /*browseFileSystem*/ ctx[139]
+						: noop$1)) (/*isWaitingForImage*/ ctx[24]
+						? /*browseFileSystem*/ ctx[139]
+						: noop$1).apply(this, arguments);
 					}),
-					listen(div, "transitionend", /*handleTransitionEnd*/ ctx[99]),
-					listen(div, "dropfiles", /*handleDropFiles*/ ctx[114]),
-					listen(div, "measure", /*measure_handler_4*/ ctx[229]),
 					action_destroyer(measurable.call(null, div, { observeViewRect: true })),
 					action_destroyer(focusvisible.call(null, div)),
 					action_destroyer(dropable.call(null, div))
@@ -15967,11 +18000,11 @@ function create_fragment$r(ctx) {
 		p(new_ctx, dirty) {
 			ctx = new_ctx;
 
-			if (/*canRender*/ ctx[40]) {
+			if (/*canRender*/ ctx[41]) {
 				if (if_block0) {
 					if_block0.p(ctx, dirty);
 
-					if (dirty[1] & /*canRender*/ 512) {
+					if (dirty[1] & /*canRender*/ 1024) {
 						transition_in(if_block0, 1);
 					}
 				} else {
@@ -15990,7 +18023,7 @@ function create_fragment$r(ctx) {
 				check_outros();
 			}
 
-			if (/*$disabledTransition*/ ctx[52] > 0) {
+			if (/*$disabledTransition*/ ctx[57] > 0) {
 				if (if_block1) {
 					if_block1.p(ctx, dirty);
 				} else {
@@ -16007,12 +18040,12 @@ function create_fragment$r(ctx) {
 				attr(div, "id", /*id*/ ctx[3]);
 			}
 
-			if (!current || dirty[1] & /*className*/ 1) {
-				attr(div, "class", /*className*/ ctx[31]);
+			if (!current || dirty[1] & /*className*/ 8) {
+				attr(div, "class", /*className*/ ctx[34]);
 			}
 
-			if (!current || dirty[1] & /*envStr*/ 4) {
-				attr(div, "data-env", /*envStr*/ ctx[33]);
+			if (!current || dirty[1] & /*envStr*/ 32) {
+				attr(div, "data-env", /*envStr*/ ctx[36]);
 			}
 		},
 		i(local) {
@@ -16028,7 +18061,7 @@ function create_fragment$r(ctx) {
 			if (detaching) detach(div);
 			if (if_block0) if_block0.d();
 			if (if_block1) if_block1.d();
-			/*div_binding_1*/ ctx[228](null);
+			/*div_binding_1*/ ctx[288](null);
 			mounted = false;
 			run_all(dispose);
 		}
@@ -16040,13 +18073,22 @@ const imageCropRectElasticity = 5;
 // updating crop selection / the intended selection rect, combined with actual selection rect, used to render elasticity visualisation
 const imageSelectionRectElasticity = 1;
 
+const STAGE_OVERLAY_ID = "stage-overlay";
+const maxOpacity = 0.85;
 const scrollElasticity = 10;
 const rangeInputElasticity = 5;
 
-function instance$r($$self, $$props, $$invalidate) {
+function instance$v($$self, $$props, $$invalidate) {
 	let isOverlayModeEnabled;
 	let showUtils;
 	let maxImageDataSize;
+	let preprocessShape;
+	let imageTargetSizeCurrent;
+	let overlayTop;
+	let overlayBottom;
+	let overlayLeft;
+	let overlayRight;
+	let gradientOverlays;
 	let canAnimate;
 	let acceptsAnimations;
 	let canUndo;
@@ -16076,6 +18118,8 @@ function instance$r($$self, $$props, $$invalidate) {
 	let isCompact;
 	let hasSwipeNavigation;
 	let shouldRenderUtilTools;
+	let navigationHorizontalPreference;
+	let navigationVerticalPreference;
 	let rootElementComputedStyle;
 	let envStr;
 	let imageCanvasState;
@@ -16101,22 +18145,24 @@ function instance$r($$self, $$props, $$invalidate) {
 	let hasAside;
 	let statusIndent;
 	let statusTransform;
-	let handleTouchStart;
-	let handleTouchMove;
 	let toolbarItems;
 	let hasClientRect;
 	let canRender;
+	let hasImageRedaction;
+	let imageRedactionScalar;
 	let routePing;
+	let isReady;
 	let $images;
+	let $shapePreprocessor;
 	let $clientRect;
 	let $imageCropAspectRatio;
 	let $rootRect;
 	let $imageLoadState;
-	let $imageCropRectSnapshot;
-	let $imageCropRectIntent;
-	let $previewShouldUpscale;
 	let $imageCropRect;
+	let $imageCropRectIntent;
 	let $isInteracting;
+	let $imageCropRectSnapshot;
+	let $previewShouldUpscale;
 	let $imageSelectionRect;
 	let $shouldAnimate;
 	let $imageSelectionRectIntent;
@@ -16126,8 +18172,20 @@ function instance$r($$self, $$props, $$invalidate) {
 	let $imageSize;
 	let $presentationScalar;
 	let $imageSelectionRectSnapshot;
+	let $overlayInset;
+	let $imageVisualBounds;
+	let $overlaySize;
+	let $overlayTopOpacity;
+	let $overlayBottomOpacity;
+	let $overlayLeftOpacity;
+	let $overlayRightOpacity;
+	let $imageOverlayMarkup;
 	let $imageFile;
-	let $activeImages;
+
+	let $imagePreview,
+		$$unsubscribe_imagePreview = noop,
+		$$subscribe_imagePreview = () => ($$unsubscribe_imagePreview(), $$unsubscribe_imagePreview = subscribe(imagePreview, $$value => $$invalidate(207, $imagePreview = $$value)), imagePreview);
+
 	let $imagePreviewSource;
 	let $prefersReducedMotion;
 	let $imageState;
@@ -16135,7 +18193,7 @@ function instance$r($$self, $$props, $$invalidate) {
 
 	let $history,
 		$$unsubscribe_history = noop,
-		$$subscribe_history = () => ($$unsubscribe_history(), $$unsubscribe_history = subscribe(history, $$value => $$invalidate(160, $history = $$value)), history);
+		$$subscribe_history = () => ($$unsubscribe_history(), $$unsubscribe_history = subscribe(history, $$value => $$invalidate(213, $history = $$value)), history);
 
 	let $imageProcessingPreparing;
 	let $env;
@@ -16143,16 +18201,20 @@ function instance$r($$self, $$props, $$invalidate) {
 	let $pointerHoverable;
 	let $imageTransforms;
 	let $imagePreviewModifiers;
-	let $imagePreview;
 	let $imageProps;
+	let $activeImages;
 	let $imageSelectionRectPresentation;
 	let $imageVisualLoadComplete;
 	let $imageProcessState;
+	let $wasProcessingImage;
 	let $statusOpacity;
 	let $statusWidth;
 	let $asideWidth;
 	let $statusOffset;
 	let $pressedKeysStore;
+	let $imageRedaction;
+	let $imageScrambler;
+	let $imageBackgroundColor;
 	let $rootForegroundColor;
 	let $rootLineColor;
 	let $isInteractingFraction;
@@ -16162,12 +18224,17 @@ function instance$r($$self, $$props, $$invalidate) {
 	let $utilRect;
 	let $pixelRatio;
 	let $rootBackgroundColor;
+	let $utilSelectedStore;
+	let $stagePadded;
 	let $interfaceImages;
-	let $imageDecoration;
+	let $willRequestResource;
 	let $imageAnnotation;
+	let $imageDecoration;
+	let $imageFrame;
 	let $imageOverlay;
 	let $disabledTransition;
-	component_subscribe($$self, prefersReducedMotion, $$value => $$invalidate(158, $prefersReducedMotion = $$value));
+	component_subscribe($$self, prefersReducedMotion, $$value => $$invalidate(211, $prefersReducedMotion = $$value));
+	$$self.$$.on_destroy.push(() => $$unsubscribe_imagePreview());
 	$$self.$$.on_destroy.push(() => $$unsubscribe_history());
 	const eventProxy = pubsub();
 	const dispatch = createEventDispatcher();
@@ -16201,8 +18268,11 @@ function instance$r($$self, $$props, $$invalidate) {
 	let { enableButtonClose = false } = $$props;
 	let { enableDropImage = false } = $$props;
 	let { enablePasteImage = false } = $$props;
+	let { enableBrowseImage = false } = $$props;
 	let { previewImageDataMaxSize = undefined } = $$props;
 	let { layoutDirectionPreference = "auto" } = $$props;
+	let { layoutHorizontalUtilsPreference = "left" } = $$props;
+	let { layoutVerticalUtilsPreference = "bottom" } = $$props;
 	let { imagePreviewSrc = undefined } = $$props;
 	let { imageOrienter = { read: () => 1, apply: v => v } } = $$props;
 	let { pluginComponents = undefined } = $$props;
@@ -16215,17 +18285,20 @@ function instance$r($$self, $$props, $$invalidate) {
 	// editor disabled spring for animating in and out disabled state
 	const disabledTransition = spring();
 
-	component_subscribe($$self, disabledTransition, value => $$invalidate(52, $disabledTransition = value));
+	component_subscribe($$self, disabledTransition, value => $$invalidate(57, $disabledTransition = value));
 
 	// this method is used to read image resources (preview image / shape images)
 	const glMaxTextureSize = getWebGLTextureSizeLimit() || 1024;
 
 	const maxTextureSize = sizeCreate(glMaxTextureSize, glMaxTextureSize);
-	const canvasMemoryLimit = isIOS() ? 4096 * 4096 : Infinity;
+	const canvasMemoryLimit = getCanvasMemoryLimit();
 
 	let { imageSourceToImageData = src => isString(src)
 	? // it's a url src
-		fetch(src).then(res => res.blob()).then(blob => blobToImageBitmap(blob, imageOrienter, canvasMemoryLimit)).then(imageData => imageDataContain(imageData, maxImageDataSize))
+		fetch(src).then(res => {
+			if (res.status !== 200) throw `${res.status} (${res.statusText})`;
+			return res.blob();
+		}).then(blob => blobToImageBitmap(blob, imageOrienter, canvasMemoryLimit)).then(imageData => imageDataContain(imageData, maxImageDataSize))
 	: isElement(src)
 		? // assume src is a <canvas>
 			new Promise(resolve => resolve(canvasToImageData(src)))
@@ -16233,22 +18306,33 @@ function instance$r($$self, $$props, $$invalidate) {
 			blobToImageBitmap(src, imageOrienter, canvasMemoryLimit).then(imageData => imageDataContain(imageData, maxImageDataSize)) } = $$props;
 
 	const imageProxy = createImageProxy();
-	const { file: imageFile, size: imageSize, loadState: imageLoadState, processState: imageProcessState, cropAspectRatio: imageCropAspectRatio, cropLimitToImage: imageCropLimitToImage, crop: imageCropRect, cropMinSize: imageCropMinSize, cropMaxSize: imageCropMaxSize, cropRange: imageCropRange, cropOrigin: imageCropRectOrigin, cropRectAspectRatio: imageCropRectAspectRatio, rotation: imageRotation, rotationRange: imageRotationRange, targetSize: imageOutputSize, flipX: imageFlipX, flipY: imageFlipY, backgroundColor: imageBackgroundColor, colorMatrix: imageColorMatrix, convolutionMatrix: imageConvolutionMatrix, gamma: imageGamma, vignette: imageVignette, noise: imageNoise, decoration: imageDecoration, annotation: imageAnnotation, state: imageState } = imageProxy.stores;
-	component_subscribe($$self, imageFile, value => $$invalidate(154, $imageFile = value));
-	component_subscribe($$self, imageSize, value => $$invalidate(243, $imageSize = value));
-	component_subscribe($$self, imageLoadState, value => $$invalidate(151, $imageLoadState = value));
-	component_subscribe($$self, imageProcessState, value => $$invalidate(195, $imageProcessState = value));
-	component_subscribe($$self, imageCropAspectRatio, value => $$invalidate(233, $imageCropAspectRatio = value));
-	component_subscribe($$self, imageCropRect, value => $$invalidate(237, $imageCropRect = value));
-	component_subscribe($$self, imageOutputSize, value => $$invalidate(241, $imageOutputSize = value));
-	component_subscribe($$self, imageDecoration, value => $$invalidate(49, $imageDecoration = value));
-	component_subscribe($$self, imageAnnotation, value => $$invalidate(50, $imageAnnotation = value));
-	component_subscribe($$self, imageState, value => $$invalidate(246, $imageState = value));
-	const { images } = stores;
-	component_subscribe($$self, images, value => $$invalidate(149, $images = value));
+	const { file: imageFile, size: imageSize, loadState: imageLoadState, processState: imageProcessState, cropAspectRatio: imageCropAspectRatio, cropLimitToImage: imageCropLimitToImage, crop: imageCropRect, cropMinSize: imageCropMinSize, cropMaxSize: imageCropMaxSize, cropRange: imageCropRange, cropOrigin: imageCropRectOrigin, cropRectAspectRatio: imageCropRectAspectRatio, rotation: imageRotation, rotationRange: imageRotationRange, targetSize: imageOutputSize, flipX: imageFlipX, flipY: imageFlipY, backgroundColor: imageBackgroundColor, colorMatrix: imageColorMatrix, convolutionMatrix: imageConvolutionMatrix, gamma: imageGamma, vignette: imageVignette, noise: imageNoise, decoration: imageDecoration, annotation: imageAnnotation, redaction: imageRedaction, frame: imageFrame, state: imageState } = imageProxy.stores;
+	component_subscribe($$self, imageFile, value => $$invalidate(206, $imageFile = value));
+	component_subscribe($$self, imageSize, value => $$invalidate(191, $imageSize = value));
+	component_subscribe($$self, imageLoadState, value => $$invalidate(185, $imageLoadState = value));
+	component_subscribe($$self, imageProcessState, value => $$invalidate(249, $imageProcessState = value));
+	component_subscribe($$self, imageCropAspectRatio, value => $$invalidate(297, $imageCropAspectRatio = value));
+	component_subscribe($$self, imageCropRect, value => $$invalidate(186, $imageCropRect = value));
+	component_subscribe($$self, imageOutputSize, value => $$invalidate(190, $imageOutputSize = value));
+	component_subscribe($$self, imageBackgroundColor, value => $$invalidate(269, $imageBackgroundColor = value));
+	component_subscribe($$self, imageDecoration, value => $$invalidate(54, $imageDecoration = value));
+	component_subscribe($$self, imageAnnotation, value => $$invalidate(53, $imageAnnotation = value));
+	component_subscribe($$self, imageRedaction, value => $$invalidate(266, $imageRedaction = value));
+	component_subscribe($$self, imageFrame, value => $$invalidate(55, $imageFrame = value));
+	component_subscribe($$self, imageState, value => $$invalidate(306, $imageState = value));
+	const { images, shapePreprocessor, imageScrambler, willRequestResource } = stores;
+	component_subscribe($$self, images, value => $$invalidate(182, $images = value));
+	component_subscribe($$self, shapePreprocessor, value => $$invalidate(183, $shapePreprocessor = value));
+	component_subscribe($$self, imageScrambler, value => $$invalidate(268, $imageScrambler = value));
+	component_subscribe($$self, willRequestResource, value => $$invalidate(52, $willRequestResource = value));
 
 	// let the world know about state changes
-	imageState.subscribe(state => eventProxy.pub("update", state));
+	const imageStateUnsub = imageState.subscribe(state => eventProxy.pub("update", state));
+
+	// this will hold the currently selected util
+	const utilSelectedStore = writable();
+
+	component_subscribe($$self, utilSelectedStore, value => $$invalidate(49, $utilSelectedStore = value));
 
 	//
 	// handles the view rect size, makes sure it is offset from the top
@@ -16256,21 +18340,22 @@ function instance$r($$self, $$props, $$invalidate) {
 	// root element reference used to read styles
 	const rootBackgroundColor = writable([0, 0, 0]);
 
-	component_subscribe($$self, rootBackgroundColor, value => $$invalidate(47, $rootBackgroundColor = value));
+	component_subscribe($$self, rootBackgroundColor, value => $$invalidate(48, $rootBackgroundColor = value));
 	const rootForegroundColor = writable([1, 1, 1]);
-	component_subscribe($$self, rootForegroundColor, value => $$invalidate(248, $rootForegroundColor = value));
+	component_subscribe($$self, rootForegroundColor, value => $$invalidate(308, $rootForegroundColor = value));
 	const rootLineColor = spring();
-	component_subscribe($$self, rootLineColor, value => $$invalidate(249, $rootLineColor = value));
+	component_subscribe($$self, rootLineColor, value => $$invalidate(309, $rootLineColor = value));
+	const rootColorSecondary = writable();
 
 	// client rect is the editor rect excluding scroll offset
 	const clientRect = writable();
 
-	component_subscribe($$self, clientRect, value => $$invalidate(15, $clientRect = value));
+	component_subscribe($$self, clientRect, value => $$invalidate(16, $clientRect = value));
 
 	// root rect is the editor rect including scroll offset
 	const rootRect = writable();
 
-	component_subscribe($$self, rootRect, value => $$invalidate(150, $rootRect = value));
+	component_subscribe($$self, rootRect, value => $$invalidate(184, $rootRect = value));
 
 	// when in overlay mode force aspect ratio to aspect ratio of editor root
 	const syncRootAspectRatio = () => {
@@ -16288,41 +18373,27 @@ function instance$r($$self, $$props, $$invalidate) {
 	};
 
 	const tabRect = writable(rectCreateEmpty());
-	component_subscribe($$self, tabRect, value => $$invalidate(27, $tabRect = value));
+	component_subscribe($$self, tabRect, value => $$invalidate(30, $tabRect = value));
 	const toolRect = writable(rectCreateEmpty());
-	component_subscribe($$self, toolRect, value => $$invalidate(44, $toolRect = value));
+	component_subscribe($$self, toolRect, value => $$invalidate(45, $toolRect = value));
 	const utilRect = writable(); // is undefined because we wait till util is set before defining stage rect
-	component_subscribe($$self, utilRect, value => $$invalidate(45, $utilRect = value));
-
-	const stageRect = derived([utilRect, tabRect, toolRect], ([$utilRect, $tabRect, $toolRect], set) => {
-		if (!$utilRect) return set(undefined);
-		let utilOffsetY = 0;
-
-		// if only one util active, we don't have util tabs, so add additional offset
-		if (utilsFiltered.length === 1 && !isOverlayModeEnabled) {
-			utilOffsetY = $toolRect.y + $toolRect.height;
-		}
-
-		set(rectCreate($utilRect.x + $tabRect.x, $utilRect.y + $tabRect.y + utilOffsetY, $utilRect.width, $utilRect.height));
-	});
-
-	component_subscribe($$self, stageRect, value => $$invalidate(240, $stageRect = value));
+	component_subscribe($$self, utilRect, value => $$invalidate(46, $utilRect = value));
 
 	//
 	// environment
 	//
 	const pointerAccuracy = mediaQueryStore("(pointer: fine)", matches => matches ? "pointer-fine" : "pointer-coarse");
 
-	component_subscribe($$self, pointerAccuracy, value => $$invalidate(180, $pointerAccuracy = value));
+	component_subscribe($$self, pointerAccuracy, value => $$invalidate(235, $pointerAccuracy = value));
 	const pointerHoverable = mediaQueryStore("(hover: hover)", matches => matches ? "pointer-hover" : "pointer-no-hover");
-	component_subscribe($$self, pointerHoverable, value => $$invalidate(181, $pointerHoverable = value));
+	component_subscribe($$self, pointerHoverable, value => $$invalidate(236, $pointerHoverable = value));
 
 	//
 	// app API
 	//
 	const isInteracting = writable(false);
 
-	component_subscribe($$self, isInteracting, value => $$invalidate(153, $isInteracting = value));
+	component_subscribe($$self, isInteracting, value => $$invalidate(187, $isInteracting = value));
 
 	const isInteractingFraction = readable(undefined, set => {
 		const animator = spring(0);
@@ -16337,33 +18408,13 @@ function instance$r($$self, $$props, $$invalidate) {
 		return () => subs.forEach(unsub => unsub());
 	});
 
-	component_subscribe($$self, isInteractingFraction, value => $$invalidate(250, $isInteractingFraction = value));
+	component_subscribe($$self, isInteractingFraction, value => $$invalidate(310, $isInteractingFraction = value));
 	const previewShouldUpscale = writable(previewUpscale);
-	component_subscribe($$self, previewShouldUpscale, value => $$invalidate(236, $previewShouldUpscale = value));
-
-	//
-	// image related
-	//
-	const stageScalar = derived([stageRect, imageCropRect], ([$stageRect, $imageCropRect], set) => {
-		const isManipulatingImageCropRect = !!($imageCropRectSnapshot || $imageCropRectIntent);
-
-		// update stage scalar, the crop output size relative to the stage, if image fits it's 1
-		if (!$stageRect || !$imageCropRect || isManipulatingImageCropRect) return;
-
-		// calculate scale factor needed to fit crop rect to stage
-		const scalar = Math.min($stageRect.width / $imageCropRect.width, $stageRect.height / $imageCropRect.height);
-
-		// always scaled down to fit stage, if is allowed to upscale, zoom to fit stage
-		const scale = $previewShouldUpscale ? scalar : Math.min(1, scalar);
-
-		set(scale);
-	});
-
-	component_subscribe($$self, stageScalar, value => $$invalidate(242, $stageScalar = value));
+	component_subscribe($$self, previewShouldUpscale, value => $$invalidate(300, $previewShouldUpscale = value));
 	const imageCropRectSnapshot = writable();
-	component_subscribe($$self, imageCropRectSnapshot, value => $$invalidate(234, $imageCropRectSnapshot = value));
+	component_subscribe($$self, imageCropRectSnapshot, value => $$invalidate(299, $imageCropRectSnapshot = value));
 	const imageCropRectIntent = writable(); // should always be set before setting `imageCropRect`
-	component_subscribe($$self, imageCropRectIntent, value => $$invalidate(235, $imageCropRectIntent = value));
+	component_subscribe($$self, imageCropRectIntent, value => $$invalidate(298, $imageCropRectIntent = value));
 
 	const imageCropRectPresentation = readable(undefined, set => {
 		const animator = spring(undefined, { precision: 0.0001 });
@@ -16386,15 +18437,104 @@ function instance$r($$self, $$props, $$invalidate) {
 	});
 
 	const imageSelectionRect = writable();
-	component_subscribe($$self, imageSelectionRect, value => $$invalidate(238, $imageSelectionRect = value));
+	component_subscribe($$self, imageSelectionRect, value => $$invalidate(301, $imageSelectionRect = value));
 	const imageSelectionRectSnapshot = writable();
-	component_subscribe($$self, imageSelectionRectSnapshot, value => $$invalidate(245, $imageSelectionRectSnapshot = value));
+	component_subscribe($$self, imageSelectionRectSnapshot, value => $$invalidate(305, $imageSelectionRectSnapshot = value));
 	const imageSelectionRectIntent = writable(undefined); // should always be set before setting `imageSelectionRect`
-	component_subscribe($$self, imageSelectionRectIntent, value => $$invalidate(239, $imageSelectionRectIntent = value));
+	component_subscribe($$self, imageSelectionRectIntent, value => $$invalidate(302, $imageSelectionRectIntent = value));
+	let prevFramePadding = { left: 0, right: 0, top: 0, bottom: 0 };
+
+	const framePadding = derived([imageFrame, imageSelectionRect], ([$imageFrame, $imageSelectionRect], set) => {
+		if (!$imageSelectionRect) set(prevFramePadding);
+
+		// set frame padding
+		let newPadding = getStagePadding($imageSelectionRect, $imageFrame);
+
+		// exif if no value changes
+		if (fixPrecision(prevFramePadding.top, 4) === fixPrecision(newPadding.top, 4) && fixPrecision(prevFramePadding.bottom, 4) === fixPrecision(newPadding.bottom, 4) && fixPrecision(prevFramePadding.right, 4) === fixPrecision(newPadding.right, 4) && fixPrecision(prevFramePadding.left, 4) === fixPrecision(newPadding.left, 4)) return;
+
+		prevFramePadding = newPadding;
+		set(newPadding);
+	});
+
+	const framePadded = derived([framePadding], ([$framePadding], set) => {
+		set(Object.values($framePadding).some(value => value > 0));
+	});
+
+	let prevStagePadding = { left: 0, right: 0, top: 0, bottom: 0 };
+
+	const stagePadding = derived([utilSelectedStore, imageFrame, imageSelectionRect], ([$utilSelectedStore, $imageFrame, $imageSelectionRect], set) => {
+		if (!$imageSelectionRect) set(prevStagePadding);
+
+		// TODO: configure in plugin
+		let newPadding;
+
+		if ($utilSelectedStore === "frame") {
+			newPadding = getStagePadding($imageSelectionRect, $imageFrame);
+		} else {
+			newPadding = { left: 0, right: 0, top: 0, bottom: 0 };
+		}
+
+		// exif if no value changes
+		if (fixPrecision(prevStagePadding.top, 4) === fixPrecision(newPadding.top, 4) && fixPrecision(prevStagePadding.bottom, 4) === fixPrecision(newPadding.bottom, 4) && fixPrecision(prevStagePadding.right, 4) === fixPrecision(newPadding.right, 4) && fixPrecision(prevStagePadding.left, 4) === fixPrecision(newPadding.left, 4)) return;
+
+		prevStagePadding = newPadding;
+		set(newPadding);
+	});
+
+	const stagePadded = derived([stagePadding], ([$stagePadding], set) => {
+		set(Object.values($stagePadding).some(value => value > 0));
+	});
+
+	component_subscribe($$self, stagePadded, value => $$invalidate(50, $stagePadded = value));
+
+	const stageRect = derived([utilRect, tabRect, toolRect, stagePadding], ([$utilRect, $tabRect, $toolRect, $stagePadding], set) => {
+		if (!$utilRect) return set(undefined);
+		let utilOffsetY = 0;
+
+		// if only one util active, we don't have util tabs, so add additional offset
+		if (utilsFiltered.length === 1 && !isOverlayModeEnabled) {
+			utilOffsetY = $toolRect.y + $toolRect.height;
+		}
+
+		set(rectCreate($utilRect.x + $tabRect.x + $stagePadding.top, $utilRect.y + $tabRect.y + utilOffsetY + $stagePadding.top, $utilRect.width - ($stagePadding.left + $stagePadding.right), $utilRect.height - ($stagePadding.top + $stagePadding.bottom)));
+	});
+
+	component_subscribe($$self, stageRect, value => $$invalidate(189, $stageRect = value));
+
+	const stageScalar = derived([stageRect, imageCropRect], ([$stageRect, $imageCropRect], set) => {
+		const isManipulatingImageCropRect = !!($imageCropRectSnapshot || $imageCropRectIntent);
+
+		// update stage scalar, the crop output size relative to the stage, if image fits it's 1
+		if (!$stageRect || !$imageCropRect || isManipulatingImageCropRect) return;
+
+		// calculate scale factor needed to fit crop rect to stage
+		const scalar = Math.min($stageRect.width / $imageCropRect.width, $stageRect.height / $imageCropRect.height);
+
+		// always scaled down to fit stage, if is allowed to upscale, zoom to fit stage
+		const scale = $previewShouldUpscale ? scalar : Math.min(1, scalar);
+
+		set(scale);
+	});
+
+	component_subscribe($$self, stageScalar, value => $$invalidate(303, $stageScalar = value));
 
 	//
 	// Image selection
 	//
+	const getStagePadding = (presentationRect, imageFrame) => {
+		if (!imageFrame || !presentationRect) return { top: 0, right: 0, bottom: 0, left: 0 };
+		const shapes = shapesFromCompositShape(imageFrame, presentationRect, preprocessShape);
+		const bounds = shapesBounds(shapes, presentationRect);
+
+		return {
+			top: Math.abs(bounds.top),
+			right: Math.abs(bounds.right),
+			bottom: Math.abs(bounds.bottom),
+			left: Math.abs(bounds.left)
+		};
+	};
+
 	const imageSelectionRectPresentation = readable(undefined, set => {
 		const animator = spring(undefined, { precision: 0.0001 });
 
@@ -16419,9 +18559,11 @@ function instance$r($$self, $$props, $$invalidate) {
 
 			// adjust size if needed
 			// TODO: MAKE THIS CONTROLLABLE FROM PLUGIN
-			if (utilSelected === "resize" && $imageCropRect) {
-				const targetSize = $imageOutputSize || $imageCropRect;
-				rectScale(elasticRect, targetSize.width / $imageSelectionRect.width || targetSize.height / $imageSelectionRect.height);
+			if ($imageCropRect) {
+				if (utilSelected === "resize") {
+					const visualSize = $imageOutputSize || $imageCropRect;
+					rectScale(elasticRect, visualSize.width / $imageSelectionRect.width || visualSize.height / $imageSelectionRect.height);
+				}
 			}
 
 			animator.set(elasticRect, { hard: instantUpdate });
@@ -16434,6 +18576,8 @@ function instance$r($$self, $$props, $$invalidate) {
 			imageSelectionRect.subscribe(updater),
 			// if output size changes need to update presentation
 			imageOutputSize.subscribe(updater),
+			// need to update if frame exceeds bounds
+			imageFrame.subscribe(updater),
 			// update parent store
 			animator.subscribe(set)
 		];
@@ -16442,16 +18586,16 @@ function instance$r($$self, $$props, $$invalidate) {
 		return () => subs.forEach(unsub => unsub());
 	});
 
-	component_subscribe($$self, imageSelectionRectPresentation, value => $$invalidate(35, $imageSelectionRectPresentation = value));
+	component_subscribe($$self, imageSelectionRectPresentation, value => $$invalidate(38, $imageSelectionRectPresentation = value));
 
 	// when scaling the stage we need to recenter the image selection
 	let stageRectPrev;
 
-	stageRect.subscribe(rect => {
-		if (!rect || !$imageCropRect) return;
+	const calculateImageSelectionRect = rect => {
+		// don't recalculate if no change
 		if (isOverlayModeEnabled && stageRectPrev && rectEqual(stageRectPrev, rect)) return;
 
-		// remember
+		// remember so we can compare later on if has changed
 		stageRectPrev = rect;
 
 		const imageCropRectFitsStage = $imageCropRect.width <= rect.width && $imageCropRect.height <= rect.height;
@@ -16464,6 +18608,25 @@ function instance$r($$self, $$props, $$invalidate) {
 			rectContainRect(rect, rectAspectRatio($imageCropRect || $imageSize));
 
 		imageSelectionRect.set(centeredImageSelectionRect);
+	};
+
+	// this runs once so we use the correct scale for the initial image selection rect
+	let hasSetInitialStageScalar = false;
+
+	const stageScalarUnsub = stageScalar.subscribe(scalar => {
+		// can't recalculate without these prosp
+		if (hasSetInitialStageScalar || scalar === undefined || !$imageCropRect) return;
+
+		calculateImageSelectionRect($stageRect);
+		hasSetInitialStageScalar = true;
+	});
+
+	// this recenters the crop when the window/stage is resized
+	const stageRectUnsub = stageRect.subscribe(rect => {
+		// can't recalculate without these prosp
+		if (!rect || $stageScalar === undefined || !$imageCropRect) return;
+
+		calculateImageSelectionRect(rect);
 	});
 
 	// if we've taken a snapshot of the selection, also take a snapshot of the crop rect and the presentationScalar
@@ -16471,7 +18634,7 @@ function instance$r($$self, $$props, $$invalidate) {
 	// - presentationScalar so we can use the snapshot for the calculation of the cropRect scale relative to the original imageSelectionRect (if we use the live $presentationScalar small rounding errors of the scalar result in weird glitches)
 	let presentationScalarSnapshot;
 
-	imageSelectionRectSnapshot.subscribe(rect => {
+	const imageSelectionRectSnapshotUnsub = imageSelectionRectSnapshot.subscribe(rect => {
 		if (!rect) {
 			presentationScalarSnapshot = undefined;
 			set_store_value(imageCropRectSnapshot, $imageCropRectSnapshot = undefined, $imageCropRectSnapshot);
@@ -16484,7 +18647,7 @@ function instance$r($$self, $$props, $$invalidate) {
 	});
 
 	// if image selection rect is being manipulated, and imageSelectionRectSnapshot has been defined, we also need to update the crop rect
-	imageSelectionRect.subscribe(rect => {
+	const imageSelectionRectUnsub = imageSelectionRect.subscribe(rect => {
 		// only sync crop rect with image selection rect when no longer manipulating
 		if (!rect || !$imageSelectionRectSnapshot) return;
 
@@ -16494,7 +18657,7 @@ function instance$r($$self, $$props, $$invalidate) {
 		imageCropRect.set(crop);
 	});
 
-	imageCropRect.subscribe(rect => {
+	const imageCropRectUnsub = imageCropRect.subscribe(rect => {
 		// don't update image selection rect while we're intertacting with the view, this prevents feedback loop from cropRect model updates
 		if ($isInteracting || $imageSelectionRectSnapshot || $imageCropRectIntent) return;
 
@@ -16529,7 +18692,7 @@ function instance$r($$self, $$props, $$invalidate) {
 		const selectionScaledHeight = $imageSelectionRect.height / $imageCropRect.height;
 
 		// need to correct for scale of stage
-		const scalar = Math.max(selectionScaledWidth, selectionScaledHeight) / $stageScalar;
+		let scalar = Math.max(selectionScaledWidth, selectionScaledHeight) / $stageScalar;
 
 		set(scalar);
 	});
@@ -16542,51 +18705,256 @@ function instance$r($$self, $$props, $$invalidate) {
 		set(scalar);
 	});
 
-	component_subscribe($$self, presentationScalar, value => $$invalidate(244, $presentationScalar = value));
+	component_subscribe($$self, presentationScalar, value => $$invalidate(304, $presentationScalar = value));
 
+	// const imagePresentationScale = writable(1);
+	// const imagePresentationPan = writable(vectorCreateEmpty());
 	//
 	// UI Elements
 	//
 	// image outline
-	const imageOutline = derived([rootLineColor, imageSelectionRectPresentation], ([$rootLineColor, $rect], set) => {
-		if (!$rect || isOverlayModeEnabled) return set([]);
-		const { x, y, width, height } = $rect;
-
-		set([
-			{
-				x,
-				y,
-				width,
-				height,
-				strokeWidth: 1,
-				strokeColor: $rootLineColor
-			}
-		]);
+	const imageOutlineOpacity = spring(0.075, {
+		stiffness: 0.03,
+		damping: 0.4,
+		precision: 0.001
 	});
+
+	const imageVisualBounds = derived([imageSelectionRectPresentation, framePadding], ([$rect, $padding], set) => {
+		if (!$rect) return;
+		let { x, y, width, height } = $rect;
+		let { left, right, top, bottom } = $padding;
+
+		if (utilSelected === "resize") {
+			const visualSize = $imageOutputSize || $imageCropRect;
+			const scalar = visualSize.width / $imageSelectionRect.width || visualSize.height / $imageSelectionRect.height;
+			left *= scalar;
+			right *= scalar;
+			top *= scalar;
+			bottom *= scalar;
+		}
+
+		set({
+			x: x - left,
+			y: y - right,
+			width: width + left + right,
+			height: height + top + bottom
+		});
+	});
+
+	component_subscribe($$self, imageVisualBounds, value => $$invalidate(194, $imageVisualBounds = value));
+
+	const imageOutline = derived(
+		[
+			rootLineColor,
+			imageOutlineOpacity,
+			imageSelectionRectPresentation,
+			imageFrame,
+			framePadded,
+			framePadding
+		],
+		([
+				$rootLineColor,
+				$colorOpacity,
+				$rect,
+				$imageFrame,
+				$framePadded,
+				$framePadding
+			], set) => {
+			if (!$rect || isOverlayModeEnabled) return set([]);
+			let { x, y, width, height } = $rect;
+			x += 0.5;
+			y += 0.5;
+			width -= 0.5;
+			height -= 0.5;
+			const shapes = [];
+
+			if ($framePadded) {
+				if ($colorOpacity > 0.1) {
+					// image outline
+					shapes.push({
+						x,
+						y,
+						width: width - 0.5,
+						height: height - 0.5,
+						strokeWidth: 1,
+						strokeColor: $rootLineColor,
+						opacity: $colorOpacity
+					});
+				}
+
+				let { left, right, top, bottom } = $framePadding;
+
+				if (utilSelected === "resize") {
+					const visualSize = $imageOutputSize || $imageCropRect;
+					const scalar = visualSize.width / $imageSelectionRect.width || visualSize.height / $imageSelectionRect.height;
+					left *= scalar;
+					right *= scalar;
+					top *= scalar;
+					bottom *= scalar;
+				}
+
+				set([
+					...shapes,
+					// frame outline
+					{
+						x: x - left,
+						y: y - right,
+						width: width + left + right,
+						height: height + top + bottom,
+						strokeWidth: 1,
+						strokeColor: $rootLineColor,
+						opacity: 0.05
+					}
+				]);
+
+				return;
+			}
+
+			// draw shadow behind frame if is dark outline on dark frame or bright outline on bright frame
+			const isDarkLine = isDarkColor($rootLineColor);
+
+			const isDarkFrame = $imageFrame && $imageFrame.frameColor && isDarkColor($imageFrame.frameColor);
+
+			if (isDarkLine && isDarkFrame || !isDarkLine && !isDarkLine) {
+				const shadeColor = isDarkLine ? [1, 1, 1, 0.3] : [0, 0, 0, 0.075];
+
+				shapes.push({
+					x,
+					y,
+					width,
+					height,
+					strokeWidth: 3.5,
+					strokeColor: shadeColor,
+					opacity: $colorOpacity
+				});
+			}
+
+			set([
+				...shapes,
+				// outline
+				{
+					x,
+					y,
+					width,
+					height,
+					strokeWidth: 1,
+					strokeColor: $rootLineColor,
+					opacity: $colorOpacity
+				}
+			]);
+		}
+	);
 
 	// custom markup rendered on top of image
 	const imageOverlayMarkup = writable([]);
+
+	component_subscribe($$self, imageOverlayMarkup, value => $$invalidate(205, $imageOverlayMarkup = value));
 
 	// the resulting overlay markup
 	const imageOverlay = derived([imageOutline, imageOverlayMarkup], ([$imageOutline, $imageOverlayMarkup], set) => {
 		set([...$imageOutline, ...$imageOverlayMarkup]);
 	});
 
-	component_subscribe($$self, imageOverlay, value => $$invalidate(51, $imageOverlay = value));
+	component_subscribe($$self, imageOverlay, value => $$invalidate(56, $imageOverlay = value));
+
+	//
+	// Stage overlay
+	//
+	// create canvas gradient for use as menu backdrop
+	const getOverlayGradient = (width, height, color) => {
+		const ctx = h("canvas", {
+			width: Math.max(1, width),
+			height: Math.max(1, height)
+		}).getContext("2d");
+
+		let gradient = ctx.createLinearGradient(0, 0, width, height);
+
+		[
+			[0, 0],
+			[0.013, 0.081],
+			[0.049, 0.155],
+			[0.104, 0.225],
+			[0.175, 0.29],
+			[0.259, 0.353],
+			[0.352, 0.412],
+			[0.45, 0.471],
+			[0.55, 0.529],
+			[0.648, 0.588],
+			[0.741, 0.647],
+			[0.825, 0.71],
+			[0.896, 0.775],
+			[0.951, 0.845],
+			[0.987, 0.919],
+			[1, 1]
+		].forEach(([o, s]) => gradient.addColorStop(s, `rgba(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255}, ${o})`));
+
+		ctx.fillStyle = gradient;
+		ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+		gradient = undefined;
+		return ctx.canvas;
+	};
+
+	const calculateImageTargetSize = (outputSize, cropRect) => {
+		let { width, height } = outputSize;
+		const aspectRatio = rectAspectRatio(cropRect);
+		if (width && height) return outputSize;
+
+		if (width && !height) {
+			height = width / aspectRatio;
+		}
+
+		if (height && !width) {
+			width = height * aspectRatio;
+		}
+
+		if (!width && !height) {
+			width = cropRect.width;
+			height = cropRect.height;
+		}
+
+		return sizeApply(sizeCreate(width, height), Math.round);
+	};
+
+	const overlayInset = spring(40);
+	component_subscribe($$self, overlayInset, value => $$invalidate(193, $overlayInset = value));
+	const overlaySize = spring(70);
+	component_subscribe($$self, overlaySize, value => $$invalidate(196, $overlaySize = value));
+	const overlayLeftOpacity = spring(0);
+	component_subscribe($$self, overlayLeftOpacity, value => $$invalidate(201, $overlayLeftOpacity = value));
+	const overlayRightOpacity = spring(0);
+	component_subscribe($$self, overlayRightOpacity, value => $$invalidate(203, $overlayRightOpacity = value));
+	const overlayTopOpacity = spring(0);
+	component_subscribe($$self, overlayTopOpacity, value => $$invalidate(197, $overlayTopOpacity = value));
+	const overlayBottomOpacity = spring(0);
+	component_subscribe($$self, overlayBottomOpacity, value => $$invalidate(199, $overlayBottomOpacity = value));
+
+	// make sure canvas only redraws if background color changes
+	let gradientOverlayHorizontal;
+
+	let gradientOverlayVertical;
+
+	const rootBackgroundColorUnsub = rootBackgroundColor.subscribe(color => {
+		if (!color) return;
+		if (gradientOverlayHorizontal) releaseCanvas(gradientOverlayHorizontal);
+		if (gradientOverlayVertical) releaseCanvas(gradientOverlayVertical);
+		$$invalidate(174, gradientOverlayHorizontal = getOverlayGradient(16, 0, color));
+		$$invalidate(174, gradientOverlayHorizontal.dataset.retain = 1, gradientOverlayHorizontal);
+		$$invalidate(175, gradientOverlayVertical = getOverlayGradient(0, 16, color));
+		$$invalidate(175, gradientOverlayVertical.dataset.retain = 1, gradientOverlayVertical);
+	});
 
 	//
 	// Loading the preview
 	//
 	const imageVisualLoadComplete = writable(false);
 
-	component_subscribe($$self, imageVisualLoadComplete, value => $$invalidate(192, $imageVisualLoadComplete = value));
+	component_subscribe($$self, imageVisualLoadComplete, value => $$invalidate(246, $imageVisualLoadComplete = value));
 	const imagePreviewSource = writable();
-	component_subscribe($$self, imagePreviewSource, value => $$invalidate(155, $imagePreviewSource = value));
-	let imagePreviewLoaderCancelToken;
+	component_subscribe($$self, imagePreviewSource, value => $$invalidate(208, $imagePreviewSource = value));
 
 	const createImagePreviewLoader = (src, token) => new Promise((resolve, reject) => {
 			// try not to show preview loader if updating active images array
-			const minPreviewLoaderDuration = $activeImages && $activeImages.length ? 0 : 250;
+			const minPreviewLoaderDuration = activeImages.length ? 0 : 250;
 
 			let cancelled = false;
 			let timer;
@@ -16607,32 +18975,52 @@ function instance$r($$self, $$props, $$invalidate) {
 			}).catch(reject);
 		});
 
+	let imagePreviewLoaderCancelToken;
+
 	const imagePreview = derived([imageVisualLoadComplete, imagePreviewSource], ([$imageVisualLoadComplete, $imagePreviewSource], set) => {
+		// no data, reset preview data
+		if (!$imageVisualLoadComplete || !$imagePreviewSource) {
+			set(undefined);
+			return;
+		}
+
 		// cancel existing loader
 		if (imagePreviewLoaderCancelToken) {
 			imagePreviewLoaderCancelToken.cancel();
-			$$invalidate(145, imagePreviewLoaderCancelToken = undefined);
+			$$invalidate(176, imagePreviewLoaderCancelToken = undefined);
 		}
 
-		// no data, reset preview data
-		if (!$imageVisualLoadComplete || !$imagePreviewSource) return set(undefined);
+		// if image preview source is a canvas we can update immediately
+		if (isCanvas($imagePreviewSource)) {
+			// update image preview to canvas
+			return set(canvasClone($imagePreviewSource));
+		}
 
 		// load preview
-		$$invalidate(145, imagePreviewLoaderCancelToken = { cancel: noop$1 });
+		$$invalidate(176, imagePreviewLoaderCancelToken = { cancel: noop$1 });
 
-		createImagePreviewLoader($imagePreviewSource, imagePreviewLoaderCancelToken).then(set).catch(err => set_store_value(imageLoadState, $imageLoadState.error = err, $imageLoadState)).finally(() => $$invalidate(145, imagePreviewLoaderCancelToken = undefined));
+		createImagePreviewLoader($imagePreviewSource, imagePreviewLoaderCancelToken).then(set).catch(err => {
+			// update load state
+			set_store_value(imageLoadState, $imageLoadState.error = err, $imageLoadState);
+
+			// log to console for debuggin purposes
+		}).finally(() => {
+			// no longer loading
+			$$invalidate(176, imagePreviewLoaderCancelToken = undefined);
+		});
 	});
 
-	component_subscribe($$self, imagePreview, value => $$invalidate(22, $imagePreview = value));
+	$$subscribe_imagePreview();
+	let { imagePreviewCurrent = undefined } = $$props;
 
 	//
 	// Calculates the image transforms and effects necessary for the preview
 	//
 	const imagePreviewModifiers = writable({});
 
-	component_subscribe($$self, imagePreviewModifiers, value => $$invalidate(183, $imagePreviewModifiers = value));
+	component_subscribe($$self, imagePreviewModifiers, value => $$invalidate(238, $imagePreviewModifiers = value));
 	const interfaceImages = writable([]);
-	component_subscribe($$self, interfaceImages, value => $$invalidate(48, $interfaceImages = value));
+	component_subscribe($$self, interfaceImages, value => $$invalidate(51, $interfaceImages = value));
 
 	// reset image UI previews when new file is loaded
 	const resetPreviews = () => interfaceImages.set([]);
@@ -16662,17 +19050,19 @@ function instance$r($$self, $$props, $$invalidate) {
 				$imageFlipY,
 				$imageOutputSize
 			], set) => {
+			if (!$stageRect) return;
+
 			// TODO: MAKE THIS CONTROLLABLE FROM PLUGIN
-			if ($stageRect && utilSelected === "resize") {
-				const targetSize = $imageOutputSize || $imageCropRectPresentation;
-				$presentationScalar = targetSize.width / $imageCropRectPresentation.width || targetSize.height / $imageCropRectPresentation.height;
+			if (utilSelected === "resize") {
+				const visualSize = $imageOutputSize || $imageCropRectPresentation;
+				$presentationScalar = visualSize.width / $imageCropRectPresentation.width || visualSize.height / $imageCropRectPresentation.height;
 			}
 
 			set(calculateImageTransforms($stageRect, $rootRect, $imageSize, $imageCropRectPresentation, $imageSelectionRect, $presentationScalar, 0, 0, $imageRotation, $imageFlipX, $imageFlipY));
 		}
 	);
 
-	component_subscribe($$self, imageTransforms, value => $$invalidate(182, $imageTransforms = value));
+	component_subscribe($$self, imageTransforms, value => $$invalidate(237, $imageTransforms = value));
 
 	const imageEffects = derived(
 		[
@@ -16705,7 +19095,7 @@ function instance$r($$self, $$props, $$invalidate) {
 	let windowHeight;
 	const shouldPreventSwipe = canPreventNavSwipe();
 	const env = writable({});
-	component_subscribe($$self, env, value => $$invalidate(179, $env = value));
+	component_subscribe($$self, env, value => $$invalidate(234, $env = value));
 	const initialPixelRatio = getDevicePixelRatio();
 
 	const pixelRatio = readable(initialPixelRatio, set => {
@@ -16715,14 +19105,14 @@ function instance$r($$self, $$props, $$invalidate) {
 		return () => resolutionObserver.removeListener(handleResolutionChange);
 	});
 
-	component_subscribe($$self, pixelRatio, value => $$invalidate(46, $pixelRatio = value));
+	component_subscribe($$self, pixelRatio, value => $$invalidate(47, $pixelRatio = value));
 
 	//
 	// Animations based on prefers-reduced-motion, automatically checks if user prefers reduced animations
 	//
 	const shouldAnimate = writable();
 
-	component_subscribe($$self, shouldAnimate, value => $$invalidate(17, $shouldAnimate = value));
+	component_subscribe($$self, shouldAnimate, value => $$invalidate(18, $shouldAnimate = value));
 
 	const history = historyCreate(
 		() => {
@@ -16744,7 +19134,7 @@ function instance$r($$self, $$props, $$invalidate) {
 		// set history state
 		const baseRect = { x: 0, y: 0, ...$imageSize };
 
-		const baseCropRect = rectContainRect(baseRect, $imageState.cropAspectRatio);
+		const baseCropRect = rectApply(rectContainRect(baseRect, $imageState.cropAspectRatio), Math.round);
 
 		const baseEditorState = willSetHistoryInitialState(
 			{
@@ -16769,7 +19159,7 @@ function instance$r($$self, $$props, $$invalidate) {
 		history.set(editorInitialHistoryState);
 	};
 
-	imageLoadState.subscribe(state => {
+	const imageLoadStateUnsub = imageLoadState.subscribe(state => {
 		// not ready yet
 		if (!state || !state.complete) return;
 
@@ -16784,7 +19174,7 @@ function instance$r($$self, $$props, $$invalidate) {
 	//
 	const imageProcessingPreparing = writable(false);
 
-	component_subscribe($$self, imageProcessingPreparing, value => $$invalidate(162, $imageProcessingPreparing = value));
+	component_subscribe($$self, imageProcessingPreparing, value => $$invalidate(215, $imageProcessingPreparing = value));
 
 	const handleExport = () => {
 		// this will trigger status overlay fade in
@@ -16812,7 +19202,7 @@ function instance$r($$self, $$props, $$invalidate) {
 		});
 	};
 
-	imageProcessState.subscribe(state => {
+	const imageProcessStateUnsub = imageProcessState.subscribe(state => {
 		if (!state) return;
 		set_store_value(imageProcessingPreparing, $imageProcessingPreparing = true, $imageProcessingPreparing);
 		const { complete, abort } = state;
@@ -16852,8 +19242,12 @@ function instance$r($$self, $$props, $$invalidate) {
 		// markup
 		imageDecoration,
 		imageAnnotation,
+		imageRedaction,
+		imageFrame,
 		// image preview for utils that need access to pixel data
 		imagePreview,
+		// image preview source so utils can update preview
+		imagePreviewSource,
 		// top left position of image preview
 		imageTransforms,
 		// allows utils to control how the preview is presented (for example more opacity for mask)
@@ -16873,11 +19267,17 @@ function instance$r($$self, $$props, $$invalidate) {
 		rootRect,
 		stageRect,
 		stageScalar,
+		framePadded,
 		utilRect,
 		presentationScalar,
 		rootBackgroundColor,
 		rootForegroundColor,
 		rootLineColor,
+		rootColorSecondary,
+		imageOutlineOpacity,
+		// interaction
+		// imagePresentationPan,
+		// imagePresentationScale,
 		// (write) add guides to ui (for example is used by markup util to add lines for shape manipulator)
 		imageOverlayMarkup,
 		// (write) interface images to render
@@ -16940,6 +19340,7 @@ function instance$r($$self, $$props, $$invalidate) {
 		syncColor("color", rootForegroundColor);
 		syncColor("background-color", rootBackgroundColor);
 		syncColor("outline-color", rootLineColor);
+		syncColor("--color-secondary", rootColorSecondary);
 	};
 
 	const handleTransitionEnd = ({ target, propertyName }) => {
@@ -16955,9 +19356,9 @@ function instance$r($$self, $$props, $$invalidate) {
 		};
 	});
 
-	component_subscribe($$self, imageProps, value => $$invalidate(185, $imageProps = value));
+	component_subscribe($$self, imageProps, value => $$invalidate(240, $imageProps = value));
 	const activeImages = storeList();
-	component_subscribe($$self, activeImages, value => $$invalidate(19, $activeImages = value));
+	component_subscribe($$self, activeImages, value => $$invalidate(22, $activeImages = value));
 
 	const addImagePreview = () => {
 		// if is first image scale up slightly on entrance
@@ -16969,7 +19370,7 @@ function instance$r($$self, $$props, $$invalidate) {
 		// new image on top
 		activeImages.unshift(image);
 
-		// update images
+		// update images in activeImages array
 		updateImagePreviews($imageProps);
 	};
 
@@ -16981,65 +19382,58 @@ function instance$r($$self, $$props, $$invalidate) {
 		});
 	};
 
+	// if image preview changes, push it on the stack
+	let lastImagePreview;
+
 	// test if some shapes have left/top/bottom/right offsets, if so, convert to crop space
 	// updates original shape (which at this point is a flattened shape (clone))
-	const positionDecorationShape = (shape, canvasState) => shapeComputeDisplay(shape, {
-		x: $imageSelectionRectPresentation.x / canvasState.scale,
-		y: $imageSelectionRectPresentation.y / canvasState.scale,
-		width: $imageSelectionRectPresentation.width / canvasState.scale,
-		height: $imageSelectionRectPresentation.height / canvasState.scale
-	});
+	const positionDecorationShape = (shape, canvasState) => {
+		// need to calculate intermediate sizes so relative shapes are animated when the interface updates
+		// this calculation should result in a "springed" $imageCropRect
+		const context = {
+			width: $imageSelectionRectPresentation.width / canvasState.scale,
+			height: $imageSelectionRectPresentation.height / canvasState.scale
+		};
+
+		return shapeComputeDisplay(shape, context);
+	};
 
 	// decoration is drawn relative to view space, so we need to translate relative to crop presentation rect
 	const transformDecorationShape = (shape, canvasState) => {
-		shapeComputeTransform(shape, $imageSelectionRectPresentation, canvasState.scale, canvasState.size);
+		shape._translate = vectorCreateFromAny($imageSelectionRectPresentation);
+		shape._scale = canvasState.scale;
 		return shape;
 	};
 
 	const flattenShapes = shapes => {
 		const flattenedShapes = [];
-		shapes.forEach(shape => flattenedShapes.push(...flattenShape(shape)));
+		shapes.forEach(shape => flattenedShapes.push(flattenShape(shape)));
 		return flattenedShapes.filter(Boolean);
 	};
 
 	const flattenShape = shape => {
 		// at this point shape is a copy of the original shape
-		// the shapes to draw, can be multiple shapes
-		const drawableShapes = [shape];
-
 		if (shapeIsLine(shape)) {
-			let start = vectorCreate(shape.x1, shape.y1);
-			let end = vectorCreate(shape.x2, shape.y2);
+			shape.points = [vectorCreate(shape.x1, shape.y1), vectorCreate(shape.x2, shape.y2)];
+			return shape;
+		}
 
-			if (shape.lineStart) {
-				const style = shapeComputeLineEnd(start, shape.strokeWidth, shape.strokeColor, shape.lineStart, vectorCreate(end.x - start.x, end.y - start.y));
-				start = style.position || start;
-				drawableShapes.push(style.shape);
-			}
-
-			if (shape.lineEnd) {
-				const style = shapeComputeLineEnd(end, shape.strokeWidth, shape.strokeColor, shape.lineEnd, vectorCreate(start.x - end.x, start.y - end.y));
-				end = style.position || start;
-				drawableShapes.push(style.shape);
-			}
-
-			// transform into line
-			shape.points = [start, end];
-		} else if (shapeIsTriangle(shape)) {
+		if (shapeIsTriangle(shape)) {
 			shape.points = [
 				vectorCreate(shape.x1, shape.y1),
 				vectorCreate(shape.x2, shape.y2),
 				vectorCreate(shape.x3, shape.y3)
 			];
-		} else // is empty text
+
+			return shape;
+		}
+
+		// is empty text
 		if (shapeIsTextEmpty(shape)) {
 			// make sure shape is still visible
 			if (shapeIsTextLine(shape)) {
 				shape.width = 5;
-
-				shape.height = isFunction(shape.lineHeight)
-				? shape.lineHeight(shape.fontSize)
-				: shape.lineHeight;
+				shape.height = shape.lineHeight;
 			}
 
 			// set to empty text style
@@ -17047,28 +19441,32 @@ function instance$r($$self, $$props, $$invalidate) {
 
 			shape.strokeColor = [1, 1, 1, 0.5];
 			shape.backgroundColor = [0, 0, 0, 0.1];
-		} else if (shapeIsText(shape)) {
-			shape.fontFamily = shape.fontFamily || "sans-serif";
-			shape.fontSize = shape.fontSize || 16;
+			return shape;
 		}
 
-		return drawableShapes;
+		return shape;
 	};
 
 	const statusOpacity = tweened(undefined, { duration: 500 });
-	component_subscribe($$self, statusOpacity, value => $$invalidate(24, $statusOpacity = value));
+	component_subscribe($$self, statusOpacity, value => $$invalidate(25, $statusOpacity = value));
 	let loadTimer;
+
+	// this adds a little delay to the status fade out after an image was processed
+	// needed because when the modal fades out this would otherwise create a weird flash (modal fade out, but status fade out as well showing interface)
+	const wasProcessingImage = writable(false);
+
+	component_subscribe($$self, wasProcessingImage, value => $$invalidate(258, $wasProcessingImage = value));
 	let statusState;
 
 	const asideOffset = spring(undefined, {
-		stiffness: 0.03,
-		damping: 0.4,
+		stiffness: 0.1,
+		damping: 0.7,
 		precision: 0.25
 	});
 
-	component_subscribe($$self, asideOffset, value => $$invalidate(42, $asideOffset = value));
+	component_subscribe($$self, asideOffset, value => $$invalidate(43, $asideOffset = value));
 	const asideOpacity = spring(0, { stiffness: 0.1, precision: 0.05 });
-	component_subscribe($$self, asideOpacity, value => $$invalidate(43, $asideOpacity = value));
+	component_subscribe($$self, asideOpacity, value => $$invalidate(44, $asideOpacity = value));
 
 	const asideWidth = spring(0, {
 		stiffness: 0.02,
@@ -17076,7 +19474,7 @@ function instance$r($$self, $$props, $$invalidate) {
 		precision: 0.25
 	});
 
-	component_subscribe($$self, asideWidth, value => $$invalidate(207, $asideWidth = value));
+	component_subscribe($$self, asideWidth, value => $$invalidate(262, $asideWidth = value));
 
 	const statusWidth = spring(undefined, {
 		stiffness: 0.02,
@@ -17084,7 +19482,7 @@ function instance$r($$self, $$props, $$invalidate) {
 		precision: 0.25
 	});
 
-	component_subscribe($$self, statusWidth, value => $$invalidate(205, $statusWidth = value));
+	component_subscribe($$self, statusWidth, value => $$invalidate(260, $statusWidth = value));
 
 	const statusOffset = spring(undefined, {
 		stiffness: 0.02,
@@ -17092,15 +19490,18 @@ function instance$r($$self, $$props, $$invalidate) {
 		precision: 0.25
 	});
 
-	component_subscribe($$self, statusOffset, value => $$invalidate(208, $statusOffset = value));
+	component_subscribe($$self, statusOffset, value => $$invalidate(263, $statusOffset = value));
 	let asideWidthUpdateTimer;
 
-	const offsetProgress = e => {
+	const offsetAside = e => {
+		// if error occured, snap in possition
+		const hard = !!(statusState && statusState.closeButton);
+
 		// where to render the progress indicator or close button
-		statusWidth.set(e.detail.width);
+		statusWidth.set(e.detail.width, { hard });
 
 		// offsets text so it's better centered to the viewport
-		statusOffset.set(Math.round(-e.detail.width * 0.5));
+		statusOffset.set(Math.round(-e.detail.width * 0.5), { hard });
 	};
 
 	const handleCloseImageLoadError = () => {
@@ -17112,14 +19513,36 @@ function instance$r($$self, $$props, $$invalidate) {
 		set_store_value(imageProcessingPreparing, $imageProcessingPreparing = false, $imageProcessingPreparing);
 	};
 
+	// helper to block iOS events
+	const preventDefault = e => e.preventDefault();
+
+	// prevents swipe to navigate back on iOS >= 13.4+
+	const handleTouchStart = shouldPreventSwipe
+	? e => {
+			// get touch or event itself (fixes issue with chrome dev tools)
+			const event = e.touches ? e.touches[0] : e;
+
+			// if is not an attempt to swipe back or forward
+			if (event.pageX > 10 && event.pageX < windowWidth - 10) return;
+
+			// stop the navigation attempt
+			preventDefault(e);
+		}
+	: noop$1;
+
+	// these are again needed since iOS 15 (was needed for 12 and lower, but  wasn't needed for 13, 14)
+	const handleTouchMove = isIOS() ? preventDefault : noop$1;
+
+	const handlePointerMove = isIOS() ? preventDefault : noop$1;
+
 	// context for children to know if a key is down
 	const pressedKeysStore = writable([]);
 
-	component_subscribe($$self, pressedKeysStore, value => $$invalidate(247, $pressedKeysStore = value));
+	component_subscribe($$self, pressedKeysStore, value => $$invalidate(307, $pressedKeysStore = value));
 	setContext("keysPressed", pressedKeysStore);
 
 	const handleKeydown = e => {
-		const { keyCode } = e;
+		const { keyCode, metaKey, ctrlKey, shiftKey } = e;
 
 		// prevent tabbing through fields if editor is disabled
 		if (keyCode === 9 && disabled) {
@@ -17127,9 +19550,29 @@ function instance$r($$self, $$props, $$invalidate) {
 			return;
 		}
 
+		// undo/redo
+		if (keyCode === 90 && (metaKey || ctrlKey)) {
+			if (shiftKey && metaKey) {
+				// redo on MacOS
+				history.redo();
+			} else {
+				// undo
+				history.undo();
+			}
+
+			return;
+		} else if (keyCode === 89 && ctrlKey) {
+			// redo on Windows
+			history.redo();
+
+			return;
+		}
+
 		// ignore IME popup keycode, fixes keycode 229 sticking around, as it's not triggered in keyup "If an Input Method Editor is processing key input and the event is keydown, return 229."
 		// https://lists.w3.org/Archives/Public/www-dom/2010JulSep/att-0182/keyCode-spec.html
 		if (keyCode === 229) return;
+
+		if (metaKey || ctrlKey) return;
 
 		// add to set
 		const keySet = new Set([...$pressedKeysStore, keyCode]);
@@ -17171,6 +19614,16 @@ function instance$r($$self, $$props, $$invalidate) {
 		handleUserFile(e.detail.resources[0]);
 	};
 
+	const handleSelectFile = file => {
+		if (!file) return;
+		handleUserFile(file);
+	};
+
+	const browseFileSystem = () => {
+		if (!enableBrowseImage) return;
+		browse().then(handleSelectFile);
+	};
+
 	const handlePaste = e => {
 		// not allowed to paste
 		if (!enablePasteImage) return;
@@ -17187,7 +19640,32 @@ function instance$r($$self, $$props, $$invalidate) {
 		handleUserFile((e.clipboardData || window.clipboardData).files[0]);
 	};
 
+	//
 	// canvas drawing
+	//
+	let scrambledPreviewImage = undefined;
+
+	const updateScrambledPreview = (imagePreviewData, imageScrambler, imageRedactionScalar, imageBackgroundColor) => {
+		if (!imageScrambler) return;
+
+		// remove transparency
+		const editorOptions = { dataSizeScalar: imageRedactionScalar };
+
+		if (imageBackgroundColor && imageBackgroundColor[3] > 0) {
+			editorOptions.backgroundColor = [...imageBackgroundColor];
+		}
+
+		imageScrambler(imagePreviewData, editorOptions).then(scrambledCanvas => {
+			// we've created a new scrambled preview so force release memory of old one
+			if (scrambledPreviewImage) releaseCanvas(scrambledPreviewImage);
+
+			// update scrambled preview with new image
+			$$invalidate(180, scrambledPreviewImage = scrambledCanvas);
+		});
+	};
+
+	let blendShapes = [];
+
 	const getStageState = () => ({
 		// add foreground color
 		foregroundColor: [...$rootForegroundColor],
@@ -17206,10 +19684,12 @@ function instance$r($$self, $$props, $$invalidate) {
 		selectionRect: rectClone($imageSelectionRectPresentation)
 	});
 
-	const createCanvasState = (canvasState, annotationShapes, decorationShapes, interfaceShapes) => ({
-		annotationShapes: flattenShapes(annotationShapes.filter(shapeIsVisible).map(shapeDeepCopy).map(shape => shapeComputeDisplay(shape, $imageSize))),
-		decorationShapes: flattenShapes(decorationShapes.filter(shapeIsVisible).map(shapeDeepCopy).map(shape => positionDecorationShape(shape, canvasState)).map(shape => transformDecorationShape(shape, canvasState))),
-		interfaceShapes: flattenShapes(interfaceShapes.filter(shapeIsVisible))
+	const createCanvasState = (canvasState, blendShapes, annotationShapes, decorationShapes, interfaceShapes, frameShapes) => ({
+		blendShapes: blendShapes.filter(shapeIsVisible).map(shape => shapeComputeDisplay(shape, $imageSize)),
+		annotationShapes: flattenShapes(annotationShapes.filter(shapeIsVisible).map(shapeDeepCopy).map(shape => shapeComputeDisplay(shape, $imageSize)).map(preprocessShape).flat()),
+		decorationShapes: flattenShapes(decorationShapes.filter(shapeIsVisible).map(shapeDeepCopy).map(shape => positionDecorationShape(shape, canvasState)).map(preprocessShape).flat().map(shape => transformDecorationShape(shape, canvasState))),
+		interfaceShapes: flattenShapes(interfaceShapes.filter(shapeIsVisible)),
+		frameShapes: flattenShapes(frameShapes.map(shapeDeepCopy).map(shape => positionDecorationShape(shape, canvasState)).map(preprocessShape).flat().map(shape => transformDecorationShape(shape, canvasState)))
 	});
 
 	// setup root portal for detail panel dropdown
@@ -17221,25 +19701,54 @@ function instance$r($$self, $$props, $$invalidate) {
 	// setup root rect store for global access
 	setContext("rootRect", rootRect);
 
+	// clean up so memory is released correctly
+	onDestroy(() => {
+		imageStateUnsub();
+		stageRectUnsub();
+		stageScalarUnsub();
+		imageSelectionRectSnapshotUnsub();
+		imageSelectionRectUnsub();
+		imageCropRectUnsub();
+		rootBackgroundColorUnsub();
+		imageLoadStateUnsub();
+		imageProcessStateUnsub();
+		pointerAccuracy.destroy();
+		pointerHoverable.destroy();
+		imageProxy.destroy();
+		activeImages.clear();
+		$$invalidate(144, imagePreviewCurrent = undefined);
+		$$invalidate(177, lastImagePreview = undefined);
+
+		if (gradientOverlayHorizontal) {
+			releaseCanvas(gradientOverlayHorizontal);
+			$$invalidate(174, gradientOverlayHorizontal = undefined);
+		}
+
+		if (gradientOverlayVertical) {
+			releaseCanvas(gradientOverlayVertical);
+			$$invalidate(175, gradientOverlayVertical = undefined);
+		}
+	});
+
 	function onwindowresize() {
-		$$invalidate(10, windowWidth = window_1.innerWidth);
-		$$invalidate(11, windowHeight = window_1.innerHeight);
+		$$invalidate(11, windowWidth = window_1$1.innerWidth);
+		$$invalidate(12, windowHeight = window_1$1.innerHeight);
 	}
 
 	const measure_handler = e => set_store_value(toolRect, $toolRect = e.detail, $toolRect);
-	const select_handler = ({ detail }) => $$invalidate(18, utilSelected = detail);
+	const select_handler = ({ detail }) => $$invalidate(19, utilSelected = detail);
 	const func = (panel, util) => util.id === panel;
 
 	function panel_component_binding(value, panel) {
 		if ($$self.$$.not_equal(pluginInterface[panel], value)) {
 			pluginInterface[panel] = value;
-			(($$invalidate(0, pluginInterface), $$invalidate(7, pluginOptions)), $$invalidate(142, pluginComponents));
+			(($$invalidate(0, pluginInterface), $$invalidate(7, pluginOptions)), $$invalidate(171, pluginComponents));
 		}
 	}
 
 	const measure_handler_1 = e => set_store_value(utilRect, $utilRect = e.detail, $utilRect);
-	const show_handler = panel => $$invalidate(26, utilsVisible = utilsVisible.concat(panel));
-	const hide_handler = panel => $$invalidate(26, utilsVisible = utilsVisible.filter(util => util !== panel));
+	const show_handler = panel => $$invalidate(28, utilsVisible = utilsVisible.concat(panel));
+	const hide_handler = panel => $$invalidate(28, utilsVisible = utilsVisible.filter(util => util !== panel));
 	const fade_handler = (panel, { detail }) => $$invalidate(21, utilsVisibleFraction[panel] = detail, utilsVisibleFraction);
 	const measure_handler_2 = e => set_store_value(tabRect, $tabRect = e.detail, $tabRect);
 	const func_1 = util => util.id === utilSelected;
@@ -17247,37 +19756,38 @@ function instance$r($$self, $$props, $$invalidate) {
 	function panel_component_binding_1(value) {
 		if ($$self.$$.not_equal(pluginInterface[utilSelected], value)) {
 			pluginInterface[utilSelected] = value;
-			(($$invalidate(0, pluginInterface), $$invalidate(7, pluginOptions)), $$invalidate(142, pluginComponents));
+			(($$invalidate(0, pluginInterface), $$invalidate(7, pluginOptions)), $$invalidate(171, pluginComponents));
 		}
 	}
 
 	const measure_handler_3 = e => set_store_value(utilRect, $utilRect = e.detail, $utilRect);
-	const show_handler_1 = () => $$invalidate(26, utilsVisible = utilsVisible.concat(utilSelected));
-	const hide_handler_1 = () => $$invalidate(26, utilsVisible = utilsVisible.filter(util => util !== utilSelected));
+	const show_handler_1 = () => $$invalidate(28, utilsVisible = utilsVisible.concat(utilSelected));
+	const hide_handler_1 = () => $$invalidate(28, utilsVisible = utilsVisible.filter(util => util !== utilSelected));
 	const fade_handler_1 = ({ detail }) => $$invalidate(21, utilsVisibleFraction[utilSelected] = detail, utilsVisibleFraction);
 
 	const func_2 = canvasState => {
 		// current draw state
 		const drawState = { ...canvasState, ...getStageState() };
 
-		// allow dev to add custom overlay to `imageOverlay`
-		const { annotationShapes, decorationShapes, interfaceShapes } = willRenderCanvas(
+		// allow devs to add custom overlay to `imageOverlay`
+		const { annotationShapes, decorationShapes, interfaceShapes, frameShapes } = willRenderCanvas(
 			{
-				decorationShapes: $imageDecoration,
 				annotationShapes: $imageAnnotation,
+				decorationShapes: $imageDecoration,
+				frameShapes: $imageFrame ? [$imageFrame] : [],
 				interfaceShapes: $imageOverlay
 			},
 			drawState
 		);
 
 		// need to map shapes
-		return createCanvasState(drawState, annotationShapes, decorationShapes, interfaceShapes);
+		return createCanvasState(drawState, blendShapes, annotationShapes, decorationShapes, interfaceShapes, frameShapes);
 	};
 
 	function div_binding($$value) {
 		binding_callbacks[$$value ? "unshift" : "push"](() => {
 			rootPortal = $$value;
-			$$invalidate(13, rootPortal);
+			$$invalidate(14, rootPortal);
 		});
 	}
 
@@ -17291,48 +19801,53 @@ function instance$r($$self, $$props, $$invalidate) {
 	const measure_handler_4 = e => set_store_value(clientRect, $clientRect = e.detail, $clientRect);
 
 	$$self.$$set = $$props => {
-		if ("class" in $$props) $$invalidate(119, klass = $$props.class);
-		if ("layout" in $$props) $$invalidate(120, layoutMode = $$props.layout);
-		if ("stores" in $$props) $$invalidate(121, stores = $$props.stores);
+		if ("class" in $$props) $$invalidate(145, klass = $$props.class);
+		if ("layout" in $$props) $$invalidate(146, layoutMode = $$props.layout);
+		if ("stores" in $$props) $$invalidate(147, stores = $$props.stores);
 		if ("locale" in $$props) $$invalidate(2, locale = $$props.locale);
 		if ("id" in $$props) $$invalidate(3, id = $$props.id);
-		if ("util" in $$props) $$invalidate(122, util = $$props.util);
-		if ("utils" in $$props) $$invalidate(123, utils = $$props.utils);
-		if ("animations" in $$props) $$invalidate(124, animations = $$props.animations);
-		if ("disabled" in $$props) $$invalidate(125, disabled = $$props.disabled);
-		if ("status" in $$props) $$invalidate(118, status = $$props.status);
-		if ("previewUpscale" in $$props) $$invalidate(126, previewUpscale = $$props.previewUpscale);
+		if ("util" in $$props) $$invalidate(148, util = $$props.util);
+		if ("utils" in $$props) $$invalidate(149, utils = $$props.utils);
+		if ("animations" in $$props) $$invalidate(150, animations = $$props.animations);
+		if ("disabled" in $$props) $$invalidate(151, disabled = $$props.disabled);
+		if ("status" in $$props) $$invalidate(143, status = $$props.status);
+		if ("previewUpscale" in $$props) $$invalidate(152, previewUpscale = $$props.previewUpscale);
 		if ("elasticityMultiplier" in $$props) $$invalidate(4, elasticityMultiplier = $$props.elasticityMultiplier);
-		if ("willRevert" in $$props) $$invalidate(127, willRevert = $$props.willRevert);
-		if ("willProcessImage" in $$props) $$invalidate(128, willProcessImage = $$props.willProcessImage);
+		if ("willRevert" in $$props) $$invalidate(153, willRevert = $$props.willRevert);
+		if ("willProcessImage" in $$props) $$invalidate(154, willProcessImage = $$props.willProcessImage);
 		if ("willRenderCanvas" in $$props) $$invalidate(5, willRenderCanvas = $$props.willRenderCanvas);
-		if ("willRenderToolbar" in $$props) $$invalidate(129, willRenderToolbar = $$props.willRenderToolbar);
-		if ("willSetHistoryInitialState" in $$props) $$invalidate(130, willSetHistoryInitialState = $$props.willSetHistoryInitialState);
-		if ("enableButtonExport" in $$props) $$invalidate(131, enableButtonExport = $$props.enableButtonExport);
-		if ("enableButtonRevert" in $$props) $$invalidate(132, enableButtonRevert = $$props.enableButtonRevert);
-		if ("enableNavigateHistory" in $$props) $$invalidate(133, enableNavigateHistory = $$props.enableNavigateHistory);
+		if ("willRenderToolbar" in $$props) $$invalidate(155, willRenderToolbar = $$props.willRenderToolbar);
+		if ("willSetHistoryInitialState" in $$props) $$invalidate(156, willSetHistoryInitialState = $$props.willSetHistoryInitialState);
+		if ("enableButtonExport" in $$props) $$invalidate(157, enableButtonExport = $$props.enableButtonExport);
+		if ("enableButtonRevert" in $$props) $$invalidate(158, enableButtonRevert = $$props.enableButtonRevert);
+		if ("enableNavigateHistory" in $$props) $$invalidate(159, enableNavigateHistory = $$props.enableNavigateHistory);
 		if ("enableToolbar" in $$props) $$invalidate(6, enableToolbar = $$props.enableToolbar);
-		if ("enableUtils" in $$props) $$invalidate(134, enableUtils = $$props.enableUtils);
-		if ("enableButtonClose" in $$props) $$invalidate(135, enableButtonClose = $$props.enableButtonClose);
-		if ("enableDropImage" in $$props) $$invalidate(136, enableDropImage = $$props.enableDropImage);
-		if ("enablePasteImage" in $$props) $$invalidate(137, enablePasteImage = $$props.enablePasteImage);
-		if ("previewImageDataMaxSize" in $$props) $$invalidate(138, previewImageDataMaxSize = $$props.previewImageDataMaxSize);
-		if ("layoutDirectionPreference" in $$props) $$invalidate(139, layoutDirectionPreference = $$props.layoutDirectionPreference);
-		if ("imagePreviewSrc" in $$props) $$invalidate(140, imagePreviewSrc = $$props.imagePreviewSrc);
-		if ("imageOrienter" in $$props) $$invalidate(141, imageOrienter = $$props.imageOrienter);
-		if ("pluginComponents" in $$props) $$invalidate(142, pluginComponents = $$props.pluginComponents);
+		if ("enableUtils" in $$props) $$invalidate(160, enableUtils = $$props.enableUtils);
+		if ("enableButtonClose" in $$props) $$invalidate(161, enableButtonClose = $$props.enableButtonClose);
+		if ("enableDropImage" in $$props) $$invalidate(162, enableDropImage = $$props.enableDropImage);
+		if ("enablePasteImage" in $$props) $$invalidate(163, enablePasteImage = $$props.enablePasteImage);
+		if ("enableBrowseImage" in $$props) $$invalidate(164, enableBrowseImage = $$props.enableBrowseImage);
+		if ("previewImageDataMaxSize" in $$props) $$invalidate(165, previewImageDataMaxSize = $$props.previewImageDataMaxSize);
+		if ("layoutDirectionPreference" in $$props) $$invalidate(166, layoutDirectionPreference = $$props.layoutDirectionPreference);
+		if ("layoutHorizontalUtilsPreference" in $$props) $$invalidate(167, layoutHorizontalUtilsPreference = $$props.layoutHorizontalUtilsPreference);
+		if ("layoutVerticalUtilsPreference" in $$props) $$invalidate(168, layoutVerticalUtilsPreference = $$props.layoutVerticalUtilsPreference);
+		if ("imagePreviewSrc" in $$props) $$invalidate(169, imagePreviewSrc = $$props.imagePreviewSrc);
+		if ("imageOrienter" in $$props) $$invalidate(170, imageOrienter = $$props.imageOrienter);
+		if ("pluginComponents" in $$props) $$invalidate(171, pluginComponents = $$props.pluginComponents);
 		if ("pluginOptions" in $$props) $$invalidate(7, pluginOptions = $$props.pluginOptions);
 		if ("root" in $$props) $$invalidate(1, root = $$props.root);
 		if ("imageSourceToImageData" in $$props) $$invalidate(8, imageSourceToImageData = $$props.imageSourceToImageData);
+		if ("imagePreviewCurrent" in $$props) $$invalidate(144, imagePreviewCurrent = $$props.imagePreviewCurrent);
 	};
 
 	$$self.$$.update = () => {
-		if ($$self.$$.dirty[3] & /*layoutMode*/ 134217728) {
-			$$invalidate(148, isOverlayModeEnabled = layoutMode === "overlay");
+		if ($$self.$$.dirty[4] & /*layoutMode*/ 4194304) {
+			// set to new object to force redraw
+			$$invalidate(181, isOverlayModeEnabled = layoutMode === "overlay");
 		}
 
-		if ($$self.$$.dirty[4] & /*enableUtils, isOverlayModeEnabled*/ 16778240) {
-			$$invalidate(14, showUtils = enableUtils && !isOverlayModeEnabled);
+		if ($$self.$$.dirty[5] & /*enableUtils, isOverlayModeEnabled*/ 67108896) {
+			$$invalidate(15, showUtils = enableUtils && !isOverlayModeEnabled);
 		}
 
 		if ($$self.$$.dirty[0] & /*pluginOptions, pluginInterface*/ 129) {
@@ -17352,7 +19867,7 @@ function instance$r($$self, $$props, $$invalidate) {
 			}
 		}
 
-		if ($$self.$$.dirty[0] & /*pluginInterface*/ 1 | $$self.$$.dirty[4] & /*pluginComponents*/ 262144) {
+		if ($$self.$$.dirty[0] & /*pluginInterface*/ 1 | $$self.$$.dirty[5] & /*pluginComponents*/ 65536) {
 			{
 				let changed = false;
 
@@ -17363,44 +19878,50 @@ function instance$r($$self, $$props, $$invalidate) {
 				});
 
 				if (changed) {
-					$$invalidate(144, registeredPluginsComponents = [...pluginComponents]);
+					$$invalidate(173, registeredPluginsComponents = [...pluginComponents]);
 				}
 			}
 		}
 
-		if ($$self.$$.dirty[4] & /*disabled*/ 2) {
+		if ($$self.$$.dirty[4] & /*disabled*/ 134217728) {
 			disabledTransition.set(disabled ? 1 : 0);
 		}
 
-		if ($$self.$$.dirty[4] & /*previewImageDataMaxSize*/ 16384) {
+		if ($$self.$$.dirty[5] & /*previewImageDataMaxSize*/ 1024) {
 			maxImageDataSize = previewImageDataMaxSize
 			? sizeMin(previewImageDataMaxSize, maxTextureSize)
 			: maxTextureSize;
 		}
 
-		if ($$self.$$.dirty[4] & /*$images*/ 33554432) {
+		if ($$self.$$.dirty[5] & /*$images*/ 134217728) {
 			imageProxy.update($images[0]);
 		}
 
-		if ($$self.$$.dirty[0] & /*$clientRect*/ 32768) {
+		if ($$self.$$.dirty[5] & /*$shapePreprocessor*/ 268435456) {
+			preprocessShape = $shapePreprocessor
+			? shape => $shapePreprocessor(shape, { isPreview: true })
+			: passthrough;
+		}
+
+		if ($$self.$$.dirty[0] & /*$clientRect*/ 65536) {
 			$clientRect && rootRect.set(rectCreate($clientRect.x, $clientRect.y, $clientRect.width, $clientRect.height));
 		}
 
-		if ($$self.$$.dirty[4] & /*$rootRect, isOverlayModeEnabled, $imageLoadState*/ 218103808) {
-			$rootRect && isOverlayModeEnabled && ($imageLoadState && $imageLoadState.complete) && syncRootAspectRatio();
+		if ($$self.$$.dirty[5] & /*$rootRect, isOverlayModeEnabled, $imageLoadState*/ 1677721600) {
+			$rootRect && isOverlayModeEnabled && $imageLoadState && $imageLoadState.complete && syncRootAspectRatio();
 		}
 
-		if ($$self.$$.dirty[0] & /*locale*/ 4 | $$self.$$.dirty[3] & /*utils*/ 1073741824 | $$self.$$.dirty[4] & /*registeredPluginsComponents*/ 1048576) {
-			$$invalidate(152, utilsFiltered = locale && registeredPluginsComponents.length
+		if ($$self.$$.dirty[0] & /*locale*/ 4 | $$self.$$.dirty[4] & /*utils*/ 33554432 | $$self.$$.dirty[5] & /*registeredPluginsComponents*/ 262144) {
+			$$invalidate(188, utilsFiltered = locale && registeredPluginsComponents.length
 			? utils || registeredPluginsComponents.map(([id]) => id)
 			: []);
 		}
 
-		if ($$self.$$.dirty[4] & /*utilsFiltered*/ 268435456) {
-			$$invalidate(16, shouldRenderTabs = utilsFiltered.length > 1);
+		if ($$self.$$.dirty[6] & /*utilsFiltered*/ 4) {
+			$$invalidate(17, shouldRenderTabs = utilsFiltered.length > 1);
 		}
 
-		if ($$self.$$.dirty[0] & /*shouldRenderTabs*/ 65536) {
+		if ($$self.$$.dirty[0] & /*shouldRenderTabs*/ 131072) {
 			if (!shouldRenderTabs) tabRect.set(rectCreateEmpty());
 		}
 
@@ -17408,29 +19929,146 @@ function instance$r($$self, $$props, $$invalidate) {
 			if (!enableToolbar) toolRect.set(rectCreateEmpty());
 		}
 
-		if ($$self.$$.dirty[4] & /*previewUpscale, isOverlayModeEnabled*/ 16777220) {
+		if ($$self.$$.dirty[4] & /*previewUpscale*/ 268435456 | $$self.$$.dirty[5] & /*isOverlayModeEnabled*/ 67108864) {
 			previewShouldUpscale.set(previewUpscale || isOverlayModeEnabled);
 		}
 
-		if ($$self.$$.dirty[4] & /*imagePreviewSrc, $imageFile*/ 1073807360) {
+		if ($$self.$$.dirty[5] & /*registeredPluginsComponents*/ 262144 | $$self.$$.dirty[6] & /*utilsFiltered*/ 4) {
+			$$invalidate(216, utilsAvailable = registeredPluginsComponents.filter(([id]) => utilsFiltered.includes(id)));
+		}
+
+		if ($$self.$$.dirty[6] & /*utilsAvailable*/ 1073741824) {
+			$$invalidate(217, utilsDefined = utilsAvailable.length);
+		}
+
+		if ($$self.$$.dirty[4] & /*util*/ 16777216 | $$self.$$.dirty[6] & /*utilsFiltered*/ 4 | $$self.$$.dirty[7] & /*utilsDefined*/ 1) {
+			$$invalidate(19, utilSelected = util && typeof util === "string" && utilsFiltered.includes(util)
+			? util
+			: utilsDefined > 0 ? utilsFiltered[0] : undefined);
+		}
+
+		if ($$self.$$.dirty[0] & /*utilSelected*/ 524288) {
+			utilSelected && imageOutlineOpacity.set(0.075);
+		}
+
+		if ($$self.$$.dirty[0] & /*utilSelected*/ 524288) {
+			overlayInset.set(utilSelected === "resize" ? 40 : 30);
+		}
+
+		if ($$self.$$.dirty[0] & /*utilSelected*/ 524288) {
+			overlaySize.set(utilSelected === "resize" ? 140 : 70);
+		}
+
+		if ($$self.$$.dirty[6] & /*$imageCropRect, $imageOutputSize*/ 17) {
+			$$invalidate(192, imageTargetSizeCurrent = $imageCropRect && calculateImageTargetSize($imageOutputSize || {}, $imageCropRect));
+		}
+
+		if ($$self.$$.dirty[6] & /*imageTargetSizeCurrent, $stageRect, $overlayInset, $imageVisualBounds*/ 456) {
+			imageTargetSizeCurrent && $stageRect && overlayTopOpacity.set(smoothstep($stageRect.y, $stageRect.y - $overlayInset, $imageVisualBounds.y));
+		}
+
+		if ($$self.$$.dirty[6] & /*imageTargetSizeCurrent, $stageRect, $overlayInset, $imageVisualBounds*/ 456) {
+			imageTargetSizeCurrent && $stageRect && overlayRightOpacity.set(smoothstep($stageRect.x + $stageRect.width, $stageRect.x + $stageRect.width + $overlayInset, $imageVisualBounds.x + $imageVisualBounds.width));
+		}
+
+		if ($$self.$$.dirty[6] & /*imageTargetSizeCurrent, $stageRect, $overlayInset, $imageVisualBounds*/ 456) {
+			imageTargetSizeCurrent && $stageRect && overlayBottomOpacity.set(smoothstep($stageRect.y + $stageRect.height, $stageRect.y + $stageRect.height + $overlayInset, $imageVisualBounds.y + $imageVisualBounds.height));
+		}
+
+		if ($$self.$$.dirty[6] & /*imageTargetSizeCurrent, $stageRect, $overlayInset, $imageVisualBounds*/ 456) {
+			imageTargetSizeCurrent && $stageRect && overlayLeftOpacity.set(smoothstep($stageRect.x, $stageRect.x - $overlayInset, $imageVisualBounds.x));
+		}
+
+		if ($$self.$$.dirty[5] & /*$rootRect, gradientOverlayVertical*/ 537919488 | $$self.$$.dirty[6] & /*$overlaySize, $overlayTopOpacity*/ 3072) {
+			$$invalidate(195, overlayTop = $rootRect && {
+				id: STAGE_OVERLAY_ID,
+				x: 0,
+				y: 0,
+				width: $rootRect.width,
+				height: $overlaySize,
+				rotation: Math.PI,
+				opacity: maxOpacity * $overlayTopOpacity,
+				backgroundImage: gradientOverlayVertical
+			});
+		}
+
+		if ($$self.$$.dirty[5] & /*$rootRect, gradientOverlayVertical*/ 537919488 | $$self.$$.dirty[6] & /*$overlaySize, $overlayBottomOpacity*/ 9216) {
+			$$invalidate(198, overlayBottom = $rootRect && {
+				id: STAGE_OVERLAY_ID,
+				x: 0,
+				y: $rootRect.height - $overlaySize,
+				width: $rootRect.width,
+				height: $overlaySize,
+				opacity: maxOpacity * $overlayBottomOpacity,
+				backgroundImage: gradientOverlayVertical
+			});
+		}
+
+		if ($$self.$$.dirty[5] & /*$rootRect, gradientOverlayHorizontal*/ 537395200 | $$self.$$.dirty[6] & /*$overlaySize, $overlayLeftOpacity*/ 33792) {
+			$$invalidate(200, overlayLeft = $rootRect && {
+				id: STAGE_OVERLAY_ID,
+				x: 0,
+				y: 0,
+				height: $rootRect.height,
+				width: $overlaySize,
+				rotation: Math.PI,
+				opacity: maxOpacity * $overlayLeftOpacity,
+				backgroundImage: gradientOverlayHorizontal
+			});
+		}
+
+		if ($$self.$$.dirty[5] & /*$rootRect, gradientOverlayHorizontal*/ 537395200 | $$self.$$.dirty[6] & /*$overlaySize, $overlayRightOpacity*/ 132096) {
+			$$invalidate(202, overlayRight = $rootRect && {
+				id: STAGE_OVERLAY_ID,
+				x: $rootRect.width - $overlaySize,
+				y: 0,
+				height: $rootRect.height,
+				width: $overlaySize,
+				opacity: maxOpacity * $overlayRightOpacity,
+				backgroundImage: gradientOverlayHorizontal
+			});
+		}
+
+		if ($$self.$$.dirty[6] & /*overlayTop, overlayRight, overlayBottom, overlayLeft*/ 86528) {
+			$$invalidate(204, gradientOverlays = [overlayTop, overlayRight, overlayBottom, overlayLeft].filter(Boolean));
+		}
+
+		if ($$self.$$.dirty[6] & /*gradientOverlays, $imageOverlayMarkup*/ 786432) {
+			// if overlay top changes
+			if (gradientOverlays && $imageOverlayMarkup) {
+				// remove existing resize overlays
+				const overlayMarkup = $imageOverlayMarkup.filter(markup => markup.id !== STAGE_OVERLAY_ID);
+
+				set_store_value(imageOverlayMarkup, $imageOverlayMarkup = [...overlayMarkup, ...gradientOverlays], $imageOverlayMarkup);
+			}
+		}
+
+		if ($$self.$$.dirty[5] & /*imagePreviewSrc*/ 16384 | $$self.$$.dirty[6] & /*$imageFile*/ 1048576) {
 			imagePreviewSource.set(imagePreviewSrc
 			? imagePreviewSrc
 			: $imageFile || undefined);
 		}
 
-		if ($$self.$$.dirty[5] & /*$imagePreviewSource*/ 1) {
+		if ($$self.$$.dirty[0] & /*root*/ 2 | $$self.$$.dirty[4] & /*imagePreviewCurrent*/ 1048576 | $$self.$$.dirty[6] & /*$imagePreview*/ 2097152) {
+			{
+				$$invalidate(144, imagePreviewCurrent = $imagePreview);
+				if ($imagePreview) root.dispatchEvent(createPing("loadpreview", imagePreviewCurrent));
+			}
+		}
+
+		if ($$self.$$.dirty[6] & /*$imagePreviewSource*/ 4194304) {
 			if ($imagePreviewSource) resetPreviews();
 		}
 
-		if ($$self.$$.dirty[4] & /*$isInteracting*/ 536870912) {
-			$$invalidate(156, canAnimate = !$isInteracting && !isSoftwareRendering());
+		if ($$self.$$.dirty[6] & /*$isInteracting*/ 2) {
+			$$invalidate(209, canAnimate = !$isInteracting && !isSoftwareRendering());
 		}
 
-		if ($$self.$$.dirty[5] & /*$prefersReducedMotion*/ 8) {
-			$$invalidate(157, acceptsAnimations = !$prefersReducedMotion);
+		if ($$self.$$.dirty[6] & /*$prefersReducedMotion*/ 33554432) {
+			$$invalidate(210, acceptsAnimations = !$prefersReducedMotion);
 		}
 
-		if ($$self.$$.dirty[4] & /*animations*/ 1 | $$self.$$.dirty[5] & /*canAnimate, acceptsAnimations*/ 6) {
+		if ($$self.$$.dirty[4] & /*animations*/ 67108864 | $$self.$$.dirty[6] & /*canAnimate, acceptsAnimations*/ 25165824) {
 			set_store_value(
 				shouldAnimate,
 				$shouldAnimate = animations === "always"
@@ -17442,23 +20080,15 @@ function instance$r($$self, $$props, $$invalidate) {
 			);
 		}
 
-		if ($$self.$$.dirty[5] & /*$history*/ 32) {
-			$$invalidate(159, canUndo = $history.index > 0); //-1;
+		if ($$self.$$.dirty[6] & /*$history*/ 134217728) {
+			$$invalidate(212, canUndo = $history.index > 0);
 		}
 
-		if ($$self.$$.dirty[5] & /*$history*/ 32) {
-			$$invalidate(161, canRedo = $history.index < $history.length - 1);
+		if ($$self.$$.dirty[6] & /*$history*/ 134217728) {
+			$$invalidate(214, canRedo = $history.index < $history.length - 1);
 		}
 
-		if ($$self.$$.dirty[4] & /*registeredPluginsComponents, utilsFiltered*/ 269484032) {
-			$$invalidate(163, utilsAvailable = registeredPluginsComponents.filter(([id]) => utilsFiltered.includes(id)));
-		}
-
-		if ($$self.$$.dirty[5] & /*utilsAvailable*/ 256) {
-			$$invalidate(164, utilsDefined = utilsAvailable.length);
-		}
-
-		if ($$self.$$.dirty[0] & /*locale*/ 4 | $$self.$$.dirty[4] & /*utilsFiltered*/ 268435456 | $$self.$$.dirty[5] & /*utilsAvailable*/ 256) {
+		if ($$self.$$.dirty[0] & /*locale*/ 4 | $$self.$$.dirty[6] & /*utilsFiltered, utilsAvailable*/ 1073741828) {
 			$$invalidate(20, utilsMerged = utilsFiltered.map(utilId => {
 				const util = utilsAvailable.find(([id]) => utilId === id); // [id, view]
 				if (!util) return;
@@ -17472,14 +20102,12 @@ function instance$r($$self, $$props, $$invalidate) {
 			}).filter(Boolean) || []);
 		}
 
-		if ($$self.$$.dirty[3] & /*util*/ 536870912 | $$self.$$.dirty[4] & /*utilsFiltered*/ 268435456 | $$self.$$.dirty[5] & /*utilsDefined*/ 512) {
-			$$invalidate(18, utilSelected = util && typeof util === "string" && utilsFiltered.includes(util)
-			? util
-			: utilsDefined > 0 ? utilsFiltered[0] : undefined);
+		if ($$self.$$.dirty[0] & /*utilSelected*/ 524288) {
+			utilSelectedStore.set(utilSelected);
 		}
 
-		if ($$self.$$.dirty[0] & /*utilSelected, pluginInterface*/ 262145) {
-			$$invalidate(165, utilTools = utilSelected && pluginInterface[utilSelected].tools || []);
+		if ($$self.$$.dirty[0] & /*utilSelected, pluginInterface*/ 524289) {
+			$$invalidate(218, utilTools = utilSelected && pluginInterface[utilSelected].tools || []);
 		}
 
 		if ($$self.$$.dirty[0] & /*utilsMerged, utilsVisibleFraction*/ 3145728) {
@@ -17492,15 +20120,15 @@ function instance$r($$self, $$props, $$invalidate) {
 			));
 		}
 
-		if ($$self.$$.dirty[0] & /*utilSelected*/ 262144) {
-			$$invalidate(28, tabsConfig = {
+		if ($$self.$$.dirty[0] & /*utilSelected*/ 524288) {
+			$$invalidate(31, tabsConfig = {
 				name: utilsUniqueId,
 				selected: utilSelected
 			});
 		}
 
 		if ($$self.$$.dirty[0] & /*utilsMerged*/ 1048576) {
-			$$invalidate(29, tabs = utilsMerged.map(util => ({
+			$$invalidate(32, tabs = utilsMerged.map(util => ({
 				id: util.id,
 				icon: util.tabIcon,
 				label: util.tabLabel
@@ -17508,86 +20136,96 @@ function instance$r($$self, $$props, $$invalidate) {
 		}
 
 		if ($$self.$$.dirty[0] & /*utilsMerged*/ 1048576) {
-			$$invalidate(30, panels = utilsMerged.map(util => util.id));
+			$$invalidate(33, panels = utilsMerged.map(util => util.id));
 		}
 
-		if ($$self.$$.dirty[3] & /*klass*/ 67108864) {
-			$$invalidate(31, className = arrayJoin(["PinturaRoot", "PinturaRootComponent", klass]));
+		if ($$self.$$.dirty[4] & /*klass*/ 2097152) {
+			$$invalidate(34, className = arrayJoin(["PinturaRoot", "PinturaRootComponent", klass]));
 		}
 
-		if ($$self.$$.dirty[4] & /*$rootRect*/ 67108864) {
-			$$invalidate(166, horizontalSpace = $rootRect && ($rootRect.width > 1000
+		if ($$self.$$.dirty[5] & /*$rootRect*/ 536870912) {
+			$$invalidate(219, horizontalSpace = $rootRect && ($rootRect.width > 1000
 			? "wide"
 			: $rootRect.width < 600 ? "narrow" : undefined));
 		}
 
-		if ($$self.$$.dirty[4] & /*$rootRect*/ 67108864) {
-			$$invalidate(167, hasLimitedSpace = $rootRect && ($rootRect.width <= 320 || $rootRect.height <= 460));
+		if ($$self.$$.dirty[5] & /*$rootRect*/ 536870912) {
+			$$invalidate(220, hasLimitedSpace = $rootRect && ($rootRect.width <= 320 || $rootRect.height <= 460));
 		}
 
-		if ($$self.$$.dirty[4] & /*$rootRect*/ 67108864) {
-			$$invalidate(168, verticalSpace = $rootRect && ($rootRect.height > 1000
+		if ($$self.$$.dirty[5] & /*$rootRect*/ 536870912) {
+			$$invalidate(221, verticalSpace = $rootRect && ($rootRect.height > 1000
 			? "tall"
 			: $rootRect.height < 600 ? "short" : undefined));
 		}
 
 		if ($$self.$$.dirty[0] & /*root*/ 2) {
-			$$invalidate(169, isModal = root && root.parentNode && root.parentNode.classList.contains("PinturaModal"));
+			$$invalidate(222, isModal = root && root.parentNode && root.parentNode.classList.contains("PinturaModal"));
 		}
 
-		if ($$self.$$.dirty[0] & /*windowWidth*/ 1024 | $$self.$$.dirty[4] & /*$rootRect*/ 67108864 | $$self.$$.dirty[5] & /*isModal*/ 16384) {
-			$$invalidate(170, isCenteredHorizontally = isModal && $rootRect && windowWidth > $rootRect.width);
+		if ($$self.$$.dirty[0] & /*windowWidth*/ 2048 | $$self.$$.dirty[5] & /*$rootRect*/ 536870912 | $$self.$$.dirty[7] & /*isModal*/ 32) {
+			$$invalidate(223, isCenteredHorizontally = isModal && $rootRect && windowWidth > $rootRect.width);
 		}
 
-		if ($$self.$$.dirty[0] & /*windowHeight*/ 2048 | $$self.$$.dirty[4] & /*$rootRect*/ 67108864 | $$self.$$.dirty[5] & /*isModal*/ 16384) {
-			$$invalidate(171, isCenteredVertically = isModal && $rootRect && windowHeight > $rootRect.height);
+		if ($$self.$$.dirty[0] & /*windowHeight*/ 4096 | $$self.$$.dirty[5] & /*$rootRect*/ 536870912 | $$self.$$.dirty[7] & /*isModal*/ 32) {
+			$$invalidate(224, isCenteredVertically = isModal && $rootRect && windowHeight > $rootRect.height);
 		}
 
-		if ($$self.$$.dirty[5] & /*isCenteredHorizontally, isCenteredVertically*/ 98304) {
-			$$invalidate(172, isCentered = isCenteredHorizontally && isCenteredVertically);
+		if ($$self.$$.dirty[7] & /*isCenteredHorizontally, isCenteredVertically*/ 192) {
+			$$invalidate(225, isCentered = isCenteredHorizontally && isCenteredVertically);
 		}
 
-		if ($$self.$$.dirty[5] & /*horizontalSpace*/ 2048) {
-			$$invalidate(173, isNarrow = horizontalSpace === "narrow");
+		if ($$self.$$.dirty[7] & /*horizontalSpace*/ 4) {
+			$$invalidate(226, isNarrow = horizontalSpace === "narrow");
 		}
 
-		if ($$self.$$.dirty[4] & /*$rootRect, layoutDirectionPreference*/ 67141632) {
-			$$invalidate(174, orientation = getOrientation($rootRect, layoutDirectionPreference));
+		if ($$self.$$.dirty[5] & /*$rootRect, layoutDirectionPreference*/ 536872960) {
+			$$invalidate(227, orientation = getOrientation($rootRect, layoutDirectionPreference));
 		}
 
-		if ($$self.$$.dirty[5] & /*orientation*/ 524288) {
-			$$invalidate(32, isLandscape = orientation === "landscape");
+		if ($$self.$$.dirty[7] & /*orientation*/ 1024) {
+			$$invalidate(35, isLandscape = orientation === "landscape");
 		}
 
-		if ($$self.$$.dirty[5] & /*isNarrow, verticalSpace*/ 270336) {
-			$$invalidate(175, isCompact = isNarrow || verticalSpace === "short");
+		if ($$self.$$.dirty[7] & /*isNarrow, verticalSpace*/ 528) {
+			$$invalidate(228, isCompact = isNarrow || verticalSpace === "short");
 		}
 
-		if ($$self.$$.dirty[0] & /*windowWidth*/ 1024 | $$self.$$.dirty[4] & /*$rootRect*/ 67108864) {
-			$$invalidate(176, hasSwipeNavigation = iOS && ($rootRect && windowWidth === $rootRect.width) && !shouldPreventSwipe);
+		if ($$self.$$.dirty[0] & /*windowWidth*/ 2048 | $$self.$$.dirty[5] & /*$rootRect*/ 536870912) {
+			$$invalidate(229, hasSwipeNavigation = iOS && $rootRect && windowWidth === $rootRect.width && !shouldPreventSwipe);
 		}
 
-		if ($$self.$$.dirty[4] & /*isOverlayModeEnabled*/ 16777216 | $$self.$$.dirty[5] & /*utilTools, verticalSpace*/ 9216) {
-			$$invalidate(177, shouldRenderUtilTools = utilTools.length && (verticalSpace === "short" || isOverlayModeEnabled));
+		if ($$self.$$.dirty[5] & /*isOverlayModeEnabled*/ 67108864 | $$self.$$.dirty[7] & /*utilTools, verticalSpace*/ 18) {
+			$$invalidate(230, shouldRenderUtilTools = utilTools.length && (verticalSpace === "short" || isOverlayModeEnabled));
+		}
+
+		if ($$self.$$.dirty[5] & /*layoutHorizontalUtilsPreference*/ 4096) {
+			$$invalidate(231, navigationHorizontalPreference = `has-navigation-preference-${layoutHorizontalUtilsPreference}`);
+		}
+
+		if ($$self.$$.dirty[5] & /*layoutVerticalUtilsPreference*/ 8192) {
+			$$invalidate(232, navigationVerticalPreference = `has-navigation-preference-${layoutVerticalUtilsPreference}`);
 		}
 
 		if ($$self.$$.dirty[0] & /*root*/ 2) {
 			// will update when root element is available (computed style is live, so is updated when the style is updated)
-			$$invalidate(178, rootElementComputedStyle = root && getComputedStyle(root));
+			$$invalidate(233, rootElementComputedStyle = root && getComputedStyle(root));
 		}
 
-		if ($$self.$$.dirty[5] & /*rootElementComputedStyle*/ 8388608) {
+		if ($$self.$$.dirty[7] & /*rootElementComputedStyle*/ 65536) {
 			// sync for first time
 			if (rootElementComputedStyle) syncColors();
 		}
 
-		if ($$self.$$.dirty[0] & /*$shouldAnimate, enableToolbar, shouldRenderTabs, showUtils*/ 213056 | $$self.$$.dirty[3] & /*layoutMode*/ 134217728 | $$self.$$.dirty[4] & /*disabled*/ 2 | $$self.$$.dirty[5] & /*$env, orientation, horizontalSpace, verticalSpace, isModal, isCentered, isCenteredHorizontally, isCenteredVertically, $pointerAccuracy, $pointerHoverable, isCompact, hasSwipeNavigation, hasLimitedSpace*/ 121370624) {
+		if ($$self.$$.dirty[0] & /*$shouldAnimate, enableToolbar, shouldRenderTabs, showUtils*/ 426048 | $$self.$$.dirty[4] & /*layoutMode, disabled*/ 138412032 | $$self.$$.dirty[7] & /*$env, orientation, horizontalSpace, verticalSpace, navigationHorizontalPreference, navigationVerticalPreference, isModal, isCentered, isCenteredHorizontally, isCenteredVertically, $pointerAccuracy, $pointerHoverable, isCompact, hasSwipeNavigation, hasLimitedSpace*/ 974332) {
 			env.set({
 				...$env,
 				layoutMode,
 				orientation,
 				horizontalSpace,
 				verticalSpace,
+				navigationHorizontalPreference,
+				navigationVerticalPreference,
 				isModal,
 				isDisabled: disabled,
 				isCentered,
@@ -17605,8 +20243,8 @@ function instance$r($$self, $$props, $$invalidate) {
 			});
 		}
 
-		if ($$self.$$.dirty[5] & /*$env*/ 16777216) {
-			$$invalidate(33, envStr = Object.entries($env).map(([key, value]) => {
+		if ($$self.$$.dirty[7] & /*$env*/ 131072) {
+			$$invalidate(36, envStr = Object.entries($env).map(([key, value]) => {
 				// is true boolean prop, use key
 				if ((/^is|has/).test(key)) {
 					return value ? toKebabCase(key) : undefined;
@@ -17617,8 +20255,8 @@ function instance$r($$self, $$props, $$invalidate) {
 			}).filter(Boolean).join(" "));
 		}
 
-		if ($$self.$$.dirty[5] & /*$imageTransforms, $imagePreviewModifiers*/ 402653184) {
-			$$invalidate(34, imageCanvasState = $imageTransforms && Object.entries($imagePreviewModifiers).filter(([,value]) => value != null).reduce(
+		if ($$self.$$.dirty[7] & /*$imageTransforms, $imagePreviewModifiers*/ 3145728) {
+			$$invalidate(37, imageCanvasState = $imageTransforms && Object.entries($imagePreviewModifiers).filter(([,value]) => value != null).reduce(
 				(prev, [,value]) => {
 					prev = { ...prev, ...value };
 					return prev;
@@ -17627,34 +20265,38 @@ function instance$r($$self, $$props, $$invalidate) {
 			));
 		}
 
-		if ($$self.$$.dirty[4] & /*$imageLoadState*/ 134217728) {
+		if ($$self.$$.dirty[5] & /*$imageLoadState*/ 1073741824) {
 			//
 			// loading status
 			//
-			$$invalidate(184, isStartLoadingImageSource = $imageLoadState && $imageLoadState.task === "any-to-file");
+			$$invalidate(239, isStartLoadingImageSource = $imageLoadState && $imageLoadState.task === "any-to-file");
 		}
 
-		if ($$self.$$.dirty[5] & /*isStartLoadingImageSource*/ 536870912) {
+		if ($$self.$$.dirty[7] & /*isStartLoadingImageSource*/ 4194304) {
 			// reset active images when loading a new image source
-			if (isStartLoadingImageSource && activeImages) activeImages.clear();
+			if (isStartLoadingImageSource && activeImages) {
+				activeImages.clear();
+			}
 		}
 
-		if ($$self.$$.dirty[5] & /*$imageProps*/ 1073741824) {
-			// if image props are ready 
-			$$invalidate(186, hasProps = !!$imageProps && !!$imageProps.translation);
+		if ($$self.$$.dirty[7] & /*$imageProps*/ 8388608) {
+			// if image props are ready
+			$$invalidate(241, hasProps = !!$imageProps && !!$imageProps.translation);
 		}
 
-		if ($$self.$$.dirty[0] & /*$imagePreview*/ 4194304 | $$self.$$.dirty[6] & /*hasProps*/ 1) {
-			// if image preview changes, push it on the stack
-			hasProps && $imagePreview && addImagePreview();
+		if ($$self.$$.dirty[5] & /*lastImagePreview*/ 4194304 | $$self.$$.dirty[6] & /*$imagePreview*/ 2097152 | $$self.$$.dirty[7] & /*hasProps*/ 16777216) {
+			if (hasProps && $imagePreview && $imagePreview !== lastImagePreview) {
+				$$invalidate(177, lastImagePreview = $imagePreview);
+				addImagePreview();
+			}
 		}
 
-		if ($$self.$$.dirty[5] & /*$imageProps*/ 1073741824 | $$self.$$.dirty[6] & /*hasProps*/ 1) {
+		if ($$self.$$.dirty[7] & /*hasProps, $imageProps*/ 25165824) {
 			// update images when image props change
 			hasProps && updateImagePreviews($imageProps);
 		}
 
-		if ($$self.$$.dirty[0] & /*$activeImages*/ 524288) {
+		if ($$self.$$.dirty[0] & /*$activeImages*/ 4194304) {
 			// clean active images array, removes 'inactive' images when their opacity is 0
 			if ($activeImages && $activeImages.length > 1) {
 				let imagesToRemove = [];
@@ -17668,36 +20310,36 @@ function instance$r($$self, $$props, $$invalidate) {
 			}
 		}
 
-		if ($$self.$$.dirty[0] & /*locale*/ 4 | $$self.$$.dirty[6] & /*missingFeatures*/ 2) {
+		if ($$self.$$.dirty[0] & /*locale*/ 4 | $$self.$$.dirty[7] & /*missingFeatures*/ 33554432) {
 			$$invalidate(23, isSupportsError = locale && missingFeatures.length && locale.labelSupportError(missingFeatures));
 		}
 
-		if ($$self.$$.dirty[4] & /*$imageLoadState*/ 134217728) {
-			$$invalidate(188, isImageLoadError = $imageLoadState && !!$imageLoadState.error);
+		if ($$self.$$.dirty[5] & /*$imageLoadState*/ 1073741824) {
+			$$invalidate(243, isImageLoadError = $imageLoadState && !!$imageLoadState.error);
 		}
 
-		if ($$self.$$.dirty[4] & /*$imageLoadState*/ 134217728) {
-			$$invalidate(189, isWaitingForImage = !$imageLoadState || !$imageLoadState.complete && $imageLoadState.task === undefined);
+		if ($$self.$$.dirty[5] & /*$imageLoadState*/ 1073741824) {
+			$$invalidate(24, isWaitingForImage = !$imageLoadState || !$imageLoadState.complete && $imageLoadState.task === undefined);
 		}
 
-		if ($$self.$$.dirty[4] & /*$imageLoadState*/ 134217728) {
-			$$invalidate(190, imageLoadProgress = $imageLoadState && ($imageLoadState.taskLengthComputable
+		if ($$self.$$.dirty[5] & /*$imageLoadState*/ 1073741824) {
+			$$invalidate(244, imageLoadProgress = $imageLoadState && ($imageLoadState.taskLengthComputable
 			? $imageLoadState.taskProgress
 			: Infinity));
 		}
 
-		if ($$self.$$.dirty[5] & /*isStartLoadingImageSource*/ 536870912) {
+		if ($$self.$$.dirty[7] & /*isStartLoadingImageSource*/ 4194304) {
 			if (isStartLoadingImageSource) set_store_value(imageVisualLoadComplete, $imageVisualLoadComplete = false, $imageVisualLoadComplete);
 		}
 
-		if ($$self.$$.dirty[4] & /*$imageLoadState, loadTimer*/ 138412032) {
+		if ($$self.$$.dirty[5] & /*$imageLoadState, loadTimer*/ 1082130432) {
 			if ($imageLoadState && $imageLoadState.complete) {
 				const minLoaderDuration = 500;
 
 				// TODO: derive visual load complete from interface rest state instead of arbitrary timer
 				clearTimeout(loadTimer);
 
-				$$invalidate(146, loadTimer = setTimeout(
+				$$invalidate(178, loadTimer = setTimeout(
 					() => {
 						set_store_value(imageVisualLoadComplete, $imageVisualLoadComplete = true, $imageVisualLoadComplete);
 					},
@@ -17706,28 +20348,28 @@ function instance$r($$self, $$props, $$invalidate) {
 			}
 		}
 
-		if ($$self.$$.dirty[4] & /*$imageLoadState*/ 134217728 | $$self.$$.dirty[6] & /*isImageLoadError, isWaitingForImage, $imageVisualLoadComplete*/ 76) {
-			$$invalidate(191, isLoadingImageData = $imageLoadState && !isImageLoadError && !isWaitingForImage && !$imageVisualLoadComplete);
+		if ($$self.$$.dirty[0] & /*isWaitingForImage*/ 16777216 | $$self.$$.dirty[5] & /*$imageLoadState*/ 1073741824 | $$self.$$.dirty[7] & /*isImageLoadError, $imageVisualLoadComplete*/ 603979776) {
+			$$invalidate(245, isLoadingImageData = $imageLoadState && !isImageLoadError && !isWaitingForImage && !$imageVisualLoadComplete);
 		}
 
-		if ($$self.$$.dirty[0] & /*$imagePreview*/ 4194304 | $$self.$$.dirty[4] & /*imagePreviewLoaderCancelToken*/ 2097152 | $$self.$$.dirty[5] & /*$imagePreviewSource*/ 1) {
+		if ($$self.$$.dirty[5] & /*imagePreviewLoaderCancelToken*/ 2097152 | $$self.$$.dirty[6] & /*$imagePreviewSource, $imagePreview*/ 6291456) {
 			// is creating a preview while an image source is set and the preview isn't ready or when a cancel token is found
-			$$invalidate(193, isCreatingImagePreview = !!$imagePreviewSource && (!$imagePreview || !!imagePreviewLoaderCancelToken));
+			$$invalidate(247, isCreatingImagePreview = !!$imagePreviewSource && (!$imagePreview || !!imagePreviewLoaderCancelToken));
 		}
 
-		if ($$self.$$.dirty[5] & /*$imageProcessingPreparing*/ 128 | $$self.$$.dirty[6] & /*$imageProcessState*/ 512) {
+		if ($$self.$$.dirty[6] & /*$imageProcessingPreparing*/ 536870912 | $$self.$$.dirty[8] & /*$imageProcessState*/ 2) {
 			//
 			// processing status
 			//
-			$$invalidate(194, isProcessingImage = $imageProcessingPreparing || $imageProcessState && $imageProcessState.progress !== undefined && !$imageProcessState.complete);
+			$$invalidate(248, isProcessingImage = $imageProcessingPreparing || $imageProcessState && $imageProcessState.progress !== undefined && !$imageProcessState.complete);
 		}
 
-		if ($$self.$$.dirty[4] & /*$imageLoadState*/ 134217728 | $$self.$$.dirty[6] & /*isWaitingForImage*/ 8) {
-			$$invalidate(196, imageLoadShowProgressIndicator = $imageLoadState && !($imageLoadState.error || isWaitingForImage));
+		if ($$self.$$.dirty[0] & /*isWaitingForImage*/ 16777216 | $$self.$$.dirty[5] & /*$imageLoadState*/ 1073741824) {
+			$$invalidate(250, imageLoadShowProgressIndicator = $imageLoadState && !($imageLoadState.error || isWaitingForImage));
 		}
 
-		if ($$self.$$.dirty[0] & /*locale*/ 4 | $$self.$$.dirty[4] & /*$imageLoadState*/ 134217728) {
-			$$invalidate(197, imageLoadStatusLabel = locale && (!$imageLoadState
+		if ($$self.$$.dirty[0] & /*locale*/ 4 | $$self.$$.dirty[5] & /*$imageLoadState*/ 1073741824) {
+			$$invalidate(251, imageLoadStatusLabel = locale && (!$imageLoadState
 			? locale.statusLabelLoadImage($imageLoadState)
 			: !$imageLoadState.complete || $imageLoadState.error
 				? stringReplace(locale.statusLabelLoadImage($imageLoadState), $imageLoadState.error && $imageLoadState.error.metadata, "{", "}")
@@ -17737,25 +20379,25 @@ function instance$r($$self, $$props, $$invalidate) {
 					})));
 		}
 
-		if ($$self.$$.dirty[0] & /*locale*/ 4 | $$self.$$.dirty[6] & /*$imageProcessState*/ 512) {
-			$$invalidate(198, imageProcessStatusLabel = $imageProcessState && locale && locale.statusLabelProcessImage($imageProcessState));
+		if ($$self.$$.dirty[0] & /*locale*/ 4 | $$self.$$.dirty[8] & /*$imageProcessState*/ 2) {
+			$$invalidate(252, imageProcessStatusLabel = $imageProcessState && locale && locale.statusLabelProcessImage($imageProcessState));
 		}
 
-		if ($$self.$$.dirty[6] & /*$imageProcessState*/ 512) {
-			$$invalidate(199, imageProcessProgress = $imageProcessState && ($imageProcessState.taskLengthComputable
+		if ($$self.$$.dirty[8] & /*$imageProcessState*/ 2) {
+			$$invalidate(253, imageProcessProgress = $imageProcessState && ($imageProcessState.taskLengthComputable
 			? $imageProcessState.taskProgress
 			: Infinity));
 		}
 
-		if ($$self.$$.dirty[6] & /*$imageProcessState*/ 512) {
-			$$invalidate(200, imageProcessShowProgressIndicator = $imageProcessState && !$imageProcessState.error);
+		if ($$self.$$.dirty[8] & /*$imageProcessState*/ 2) {
+			$$invalidate(254, imageProcessShowProgressIndicator = $imageProcessState && !$imageProcessState.error);
 		}
 
-		if ($$self.$$.dirty[6] & /*$imageProcessState*/ 512) {
-			$$invalidate(201, isImageProcessingError = $imageProcessState && $imageProcessState.error);
+		if ($$self.$$.dirty[8] & /*$imageProcessState*/ 2) {
+			$$invalidate(255, isImageProcessingError = $imageProcessState && $imageProcessState.error);
 		}
 
-		if ($$self.$$.dirty[0] & /*locale*/ 4 | $$self.$$.dirty[3] & /*status*/ 33554432 | $$self.$$.dirty[6] & /*isWaitingForImage, isImageLoadError, isLoadingImageData, isCreatingImagePreview, imageLoadStatusLabel, imageLoadShowProgressIndicator, imageLoadProgress, isProcessingImage, imageProcessStatusLabel, isImageProcessingError, imageProcessShowProgressIndicator, imageProcessProgress*/ 64956) {
+		if ($$self.$$.dirty[0] & /*locale, isWaitingForImage*/ 16777220 | $$self.$$.dirty[4] & /*status*/ 524288 | $$self.$$.dirty[7] & /*isImageLoadError, isLoadingImageData, isCreatingImagePreview, imageLoadProgress*/ 1543503872 | $$self.$$.dirty[8] & /*imageLoadStatusLabel, imageLoadShowProgressIndicator, isProcessingImage, imageProcessStatusLabel, isImageProcessingError, imageProcessShowProgressIndicator, imageProcessProgress*/ 253) {
 			if (status) {
 				let label;
 				let progress;
@@ -17770,82 +20412,92 @@ function instance$r($$self, $$props, $$invalidate) {
 					if (isNumber(progress)) showProgress = true;
 				}
 
-				$$invalidate(12, statusState = (label || progress) && {
+				$$invalidate(13, statusState = (label || progress) && {
 					text: label,
 					aside: isError || showProgress,
 					progressIndicator: { visible: showProgress, progress },
-					closeButton: {
+					closeButton: isError && {
 						label: locale.statusLabelButtonClose,
 						icon: locale.statusIconButtonClose,
-						onclick: errorCallback || (() => $$invalidate(118, status = undefined))
+						onclick: errorCallback || (() => $$invalidate(143, status = undefined))
 					}
 				});
 			} else if (locale && isWaitingForImage || isImageLoadError || isLoadingImageData || isCreatingImagePreview) {
-				$$invalidate(12, statusState = {
+				$$invalidate(13, statusState = {
 					text: imageLoadStatusLabel,
 					aside: isImageLoadError || imageLoadShowProgressIndicator,
 					progressIndicator: {
 						visible: imageLoadShowProgressIndicator,
 						progress: imageLoadProgress
 					},
-					closeButton: {
+					closeButton: isImageLoadError && {
 						label: locale.statusLabelButtonClose,
 						icon: locale.statusIconButtonClose,
 						onclick: handleCloseImageLoadError
 					}
 				});
 			} else if (locale && isProcessingImage && imageProcessStatusLabel) {
-				$$invalidate(12, statusState = {
+				$$invalidate(13, statusState = {
 					text: imageProcessStatusLabel,
 					aside: isImageProcessingError || imageProcessShowProgressIndicator,
 					progressIndicator: {
 						visible: imageProcessShowProgressIndicator,
 						progress: imageProcessProgress
 					},
-					closeButton: {
+					closeButton: isImageProcessingError && {
 						label: locale.statusLabelButtonClose,
 						icon: locale.statusIconButtonClose,
 						onclick: handleCloseImageProcessError
 					}
 				});
 			} else {
-				$$invalidate(12, statusState = undefined);
+				$$invalidate(13, statusState = undefined);
 			}
 		}
 
-		if ($$self.$$.dirty[3] & /*status*/ 33554432) {
-			$$invalidate(202, isCustomStatus = status !== undefined);
+		if ($$self.$$.dirty[4] & /*status*/ 524288) {
+			$$invalidate(256, isCustomStatus = status !== undefined);
 		}
 
-		if ($$self.$$.dirty[0] & /*isSupportsError*/ 8388608 | $$self.$$.dirty[6] & /*isWaitingForImage, isImageLoadError, isLoadingImageData, isCreatingImagePreview, isProcessingImage, isCustomStatus*/ 65964) {
-			$$invalidate(203, isStatusActive = isSupportsError || isWaitingForImage || isImageLoadError || isLoadingImageData || isCreatingImagePreview || isProcessingImage || isCustomStatus);
+		if ($$self.$$.dirty[7] & /*isModal*/ 32 | $$self.$$.dirty[8] & /*$imageProcessState*/ 2) {
+			if (isModal && $imageProcessState && $imageProcessState.complete) {
+				wasProcessingImage.set(true);
+				setTimeout(() => wasProcessingImage.set(false), 100);
+			}
 		}
 
-		if ($$self.$$.dirty[6] & /*isStatusActive*/ 131072) {
+		if ($$self.$$.dirty[0] & /*isSupportsError, isWaitingForImage*/ 25165824 | $$self.$$.dirty[7] & /*isImageLoadError, isLoadingImageData, isCreatingImagePreview*/ 1409286144 | $$self.$$.dirty[8] & /*$wasProcessingImage, isProcessingImage, isCustomStatus*/ 1281) {
+			$$invalidate(257, isStatusActive = $wasProcessingImage || isSupportsError || isWaitingForImage || isImageLoadError || isLoadingImageData || isCreatingImagePreview || isProcessingImage || isCustomStatus);
+		}
+
+		if ($$self.$$.dirty[8] & /*isStatusActive*/ 512) {
 			set_store_value(statusOpacity, $statusOpacity = isStatusActive ? 1 : 0, $statusOpacity);
 		}
 
-		if ($$self.$$.dirty[0] & /*$statusOpacity*/ 16777216) {
-			$$invalidate(25, isStatusVisible = $statusOpacity > 0);
+		if ($$self.$$.dirty[0] & /*$statusOpacity*/ 33554432) {
+			$$invalidate(26, isStatusVisible = $statusOpacity > 0);
 		}
 
-		if ($$self.$$.dirty[0] & /*statusState*/ 4096) {
-			$$invalidate(204, hasAside = !!(statusState && statusState.aside));
+		if ($$self.$$.dirty[0] & /*statusState*/ 8192) {
+			$$invalidate(259, hasAside = !!(statusState && statusState.aside));
 		}
 
-		if ($$self.$$.dirty[0] & /*isStatusVisible, statusState*/ 33558528 | $$self.$$.dirty[4] & /*asideWidthUpdateTimer*/ 8388608 | $$self.$$.dirty[6] & /*hasAside, $statusWidth*/ 786432) {
+		if ($$self.$$.dirty[0] & /*isStatusVisible, statusState*/ 67117056 | $$self.$$.dirty[5] & /*asideWidthUpdateTimer*/ 16777216 | $$self.$$.dirty[8] & /*hasAside, $statusWidth*/ 6144) {
 			if (isStatusVisible && statusState) {
 				clearTimeout(asideWidthUpdateTimer);
 
 				// has aside
 				if (hasAside) {
+					// if error occured, snap in possition
+					const hard = !!statusState.error;
+
 					asideOpacity.set(1);
 
 					// update offset of aside
-					asideOffset.set($statusWidth);
+					asideOffset.set($statusWidth, { hard });
 
 					// update width of aside, this pushes message to left so it stays centered
-					$$invalidate(147, asideWidthUpdateTimer = setTimeout(
+					$$invalidate(179, asideWidthUpdateTimer = setTimeout(
 						() => {
 							asideWidth.set(16);
 						},
@@ -17854,7 +20506,7 @@ function instance$r($$self, $$props, $$invalidate) {
 				} else {
 					asideOpacity.set(0);
 
-					$$invalidate(147, asideWidthUpdateTimer = setTimeout(
+					$$invalidate(179, asideWidthUpdateTimer = setTimeout(
 						() => {
 							asideWidth.set(0);
 						},
@@ -17864,7 +20516,7 @@ function instance$r($$self, $$props, $$invalidate) {
 			}
 		}
 
-		if ($$self.$$.dirty[0] & /*isStatusVisible*/ 33554432) {
+		if ($$self.$$.dirty[0] & /*isStatusVisible*/ 67108864) {
 			if (!isStatusVisible) {
 				statusOffset.set(undefined, { hard: true });
 				asideOffset.set(undefined, { hard: true });
@@ -17872,31 +20524,17 @@ function instance$r($$self, $$props, $$invalidate) {
 			}
 		}
 
-		if ($$self.$$.dirty[6] & /*$asideWidth*/ 2097152) {
-			$$invalidate(206, statusIndent = $asideWidth * 0.5);
+		if ($$self.$$.dirty[8] & /*$asideWidth*/ 16384) {
+			$$invalidate(261, statusIndent = $asideWidth * 0.5);
 		}
 
-		if ($$self.$$.dirty[6] & /*$statusOffset, statusIndent*/ 5242880) {
-			$$invalidate(36, statusTransform = `transform: translateX(${$statusOffset - statusIndent}px)`);
+		if ($$self.$$.dirty[8] & /*$statusOffset, statusIndent*/ 40960) {
+			$$invalidate(39, statusTransform = `transform: translateX(${$statusOffset - statusIndent}px)`);
 		}
 
-		if ($$self.$$.dirty[0] & /*windowWidth*/ 1024) {
-			// prevents swipe to navigate back on iOS >= 13.4+
-			$$invalidate(37, handleTouchStart = shouldPreventSwipe && (e => {
-				// get touch or event itself (fixes issue with chrome dev tools)
-				const event = e.touches ? e.touches[0] : e;
-
-				// if is not an attempt to swipe back or forward
-				if (event.pageX > 10 && event.pageX < windowWidth - 10) return;
-
-				// stop the navigation attempt
-				e.preventDefault();
-			}));
-		}
-
-		if ($$self.$$.dirty[0] & /*locale*/ 4 | $$self.$$.dirty[4] & /*willRenderToolbar, enableButtonClose, enableButtonRevert, enableNavigateHistory, enableButtonExport*/ 2976 | $$self.$$.dirty[5] & /*canUndo, canRedo, shouldRenderUtilTools, utilTools, isNarrow, $env*/ 21234768) {
+		if ($$self.$$.dirty[0] & /*locale*/ 4 | $$self.$$.dirty[5] & /*willRenderToolbar, enableButtonClose, enableButtonRevert, enableNavigateHistory, enableButtonExport*/ 93 | $$self.$$.dirty[6] & /*canUndo, canRedo*/ 335544320 | $$self.$$.dirty[7] & /*shouldRenderUtilTools, utilTools, isNarrow, $env*/ 139778) {
 			// dynamic IO menu
-			$$invalidate(39, toolbarItems = locale && willRenderToolbar(
+			$$invalidate(40, toolbarItems = locale && willRenderToolbar(
 				[
 					[
 						"div",
@@ -18004,26 +20642,76 @@ function instance$r($$self, $$props, $$invalidate) {
 			));
 		}
 
-		if ($$self.$$.dirty[0] & /*$clientRect*/ 32768) {
-			$$invalidate(209, hasClientRect = $clientRect && $clientRect.width > 0 && $clientRect.height > 0);
+		if ($$self.$$.dirty[0] & /*$clientRect*/ 65536) {
+			$$invalidate(264, hasClientRect = $clientRect && $clientRect.width > 0 && $clientRect.height > 0);
 		}
 
-		if ($$self.$$.dirty[0] & /*locale*/ 4 | $$self.$$.dirty[5] & /*utilsDefined*/ 512 | $$self.$$.dirty[6] & /*hasClientRect*/ 8388608) {
-			$$invalidate(40, canRender = hasClientRect && locale && utilsDefined);
+		if ($$self.$$.dirty[0] & /*locale*/ 4 | $$self.$$.dirty[7] & /*utilsDefined*/ 1 | $$self.$$.dirty[8] & /*hasClientRect*/ 65536) {
+			$$invalidate(41, canRender = hasClientRect && locale && utilsDefined);
 		}
 
-		if ($$self.$$.dirty[0] & /*rootPortal*/ 8192) {
+		if ($$self.$$.dirty[8] & /*$imageRedaction*/ 262144) {
+			// toggles on/off depending on active redaction shapes
+			$$invalidate(265, hasImageRedaction = $imageRedaction && !!$imageRedaction.length);
+		}
+
+		if ($$self.$$.dirty[6] & /*$imageSize*/ 32 | $$self.$$.dirty[8] & /*hasImageRedaction, $imageRedaction*/ 393216) {
+			// scales down resolution of scrambled image if redaction takes up more than half of view
+			$$invalidate(267, imageRedactionScalar = hasImageRedaction && getImageRedactionScaleFactor($imageSize, $imageRedaction));
+		}
+
+		if ($$self.$$.dirty[6] & /*$imagePreview*/ 2097152 | $$self.$$.dirty[8] & /*hasImageRedaction, $imageScrambler, imageRedactionScalar, $imageBackgroundColor*/ 3801088) {
+			// only update/render preview if image redaction shapes are found
+			hasImageRedaction && updateScrambledPreview($imagePreview, $imageScrambler, imageRedactionScalar, $imageBackgroundColor);
+		}
+
+		if ($$self.$$.dirty[5] & /*scrambledPreviewImage*/ 33554432 | $$self.$$.dirty[6] & /*$imageSize*/ 32 | $$self.$$.dirty[8] & /*$imageRedaction*/ 262144) {
+			if ($imageRedaction && scrambledPreviewImage && $imageSize) {
+				// used to calculate fraction x y coordinates of shape corners
+				const { width, height } = $imageSize;
+
+				// to blended shapes
+				$$invalidate(29, blendShapes = $imageRedaction.map(shape => {
+					const rect = rectCreate(shape.x, shape.y, shape.width, shape.height);
+					const corners = rectRotate(rectClone(rect), shape.rotation);
+					const backgroundCorners = corners.map(corner => vectorCreate(corner.x / width, corner.y / height));
+
+					return {
+						...shape,
+						id: "redaction",
+						flipX: false,
+						flipY: false,
+						cornerRadius: 0,
+						strokeWidth: 0,
+						strokeColor: undefined,
+						backgroundColor: [0, 0, 0],
+						backgroundImage: scrambledPreviewImage,
+						backgroundImageRendering: "pixelated",
+						backgroundCorners
+					};
+				}));
+			}
+		}
+
+		if ($$self.$$.dirty[0] & /*rootPortal*/ 16384) {
 			rootPortal && rootPortalStore.set(rootPortal);
+		}
+
+		if ($$self.$$.dirty[0] & /*isSupportsError*/ 8388608 | $$self.$$.dirty[6] & /*$imagePreview*/ 2097152) {
+			// ready bool
+			$$invalidate(27, isReady = $imagePreview && !isSupportsError);
+		}
+
+		if ($$self.$$.dirty[0] & /*isReady, root*/ 134217730) {
+			// now ready for interaction
+			isReady && root.dispatchEvent(createPing("ready"));
 		}
 	};
 
-	$$invalidate(187, missingFeatures = [!supportsWebGL() && "WebGL"].filter(Boolean));
-
-	// prevent scrolling of page on older (<=12) iOS devices
-	$$invalidate(38, handleTouchMove = !supportsPointerEvents() && (e => e.preventDefault()));
+	$$invalidate(242, missingFeatures = [!supportsWebGL() && "WebGL"].filter(Boolean));
 
 	// used to route ping events
-	$$invalidate(41, routePing = createPingRouter(eventProxy.pub));
+	$$invalidate(42, routePing = createPingRouter(eventProxy.pub));
 
 	return [
 		pluginInterface,
@@ -18035,6 +20723,7 @@ function instance$r($$self, $$props, $$invalidate) {
 		enableToolbar,
 		pluginOptions,
 		imageSourceToImageData,
+		imagePreview,
 		history,
 		windowWidth,
 		windowHeight,
@@ -18045,14 +20734,16 @@ function instance$r($$self, $$props, $$invalidate) {
 		shouldRenderTabs,
 		$shouldAnimate,
 		utilSelected,
-		$activeImages,
 		utilsMerged,
 		utilsVisibleFraction,
-		$imagePreview,
+		$activeImages,
 		isSupportsError,
+		isWaitingForImage,
 		$statusOpacity,
 		isStatusVisible,
+		isReady,
 		utilsVisible,
+		blendShapes,
 		$tabRect,
 		tabsConfig,
 		tabs,
@@ -18063,8 +20754,6 @@ function instance$r($$self, $$props, $$invalidate) {
 		imageCanvasState,
 		$imageSelectionRectPresentation,
 		statusTransform,
-		handleTouchStart,
-		handleTouchMove,
 		toolbarItems,
 		canRender,
 		routePing,
@@ -18074,9 +20763,13 @@ function instance$r($$self, $$props, $$invalidate) {
 		$utilRect,
 		$pixelRatio,
 		$rootBackgroundColor,
+		$utilSelectedStore,
+		$stagePadded,
 		$interfaceImages,
-		$imageDecoration,
+		$willRequestResource,
 		$imageAnnotation,
+		$imageDecoration,
+		$imageFrame,
 		$imageOverlay,
 		$disabledTransition,
 		disabledTransition,
@@ -18087,10 +20780,17 @@ function instance$r($$self, $$props, $$invalidate) {
 		imageCropAspectRatio,
 		imageCropRect,
 		imageOutputSize,
+		imageBackgroundColor,
 		imageDecoration,
 		imageAnnotation,
+		imageRedaction,
+		imageFrame,
 		imageState,
 		images,
+		shapePreprocessor,
+		imageScrambler,
+		willRequestResource,
+		utilSelectedStore,
 		rootBackgroundColor,
 		rootForegroundColor,
 		rootLineColor,
@@ -18099,24 +20799,32 @@ function instance$r($$self, $$props, $$invalidate) {
 		tabRect,
 		toolRect,
 		utilRect,
-		stageRect,
 		pointerAccuracy,
 		pointerHoverable,
 		isInteracting,
 		isInteractingFraction,
 		previewShouldUpscale,
-		stageScalar,
 		imageCropRectSnapshot,
 		imageCropRectIntent,
 		imageSelectionRect,
 		imageSelectionRectSnapshot,
 		imageSelectionRectIntent,
+		stagePadded,
+		stageRect,
+		stageScalar,
 		imageSelectionRectPresentation,
 		presentationScalar,
+		imageVisualBounds,
+		imageOverlayMarkup,
 		imageOverlay,
+		overlayInset,
+		overlaySize,
+		overlayLeftOpacity,
+		overlayRightOpacity,
+		overlayTopOpacity,
+		overlayBottomOpacity,
 		imageVisualLoadComplete,
 		imagePreviewSource,
-		imagePreview,
 		imagePreviewModifiers,
 		interfaceImages,
 		imageTransforms,
@@ -18129,22 +20837,28 @@ function instance$r($$self, $$props, $$invalidate) {
 		imageProps,
 		activeImages,
 		statusOpacity,
+		wasProcessingImage,
 		asideOffset,
 		asideOpacity,
 		asideWidth,
 		statusWidth,
 		statusOffset,
-		offsetProgress,
+		offsetAside,
+		handleTouchStart,
+		handleTouchMove,
+		handlePointerMove,
 		pressedKeysStore,
 		handleKeydown,
 		handleKeyup,
 		handleWindowBlur,
 		handleContextMenu,
 		handleDropFiles,
+		browseFileSystem,
 		handlePaste,
 		getStageState,
 		createCanvasState,
 		status,
+		imagePreviewCurrent,
 		klass,
 		layoutMode,
 		stores,
@@ -18164,23 +20878,50 @@ function instance$r($$self, $$props, $$invalidate) {
 		enableButtonClose,
 		enableDropImage,
 		enablePasteImage,
+		enableBrowseImage,
 		previewImageDataMaxSize,
 		layoutDirectionPreference,
+		layoutHorizontalUtilsPreference,
+		layoutVerticalUtilsPreference,
 		imagePreviewSrc,
 		imageOrienter,
 		pluginComponents,
 		sub,
 		registeredPluginsComponents,
+		gradientOverlayHorizontal,
+		gradientOverlayVertical,
 		imagePreviewLoaderCancelToken,
+		lastImagePreview,
 		loadTimer,
 		asideWidthUpdateTimer,
+		scrambledPreviewImage,
 		isOverlayModeEnabled,
 		$images,
+		$shapePreprocessor,
 		$rootRect,
 		$imageLoadState,
-		utilsFiltered,
+		$imageCropRect,
 		$isInteracting,
+		utilsFiltered,
+		$stageRect,
+		$imageOutputSize,
+		$imageSize,
+		imageTargetSizeCurrent,
+		$overlayInset,
+		$imageVisualBounds,
+		overlayTop,
+		$overlaySize,
+		$overlayTopOpacity,
+		overlayBottom,
+		$overlayBottomOpacity,
+		overlayLeft,
+		$overlayLeftOpacity,
+		overlayRight,
+		$overlayRightOpacity,
+		gradientOverlays,
+		$imageOverlayMarkup,
 		$imageFile,
+		$imagePreview,
 		$imagePreviewSource,
 		canAnimate,
 		acceptsAnimations,
@@ -18204,6 +20945,8 @@ function instance$r($$self, $$props, $$invalidate) {
 		isCompact,
 		hasSwipeNavigation,
 		shouldRenderUtilTools,
+		navigationHorizontalPreference,
+		navigationVerticalPreference,
 		rootElementComputedStyle,
 		$env,
 		$pointerAccuracy,
@@ -18215,7 +20958,6 @@ function instance$r($$self, $$props, $$invalidate) {
 		hasProps,
 		missingFeatures,
 		isImageLoadError,
-		isWaitingForImage,
 		imageLoadProgress,
 		isLoadingImageData,
 		$imageVisualLoadComplete,
@@ -18230,12 +20972,18 @@ function instance$r($$self, $$props, $$invalidate) {
 		isImageProcessingError,
 		isCustomStatus,
 		isStatusActive,
+		$wasProcessingImage,
 		hasAside,
 		$statusWidth,
 		statusIndent,
 		$asideWidth,
 		$statusOffset,
 		hasClientRect,
+		hasImageRedaction,
+		$imageRedaction,
+		imageRedactionScalar,
+		$imageScrambler,
+		$imageBackgroundColor,
 		onwindowresize,
 		measure_handler,
 		select_handler,
@@ -18266,53 +21014,58 @@ class Ui extends SvelteComponent {
 		init(
 			this,
 			options,
-			instance$r,
-			create_fragment$r,
+			instance$v,
+			create_fragment$v,
 			safe_not_equal,
 			{
-				class: 119,
-				layout: 120,
-				stores: 121,
+				class: 145,
+				layout: 146,
+				stores: 147,
 				locale: 2,
 				id: 3,
-				util: 122,
-				utils: 123,
-				animations: 124,
-				disabled: 125,
-				status: 118,
-				previewUpscale: 126,
+				util: 148,
+				utils: 149,
+				animations: 150,
+				disabled: 151,
+				status: 143,
+				previewUpscale: 152,
 				elasticityMultiplier: 4,
-				willRevert: 127,
-				willProcessImage: 128,
+				willRevert: 153,
+				willProcessImage: 154,
 				willRenderCanvas: 5,
-				willRenderToolbar: 129,
-				willSetHistoryInitialState: 130,
-				enableButtonExport: 131,
-				enableButtonRevert: 132,
-				enableNavigateHistory: 133,
+				willRenderToolbar: 155,
+				willSetHistoryInitialState: 156,
+				enableButtonExport: 157,
+				enableButtonRevert: 158,
+				enableNavigateHistory: 159,
 				enableToolbar: 6,
-				enableUtils: 134,
-				enableButtonClose: 135,
-				enableDropImage: 136,
-				enablePasteImage: 137,
-				previewImageDataMaxSize: 138,
-				layoutDirectionPreference: 139,
-				imagePreviewSrc: 140,
-				imageOrienter: 141,
-				pluginComponents: 142,
+				enableUtils: 160,
+				enableButtonClose: 161,
+				enableDropImage: 162,
+				enablePasteImage: 163,
+				enableBrowseImage: 164,
+				previewImageDataMaxSize: 165,
+				layoutDirectionPreference: 166,
+				layoutHorizontalUtilsPreference: 167,
+				layoutVerticalUtilsPreference: 168,
+				imagePreviewSrc: 169,
+				imageOrienter: 170,
+				pluginComponents: 171,
 				pluginOptions: 7,
-				sub: 143,
+				sub: 172,
 				pluginInterface: 0,
 				root: 1,
 				imageSourceToImageData: 8,
-				history: 9
+				imagePreview: 9,
+				imagePreviewCurrent: 144,
+				history: 10
 			},
-			[-1, -1, -1, -1, -1, -1, -1, -1, -1, -1]
+			[-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]
 		);
 	}
 
 	get class() {
-		return this.$$.ctx[119];
+		return this.$$.ctx[145];
 	}
 
 	set class(klass) {
@@ -18321,7 +21074,7 @@ class Ui extends SvelteComponent {
 	}
 
 	get layout() {
-		return this.$$.ctx[120];
+		return this.$$.ctx[146];
 	}
 
 	set layout(layoutMode) {
@@ -18330,7 +21083,7 @@ class Ui extends SvelteComponent {
 	}
 
 	get stores() {
-		return this.$$.ctx[121];
+		return this.$$.ctx[147];
 	}
 
 	set stores(stores) {
@@ -18357,7 +21110,7 @@ class Ui extends SvelteComponent {
 	}
 
 	get util() {
-		return this.$$.ctx[122];
+		return this.$$.ctx[148];
 	}
 
 	set util(util) {
@@ -18366,7 +21119,7 @@ class Ui extends SvelteComponent {
 	}
 
 	get utils() {
-		return this.$$.ctx[123];
+		return this.$$.ctx[149];
 	}
 
 	set utils(utils) {
@@ -18375,7 +21128,7 @@ class Ui extends SvelteComponent {
 	}
 
 	get animations() {
-		return this.$$.ctx[124];
+		return this.$$.ctx[150];
 	}
 
 	set animations(animations) {
@@ -18384,7 +21137,7 @@ class Ui extends SvelteComponent {
 	}
 
 	get disabled() {
-		return this.$$.ctx[125];
+		return this.$$.ctx[151];
 	}
 
 	set disabled(disabled) {
@@ -18393,7 +21146,7 @@ class Ui extends SvelteComponent {
 	}
 
 	get status() {
-		return this.$$.ctx[118];
+		return this.$$.ctx[143];
 	}
 
 	set status(status) {
@@ -18402,7 +21155,7 @@ class Ui extends SvelteComponent {
 	}
 
 	get previewUpscale() {
-		return this.$$.ctx[126];
+		return this.$$.ctx[152];
 	}
 
 	set previewUpscale(previewUpscale) {
@@ -18420,7 +21173,7 @@ class Ui extends SvelteComponent {
 	}
 
 	get willRevert() {
-		return this.$$.ctx[127];
+		return this.$$.ctx[153];
 	}
 
 	set willRevert(willRevert) {
@@ -18429,7 +21182,7 @@ class Ui extends SvelteComponent {
 	}
 
 	get willProcessImage() {
-		return this.$$.ctx[128];
+		return this.$$.ctx[154];
 	}
 
 	set willProcessImage(willProcessImage) {
@@ -18447,7 +21200,7 @@ class Ui extends SvelteComponent {
 	}
 
 	get willRenderToolbar() {
-		return this.$$.ctx[129];
+		return this.$$.ctx[155];
 	}
 
 	set willRenderToolbar(willRenderToolbar) {
@@ -18456,7 +21209,7 @@ class Ui extends SvelteComponent {
 	}
 
 	get willSetHistoryInitialState() {
-		return this.$$.ctx[130];
+		return this.$$.ctx[156];
 	}
 
 	set willSetHistoryInitialState(willSetHistoryInitialState) {
@@ -18465,7 +21218,7 @@ class Ui extends SvelteComponent {
 	}
 
 	get enableButtonExport() {
-		return this.$$.ctx[131];
+		return this.$$.ctx[157];
 	}
 
 	set enableButtonExport(enableButtonExport) {
@@ -18474,7 +21227,7 @@ class Ui extends SvelteComponent {
 	}
 
 	get enableButtonRevert() {
-		return this.$$.ctx[132];
+		return this.$$.ctx[158];
 	}
 
 	set enableButtonRevert(enableButtonRevert) {
@@ -18483,7 +21236,7 @@ class Ui extends SvelteComponent {
 	}
 
 	get enableNavigateHistory() {
-		return this.$$.ctx[133];
+		return this.$$.ctx[159];
 	}
 
 	set enableNavigateHistory(enableNavigateHistory) {
@@ -18501,7 +21254,7 @@ class Ui extends SvelteComponent {
 	}
 
 	get enableUtils() {
-		return this.$$.ctx[134];
+		return this.$$.ctx[160];
 	}
 
 	set enableUtils(enableUtils) {
@@ -18510,7 +21263,7 @@ class Ui extends SvelteComponent {
 	}
 
 	get enableButtonClose() {
-		return this.$$.ctx[135];
+		return this.$$.ctx[161];
 	}
 
 	set enableButtonClose(enableButtonClose) {
@@ -18519,7 +21272,7 @@ class Ui extends SvelteComponent {
 	}
 
 	get enableDropImage() {
-		return this.$$.ctx[136];
+		return this.$$.ctx[162];
 	}
 
 	set enableDropImage(enableDropImage) {
@@ -18528,7 +21281,7 @@ class Ui extends SvelteComponent {
 	}
 
 	get enablePasteImage() {
-		return this.$$.ctx[137];
+		return this.$$.ctx[163];
 	}
 
 	set enablePasteImage(enablePasteImage) {
@@ -18536,8 +21289,17 @@ class Ui extends SvelteComponent {
 		flush();
 	}
 
+	get enableBrowseImage() {
+		return this.$$.ctx[164];
+	}
+
+	set enableBrowseImage(enableBrowseImage) {
+		this.$set({ enableBrowseImage });
+		flush();
+	}
+
 	get previewImageDataMaxSize() {
-		return this.$$.ctx[138];
+		return this.$$.ctx[165];
 	}
 
 	set previewImageDataMaxSize(previewImageDataMaxSize) {
@@ -18546,7 +21308,7 @@ class Ui extends SvelteComponent {
 	}
 
 	get layoutDirectionPreference() {
-		return this.$$.ctx[139];
+		return this.$$.ctx[166];
 	}
 
 	set layoutDirectionPreference(layoutDirectionPreference) {
@@ -18554,8 +21316,26 @@ class Ui extends SvelteComponent {
 		flush();
 	}
 
+	get layoutHorizontalUtilsPreference() {
+		return this.$$.ctx[167];
+	}
+
+	set layoutHorizontalUtilsPreference(layoutHorizontalUtilsPreference) {
+		this.$set({ layoutHorizontalUtilsPreference });
+		flush();
+	}
+
+	get layoutVerticalUtilsPreference() {
+		return this.$$.ctx[168];
+	}
+
+	set layoutVerticalUtilsPreference(layoutVerticalUtilsPreference) {
+		this.$set({ layoutVerticalUtilsPreference });
+		flush();
+	}
+
 	get imagePreviewSrc() {
-		return this.$$.ctx[140];
+		return this.$$.ctx[169];
 	}
 
 	set imagePreviewSrc(imagePreviewSrc) {
@@ -18564,7 +21344,7 @@ class Ui extends SvelteComponent {
 	}
 
 	get imageOrienter() {
-		return this.$$.ctx[141];
+		return this.$$.ctx[170];
 	}
 
 	set imageOrienter(imageOrienter) {
@@ -18573,7 +21353,7 @@ class Ui extends SvelteComponent {
 	}
 
 	get pluginComponents() {
-		return this.$$.ctx[142];
+		return this.$$.ctx[171];
 	}
 
 	set pluginComponents(pluginComponents) {
@@ -18591,7 +21371,7 @@ class Ui extends SvelteComponent {
 	}
 
 	get sub() {
-		return this.$$.ctx[143];
+		return this.$$.ctx[172];
 	}
 
 	get pluginInterface() {
@@ -18616,8 +21396,21 @@ class Ui extends SvelteComponent {
 		flush();
 	}
 
-	get history() {
+	get imagePreview() {
 		return this.$$.ctx[9];
+	}
+
+	get imagePreviewCurrent() {
+		return this.$$.ctx[144];
+	}
+
+	set imagePreviewCurrent(imagePreviewCurrent) {
+		this.$set({ imagePreviewCurrent });
+		flush();
+	}
+
+	get history() {
+		return this.$$.ctx[10];
 	}
 }
 
@@ -18635,6 +21428,8 @@ const viewPrivateProps = [
     'pluginOptions',
     'sub',
     'imagePreviewSrc',
+    'imagePreview',
+    'imagePreviewCurrent',
 ];
 // view options array
 let editorProps;
@@ -18695,6 +21490,10 @@ const attachEditorView = (target, stores) => {
             set: (value) => (editor[prop] = value),
         });
     });
+    // this reads the imagePreview store so third parties can interact with image data
+    Object.defineProperty(accessors, 'previewImageData', {
+        get: () => editor.imagePreviewCurrent,
+    });
     // set up accessors for plugin props
     pluginProps.forEach((prop) => {
         const plugins = propPluginRef[prop];
@@ -18727,7 +21526,9 @@ const attachEditorView = (target, stores) => {
         on: (event, cb) => {
             // exit if editor was destroyed, will return stub function so unsubs can be called without issues
             if (isDestroyed)
-                return () => { };
+                return () => {
+                    // Do nothing
+                };
             // catch history events and route to history object
             if (/undo|redo|revert/.test(event))
                 return history.on(event, cb);
@@ -18751,6 +21552,10 @@ const attachEditorView = (target, stores) => {
             redo: () => history.redo(),
             revert: () => history.revert(),
             get: () => history.get(),
+            getCollapsed: () => {
+                const entries = history.get();
+                return entries.splice(0, history.index + 1);
+            },
             set: (entries) => history.set(entries),
             write: (state) => history.write(state),
             get length() {
@@ -18779,6 +21584,8 @@ var editorEvents = [
     'show',
     'hide',
     'close',
+    'ready',
+    'loadpreview',
     'selectshape',
     'updateshape',
     'addshape',
@@ -19147,20 +21954,8 @@ var legacyDataToImageState = (editor, imageSize, data = {}) => {
         Object.assign(res, imagePropertiesFromLegacyCrop(imageSize, data.crop));
     }
     if (data.markup) {
-        let markup = Array.isArray(data.markup) ? data.markup : Object.values(data.markup);
-        res.decoration = markup
-            .map((markup) => shapeFromLegacyMarkup(res.crop || imageSize, markup[0], markup[1]))
-            .sort((a, b) => {
-            if (a.zIndex < b.zIndex)
-                return -1;
-            if (a.zIndex > b.zIndex)
-                return 1;
-            return 0;
-        })
-            .map((shape) => {
-            delete shape.zIndex;
-            return shape;
-        });
+        const markup = Array.isArray(data.markup) ? data.markup : Object.values(data.markup);
+        res.decoration = markup.map((markup) => shapeFromLegacyMarkup(res.crop || imageSize, markup[0], markup[1]));
     }
     if (data.color) {
         Object.keys(data.color)
@@ -19620,237 +22415,108 @@ var _plugin_filter_defaults = {
     filterOptions: filterOptionsDefault,
 };
 
-/* src/core/ui/components/Slider.svelte generated by Svelte v3.37.0 */
-
-function create_fragment$q(ctx) {
-	let div3;
-	let input_1;
-	let t0;
-	let div0;
-	let t1;
-	let div2;
-	let div1;
-	let div2_style_value;
-	let div3_class_value;
-	let mounted;
-	let dispose;
-
-	return {
-		c() {
-			div3 = element("div");
-			input_1 = element("input");
-			t0 = space();
-			div0 = element("div");
-			t1 = space();
-			div2 = element("div");
-			div1 = element("div");
-			attr(input_1, "type", "range");
-			attr(input_1, "id", /*id*/ ctx[4]);
-			attr(input_1, "min", /*min*/ ctx[1]);
-			attr(input_1, "max", /*max*/ ctx[2]);
-			attr(input_1, "step", /*step*/ ctx[3]);
-			input_1.value = /*value*/ ctx[0];
-			attr(div0, "class", "PinturaSliderTrack");
-			attr(div0, "style", /*trackStyle*/ ctx[5]);
-			attr(div1, "class", "PinturaSliderKnob");
-			attr(div1, "style", /*knobStyle*/ ctx[6]);
-			attr(div2, "class", "PinturaSliderKnobController");
-			attr(div2, "style", div2_style_value = `transform: translateX(${/*position*/ ctx[9]}%)`);
-			attr(div3, "class", div3_class_value = arrayJoin(["PinturaSlider", /*klass*/ ctx[7]]));
-		},
-		m(target, anchor) {
-			insert(target, div3, anchor);
-			append(div3, input_1);
-			/*input_1_binding*/ ctx[15](input_1);
-			append(div3, t0);
-			append(div3, div0);
-			append(div3, t1);
-			append(div3, div2);
-			append(div2, div1);
-
-			if (!mounted) {
-				dispose = [
-					listen(input_1, "pointerdown", /*handlePointerDown*/ ctx[12]),
-					listen(input_1, "input", /*handleInput*/ ctx[10]),
-					listen(input_1, "nudge", /*handleNudge*/ ctx[11]),
-					action_destroyer(nudgeable.call(null, input_1))
-				];
-
-				mounted = true;
-			}
-		},
-		p(ctx, [dirty]) {
-			if (dirty & /*id*/ 16) {
-				attr(input_1, "id", /*id*/ ctx[4]);
-			}
-
-			if (dirty & /*min*/ 2) {
-				attr(input_1, "min", /*min*/ ctx[1]);
-			}
-
-			if (dirty & /*max*/ 4) {
-				attr(input_1, "max", /*max*/ ctx[2]);
-			}
-
-			if (dirty & /*step*/ 8) {
-				attr(input_1, "step", /*step*/ ctx[3]);
-			}
-
-			if (dirty & /*value*/ 1) {
-				input_1.value = /*value*/ ctx[0];
-			}
-
-			if (dirty & /*trackStyle*/ 32) {
-				attr(div0, "style", /*trackStyle*/ ctx[5]);
-			}
-
-			if (dirty & /*knobStyle*/ 64) {
-				attr(div1, "style", /*knobStyle*/ ctx[6]);
-			}
-
-			if (dirty & /*position*/ 512 && div2_style_value !== (div2_style_value = `transform: translateX(${/*position*/ ctx[9]}%)`)) {
-				attr(div2, "style", div2_style_value);
-			}
-
-			if (dirty & /*klass*/ 128 && div3_class_value !== (div3_class_value = arrayJoin(["PinturaSlider", /*klass*/ ctx[7]]))) {
-				attr(div3, "class", div3_class_value);
-			}
-		},
-		i: noop,
-		o: noop,
-		d(detaching) {
-			if (detaching) detach(div3);
-			/*input_1_binding*/ ctx[15](null);
-			mounted = false;
-			run_all(dispose);
-		}
-	};
-}
-
-function instance$q($$self, $$props, $$invalidate) {
-	let range;
-	let position;
-	let { min = 0 } = $$props;
-	let { max = 100 } = $$props;
-	let { step = 1 } = $$props;
-	let { id = undefined } = $$props;
-	let { value = 0 } = $$props;
-	let { trackStyle = undefined } = $$props;
-	let { knobStyle = undefined } = $$props;
-	let { onchange = undefined } = $$props;
-	let { class: klass = undefined } = $$props;
-	let input;
-	let inputWidth;
-	let inputOffsetX;
-	let pageOffsetX;
-
-	const setValueByOffsetX = (offsetX, inputWidth) => {
-		$$invalidate(0, value = clamp(min + offsetX / inputWidth * range, min, max));
-		onchange(value);
-	};
-
-	const handleInput = e => {
-		// already handled by pointer events
-		if (inputWidth) return;
-
-		$$invalidate(0, value = parseFloat(e.target.value));
-		onchange(value);
-	};
-
-	const handleNudge = e => {
-		const width = input.offsetWidth;
-		const offset = value / range * width;
-		setValueByOffsetX(offset + e.detail.x, width);
-	};
-
-	const handlePointerDown = e => {
-		e.stopPropagation();
-		inputWidth = input.offsetWidth;
-		inputOffsetX = e.offsetX;
-		pageOffsetX = e.pageX;
-		setValueByOffsetX(inputOffsetX, inputWidth);
-		document.documentElement.addEventListener("pointermove", handlePointerMove);
-		document.documentElement.addEventListener("pointerup", handlePointerUp);
-	};
-
-	const handlePointerMove = e => {
-		const dx = e.pageX - pageOffsetX;
-		setValueByOffsetX(inputOffsetX + dx, inputWidth);
-	};
-
-	const handlePointerUp = e => {
-		inputWidth = undefined;
-		document.documentElement.removeEventListener("pointermove", handlePointerMove);
-		document.documentElement.removeEventListener("pointerup", handlePointerUp);
-		onchange(value);
-	};
-
-	function input_1_binding($$value) {
-		binding_callbacks[$$value ? "unshift" : "push"](() => {
-			input = $$value;
-			$$invalidate(8, input);
-		});
-	}
-
-	$$self.$$set = $$props => {
-		if ("min" in $$props) $$invalidate(1, min = $$props.min);
-		if ("max" in $$props) $$invalidate(2, max = $$props.max);
-		if ("step" in $$props) $$invalidate(3, step = $$props.step);
-		if ("id" in $$props) $$invalidate(4, id = $$props.id);
-		if ("value" in $$props) $$invalidate(0, value = $$props.value);
-		if ("trackStyle" in $$props) $$invalidate(5, trackStyle = $$props.trackStyle);
-		if ("knobStyle" in $$props) $$invalidate(6, knobStyle = $$props.knobStyle);
-		if ("onchange" in $$props) $$invalidate(13, onchange = $$props.onchange);
-		if ("class" in $$props) $$invalidate(7, klass = $$props.class);
-	};
-
-	$$self.$$.update = () => {
-		if ($$self.$$.dirty & /*max, min*/ 6) {
-			$$invalidate(14, range = max - min);
-		}
-
-		if ($$self.$$.dirty & /*value, range*/ 16385) {
-			$$invalidate(9, position = value / range * 100);
-		}
-	};
-
-	return [
-		value,
-		min,
-		max,
-		step,
-		id,
-		trackStyle,
-		knobStyle,
-		klass,
-		input,
-		position,
-		handleInput,
-		handleNudge,
-		handlePointerDown,
-		onchange,
-		range,
-		input_1_binding
-	];
-}
-
-class Slider extends SvelteComponent {
-	constructor(options) {
-		super();
-
-		init(this, options, instance$q, create_fragment$q, safe_not_equal, {
-			min: 1,
-			max: 2,
-			step: 3,
-			id: 4,
-			value: 0,
-			trackStyle: 5,
-			knobStyle: 6,
-			onchange: 13,
-			class: 7
-		});
-	}
-}
+const solidSharp = {
+    shape: {
+        frameStyle: 'solid',
+        frameSize: '2.5%',
+    },
+    thumb: '<rect stroke-width="5" x="0" y="0" width="100%" height="100%"/>',
+};
+const solidRound = {
+    shape: {
+        frameStyle: 'solid',
+        frameSize: '2.5%',
+        frameRound: true,
+    },
+    thumb: '<rect stroke-width="5" x="0" y="0" width="100%" height="100%" rx="12%"/>',
+};
+const lineSingle = {
+    shape: {
+        frameStyle: 'line',
+        frameInset: '2.5%',
+        frameSize: '.3125%',
+        frameRadius: 0,
+    },
+    thumb: '<div style="top:.5em;left:.5em;right:.5em;bottom:.5em;box-shadow:inset 0 0 0 1px currentColor"></div>',
+};
+const lineMultiple = {
+    shape: {
+        frameStyle: 'line',
+        frameAmount: 2,
+        frameInset: '2.5%',
+        frameSize: '.3125%',
+        frameOffset: '1.25%',
+        frameRadius: 0,
+    },
+    thumb: '<div style="top:.75em;left:.75em;right:.75em;bottom:.75em; outline: 3px double"></div>',
+};
+const edgeSeparate = {
+    shape: {
+        frameStyle: 'edge',
+        frameInset: '2.5%',
+        frameOffset: '5%',
+        frameSize: '.3125%',
+    },
+    thumb: '<div style="top:.75em;left:.5em;bottom:.75em;border-left:1px solid"></div><div style="top:.75em;right:.5em;bottom:.75em;border-right:1px solid"></div><div style="top:.5em;left:.75em;right:.75em;border-top:1px solid"></div><div style="bottom:.5em;left:.75em;right:.75em;border-bottom:1px solid"></div>',
+};
+const edgeCross = {
+    shape: {
+        frameStyle: 'edge',
+        frameInset: '2.5%',
+        frameSize: '.3125%',
+    },
+    thumb: '<div style="top:-.5em;left:.5em;right:.5em;bottom:-.5em; box-shadow: inset 0 0 0 1px currentColor"></div><div style="top:.5em;left:-.5em;right:-.5em;bottom:.5em;box-shadow:inset 0 0 0 1px currentColor"></div>',
+};
+const edgeOverlap = {
+    shape: {
+        frameStyle: 'edge',
+        frameOffset: '1.5%',
+        frameSize: '.3125%',
+    },
+    thumb: '<div style="top:.3125em;left:.5em;bottom:.3125em;border-left:1px solid"></div><div style="top:.3125em;right:.5em;bottom:.3125em;border-right:1px solid"></div><div style="top:.5em;left:.3125em;right:.3125em;border-top:1px solid"></div><div style="bottom:.5em;left:.3125em;right:.3125em;border-bottom:1px solid"></div>',
+};
+const hook = {
+    shape: {
+        frameStyle: 'hook',
+        frameInset: '2.5%',
+        frameSize: '.3125%',
+        frameLength: '5%',
+    },
+    thumb: '<div style="top:.5em;left:.5em;width:.75em;height:.75em; border-left: 1px solid;border-top: 1px solid;"></div><div style="top:.5em;right:.5em;width:.75em;height:.75em; border-right: 1px solid;border-top: 1px solid;"></div><div style="bottom:.5em;left:.5em;width:.75em;height:.75em; border-left: 1px solid;border-bottom: 1px solid;"></div><div style="bottom:.5em;right:.5em;width:.75em;height:.75em; border-right: 1px solid;border-bottom: 1px solid;"></div>',
+};
+const polaroid = {
+    shape: {
+        frameStyle: 'polaroid',
+    },
+    thumb: '<rect stroke-width="20%" x="-5%" y="-5%" width="110%" height="96%"/>',
+};
+const frameStylesDefault = {
+    solidSharp,
+    solidRound,
+    lineSingle,
+    lineMultiple,
+    edgeSeparate,
+    edgeCross,
+    edgeOverlap,
+    hook,
+    polaroid,
+};
+const frameOptionsDefault = [
+    [undefined, (locale) => locale.labelNone],
+    ['solidSharp', (locale) => locale.frameLabelMatSharp],
+    ['solidRound', (locale) => locale.frameLabelMatRound],
+    ['lineSingle', (locale) => locale.frameLabelLineSingle],
+    ['lineMultiple', (locale) => locale.frameLabelLineMultiple],
+    ['edgeCross', (locale) => locale.frameLabelEdgeCross],
+    ['edgeSeparate', (locale) => locale.frameLabelEdgeSeparate],
+    ['edgeOverlap', (locale) => locale.frameLabelEdgeOverlap],
+    ['hook', (locale) => locale.frameLabelCornerHooks],
+    ['polaroid', (locale) => locale.frameLabelPolaroid],
+];
+var _plugin_frame_defaults = {
+    frameStyles: frameStylesDefault,
+    frameOptions: frameOptionsDefault,
+};
 
 var RGBToHSV = (r, g, b) => {
     let v = Math.max(r, g, b), n = v - Math.min(r, g, b);
@@ -19890,7 +22556,7 @@ var HSVToRGB = (h, s, v) => {
 
 /* src/core/ui/components/ColorPreview.svelte generated by Svelte v3.37.0 */
 
-function create_fragment$p(ctx) {
+function create_fragment$u(ctx) {
 	let div;
 	let span;
 	let div_style_value;
@@ -19924,7 +22590,7 @@ function create_fragment$p(ctx) {
 	};
 }
 
-function instance$p($$self, $$props, $$invalidate) {
+function instance$u($$self, $$props, $$invalidate) {
 	let colorValue;
 	let { color = undefined } = $$props;
 	let { title = undefined } = $$props;
@@ -19946,13 +22612,13 @@ function instance$p($$self, $$props, $$invalidate) {
 class ColorPreview extends SvelteComponent {
 	constructor(options) {
 		super();
-		init(this, options, instance$p, create_fragment$p, safe_not_equal, { color: 2, title: 0 });
+		init(this, options, instance$u, create_fragment$u, safe_not_equal, { color: 2, title: 0 });
 	}
 }
 
 /* src/core/ui/components/ColorPicker.svelte generated by Svelte v3.37.0 */
 
-function create_if_block_4$3(ctx) {
+function create_if_block_4$4(ctx) {
 	let span;
 	let t;
 
@@ -19974,7 +22640,7 @@ function create_if_block_4$3(ctx) {
 	};
 }
 
-// (312:4) 
+// (160:4) 
 function create_label_slot(ctx) {
 	let span;
 	let colorpreview;
@@ -19988,7 +22654,7 @@ function create_label_slot(ctx) {
 			}
 		});
 
-	let if_block = !/*hidePresetLabel*/ ctx[9] && create_if_block_4$3(ctx);
+	let if_block = !/*hidePresetLabel*/ ctx[9] && create_if_block_4$4(ctx);
 
 	return {
 		c() {
@@ -20016,7 +22682,7 @@ function create_label_slot(ctx) {
 				if (if_block) {
 					if_block.p(ctx, dirty);
 				} else {
-					if_block = create_if_block_4$3(ctx);
+					if_block = create_if_block_4$4(ctx);
 					if_block.c();
 					if_block.m(span, null);
 				}
@@ -20042,7 +22708,7 @@ function create_label_slot(ctx) {
 	};
 }
 
-// (324:8) {#if enablePicker}
+// (171:8) {#if enablePicker}
 function create_if_block_2$5(ctx) {
 	let div3;
 	let div2;
@@ -20066,11 +22732,11 @@ function create_if_block_2$5(ctx) {
 				value: /*hue*/ ctx[14],
 				min: 0,
 				max: 1,
-				step: 0.001
+				step: 0.01
 			}
 		});
 
-	let if_block = /*enableOpacity*/ ctx[11] && create_if_block_3$3(ctx);
+	let if_block = /*enableOpacity*/ ctx[11] && create_if_block_3$4(ctx);
 
 	return {
 		c() {
@@ -20141,7 +22807,7 @@ function create_if_block_2$5(ctx) {
 						transition_in(if_block, 1);
 					}
 				} else {
-					if_block = create_if_block_3$3(ctx);
+					if_block = create_if_block_3$4(ctx);
 					if_block.c();
 					transition_in(if_block, 1);
 					if_block.m(div3, null);
@@ -20178,8 +22844,8 @@ function create_if_block_2$5(ctx) {
 	};
 }
 
-// (345:12) {#if enableOpacity}
-function create_if_block_3$3(ctx) {
+// (205:16) {#if enableOpacity}
+function create_if_block_3$4(ctx) {
 	let slider;
 	let current;
 
@@ -20192,7 +22858,7 @@ function create_if_block_3$3(ctx) {
 				value: /*opacity*/ ctx[15],
 				min: 0,
 				max: 1,
-				step: 0.001
+				step: 0.01
 			}
 		});
 
@@ -20226,7 +22892,7 @@ function create_if_block_3$3(ctx) {
 	};
 }
 
-// (358:8) {#if enablePresets}
+// (221:8) {#if enablePresets}
 function create_if_block$6(ctx) {
 	let radiogroup;
 	let current;
@@ -20252,7 +22918,7 @@ function create_if_block$6(ctx) {
 				onchange: /*func_1*/ ctx[33],
 				$$slots: {
 					option: [
-						create_option_slot$2,
+						create_option_slot$3,
 						({ option }) => ({ 44: option }),
 						({ option }) => [0, option ? 8192 : 0]
 					],
@@ -20312,7 +22978,7 @@ function create_if_block$6(ctx) {
 	};
 }
 
-// (374:12) 
+// (243:16) 
 function create_group_slot(ctx) {
 	let span;
 	let t_value = /*option*/ ctx[44].label + "";
@@ -20337,7 +23003,7 @@ function create_group_slot(ctx) {
 	};
 }
 
-// (379:16) {#if !hidePresetLabel}
+// (248:20) {#if !hidePresetLabel}
 function create_if_block_1$6(ctx) {
 	let span;
 	let t_value = /*option*/ ctx[44].label + "";
@@ -20362,8 +23028,8 @@ function create_if_block_1$6(ctx) {
 	};
 }
 
-// (377:12) 
-function create_option_slot$2(ctx) {
+// (246:16) 
+function create_option_slot$3(ctx) {
 	let span;
 	let colorpreview;
 	let t;
@@ -20429,7 +23095,7 @@ function create_option_slot$2(ctx) {
 	};
 }
 
-// (321:4) 
+// (169:4) 
 function create_details_slot(ctx) {
 	let div;
 	let t;
@@ -20519,7 +23185,7 @@ function create_details_slot(ctx) {
 	};
 }
 
-function create_fragment$o(ctx) {
+function create_fragment$t(ctx) {
 	let details;
 	let current;
 
@@ -20567,7 +23233,7 @@ function create_fragment$o(ctx) {
 	};
 }
 
-function instance$o($$self, $$props, $$invalidate) {
+function instance$t($$self, $$props, $$invalidate) {
 	let sx;
 	let sy;
 	let { label = undefined } = $$props;
@@ -20773,8 +23439,8 @@ class ColorPicker extends SvelteComponent {
 		init(
 			this,
 			options,
-			instance$o,
-			create_fragment$o,
+			instance$t,
+			create_fragment$t,
 			safe_not_equal,
 			{
 				label: 0,
@@ -20823,10 +23489,7 @@ var canCheckFontAvailability = () => {
 // @ts-ignore
 const toLocaleFn = (key, localePrefix) => (locale) => locale[localePrefix ? `${localePrefix}${upperCaseFirstLetter(key)}` : key];
 const mapToSizeOption = (v) => [v, `${v}`];
-const createLocaleMapper = (options, localePrefix) => (key) => [
-    options[key],
-    toLocaleFn(key, localePrefix),
-];
+const createLocaleMapper = (options, localePrefix) => (key) => [options[key], toLocaleFn(key, localePrefix)];
 const toolColorDefault = [1, 0.2549, 0.2118];
 const toolStrokeColorDefault = [1, 1, 1, 0];
 //#region tools
@@ -20876,6 +23539,7 @@ const createToolStyles = (tools) => ({
     sharpie: createToolStyle('path', {
         strokeWidth: '0.5%',
         strokeColor: [...toolColorDefault],
+        disableMove: true,
     }),
     eraser: createToolStyle('eraser'),
     line: createToolStyle('line', {
@@ -20912,7 +23576,16 @@ const createToolbarItem = (tool, label, props) => [
         ...props,
     },
 ];
-const createToolbar = (tools = ['sharpie', 'eraser', 'line', 'arrow', 'rectangle', 'ellipse', 'text', 'preset']) => tools
+const createToolbar = (tools = [
+    'sharpie',
+    'eraser',
+    'line',
+    'arrow',
+    'rectangle',
+    'ellipse',
+    'text',
+    'preset',
+]) => tools
     .map((tool) => {
     // default tool definition, assume locale in
     if (isString(tool))
@@ -20948,7 +23621,10 @@ const createDefaultColorOptions = () => ({
     fuchsia: [0.9412, 0.0706, 0.7451],
     purple: [0.6941, 0.051, 0.7882],
 });
-const createDefaultFontSizeOptions = () => [16, 18, 20, 24, 30, 36, 48, 64, 72, 96, 144];
+const createDefaultFontSizeOptions = () => [
+    16, 18, 20, 24, 30, 36, 48, 64, 72, 96, 128, 144,
+];
+const createDefaultLineHeightOptions = createDefaultFontSizeOptions;
 const createDefaultFontScaleOptions = () => ({
     extraSmall: '2%',
     small: '4%',
@@ -20958,7 +23634,18 @@ const createDefaultFontScaleOptions = () => ({
     large: '20%',
     extraLarge: '25%',
 });
-const createDefaultStrokeWidthOptions = () => [1, 2, 3, 4, 6, 8, 12, 16, 20, 24, 32, 48];
+const createDefaultLineHeightScaleOptions = () => ({
+    extraSmall: '40%',
+    small: '60%',
+    mediumSmall: '100%',
+    medium: '120%',
+    mediumLarge: '140%',
+    large: '180%',
+    extraLarge: '220%',
+});
+const createDefaultStrokeWidthOptions = () => [
+    1, 2, 3, 4, 6, 8, 12, 16, 20, 24, 32, 48, 64,
+];
 const createDefaultStrokeScaleOptions = () => ({
     extraSmall: '0.25%',
     small: '0.5%',
@@ -20999,6 +23686,8 @@ const createDefaultFontStyleOptions = () => [
 const createColorOptions = (colors) => Object.keys(colors).map(createLocaleMapper(colors, 'shapeTitleColor'));
 const createFontSizeOptions = (sizes) => sizes.map(mapToSizeOption);
 const createFontScaleOptions = (scales) => Object.keys(scales).map(createLocaleMapper(scales, 'labelSize'));
+const createLineHeightOptions = (sizes) => sizes.map(mapToSizeOption);
+const createLineHeightScaleOptions = (scales) => Object.keys(scales).map(createLocaleMapper(scales, 'labelSize'));
 const createStrokeWidthOptions = (sizes) => sizes.map(mapToSizeOption);
 const createStrokeScaleOptions = (scales) => Object.keys(scales).map(createLocaleMapper(scales, 'labelSize'));
 const createFontFamilyOptions = (fonts) => [...fonts];
@@ -21023,10 +23712,10 @@ const createTextAlignOptions = (options) => options.map((align) => [
     },
 ]);
 const createControlOptions = (items, options) => {
-    const { defaultKey, defaultOptions } = options || {};
-    let arr = [];
+    const { defaultKey, defaultValue, defaultOptions } = options || {};
+    const arr = [];
     if (defaultKey)
-        arr[0] = [undefined, (locale) => locale[defaultKey], { ...defaultOptions }];
+        arr[0] = [defaultValue, (locale) => locale[defaultKey], { ...defaultOptions }];
     return [...arr, ...items];
 };
 //#endregion
@@ -21038,6 +23727,19 @@ const someFontsAvailableInStack = (stack) => stack
     // @ts-ignore
     return document.fonts.check(`16px ${name}`);
 });
+const createColorControl = (items) => [
+    ColorPicker,
+    {
+        title: (locale) => locale.labelColor,
+        options: createControlOptions(items),
+    },
+];
+const createSliderControl = (options = {}) => [
+    ToggleSlider,
+    {
+        ...options,
+    },
+];
 const createFontFamilyControl = (fontFamilies) => [
     Dropdown,
     {
@@ -21063,20 +23765,12 @@ const createFontFamilyControl = (fontFamilies) => [
                 if (document.getElementById(testId))
                     return;
                 // add font tester
-                document.body.appendChild(h('span', {
+                appendForMeasuring(h('span', {
                     textContent: ' ',
                     id: testId,
                     style: `font-family:${stack};font-size:0;color:transparent;`,
                 }));
             });
-        },
-        ondestroy: () => {
-            // can't check for font availability so no need to clean up
-            if (!canCheckFontAvailability())
-                return;
-            // clean up testers
-            const testers = document.querySelectorAll('.PinturaFontTest');
-            testers.forEach((tester) => tester.remove());
         },
         optionLabelStyle: (value) => `font-family: ${value}`,
         options: createControlOptions(fontFamilies, { defaultKey: 'labelDefault' }),
@@ -21110,8 +23804,8 @@ const createStrokeColorControl = (items, options = {}) => [
         buttonClass: 'PinturaColorPickerButtonStroke',
         onchange: (value, shape) => {
             // get shape strokeWidth as number
-            let strokeWidth = shape.strokeWidth;
-            let strokeWidthParsed = isNumber(strokeWidth) || isString(strokeWidth) ? parseFloat(strokeWidth) : 0;
+            const strokeWidth = shape.strokeWidth;
+            const strokeWidthParsed = isNumber(strokeWidth) || isString(strokeWidth) ? parseFloat(strokeWidth) : 0;
             // already has outline
             if (strokeWidthParsed > 0)
                 return;
@@ -21165,13 +23859,19 @@ const createFontStyleControl = (items) => [
         }),
     },
 ];
-const createFontSizeControl = (items) => [
-    Dropdown,
-    {
-        title: (locale) => locale.shapeTitleFontSize,
-        options: createControlOptions(items, { defaultKey: 'labelDefault' }),
-    },
-];
+const createFontSizeControl = (items) => {
+    let options;
+    if (!items.find(([value]) => value === '4%')) {
+        options = { defaultKey: 'labelAuto', defaultValue: '4%' };
+    }
+    return [
+        Dropdown,
+        {
+            title: (locale) => locale.shapeTitleFontSize,
+            options: createControlOptions(items, options),
+        },
+    ];
+};
 const createTextAlignControl = (items) => [
     RadioGroup,
     {
@@ -21179,16 +23879,46 @@ const createTextAlignControl = (items) => [
         options: createControlOptions(items),
     },
 ];
-const createLineHeightControl = (items) => [
-    Dropdown,
-    {
-        title: (locale) => locale.shapeTitleLineHeight,
-        options: createControlOptions(items, { defaultKey: 'labelAuto' }),
-    },
-];
+const createLineHeightControl = (items) => {
+    let options;
+    if (!items.find(([value]) => value === '120%')) {
+        options = { defaultKey: 'labelAuto', defaultValue: '120%' };
+    }
+    return [
+        Dropdown,
+        {
+            title: (locale) => locale.shapeTitleLineHeight,
+            options: createControlOptions(items, options),
+        },
+    ];
+};
+const autoFormatNumberItems = (arr) => arr.map(mapToSizeOption);
 const createShapeStyleControls = (options = {}) => {
-    const { colorOptions = createColorOptions(createDefaultColorOptions()), strokeWidthOptions = createStrokeScaleOptions(createDefaultStrokeScaleOptions()), lineEndStyleOptions = createLineEndStyleOptions(createDefaultLineEndStyleOptions()), fontFamilyOptions = createFontFamilyOptions(createDefaultFontFamilyOptions()), fontStyleOptions = createFontStyleOptions(createDefaultFontStyleOptions()), fontSizeOptions = createFontScaleOptions(createDefaultFontScaleOptions()), textAlignOptions = createTextAlignOptions(createDefaultTextAlignOptions()), } = options;
+    const { colorOptions = createColorOptions(createDefaultColorOptions()), lineEndStyleOptions = createLineEndStyleOptions(createDefaultLineEndStyleOptions()), fontFamilyOptions = createFontFamilyOptions(createDefaultFontFamilyOptions()), fontStyleOptions = createFontStyleOptions(createDefaultFontStyleOptions()), textAlignOptions = createTextAlignOptions(createDefaultTextAlignOptions()), } = options;
+    // these are let because we might overwrite them later when autoformatting
+    let { strokeWidthOptions = createStrokeScaleOptions(createDefaultStrokeScaleOptions()), fontSizeOptions = createFontScaleOptions(createDefaultFontScaleOptions()), lineHeightOptions = createLineHeightScaleOptions(createDefaultLineHeightScaleOptions()), } = options;
+    // auto format items that are all numbers
+    [fontSizeOptions, lineHeightOptions, strokeWidthOptions] = [
+        fontSizeOptions,
+        lineHeightOptions,
+        strokeWidthOptions,
+    ].map((items) => {
+        if (Array.isArray(items) && items.every(isNumber)) {
+            return autoFormatNumberItems(items);
+        }
+        return items;
+    });
     return {
+        // generic
+        defaultColor: colorOptions && createColorControl(colorOptions),
+        defaultNumber: createSliderControl(),
+        defaultPercentage: createSliderControl({
+            getValue: (value) => parseFloat(value),
+            setValue: (value) => `${value}%`,
+            step: 0.05,
+            label: (value, min, max) => `${Math.round((value / max) * 100)}%`,
+            labelClass: 'PinturaPercentageLabel',
+        }),
         // shape background
         backgroundColor: colorOptions && createBackgroundColorControl(colorOptions),
         // line/outline
@@ -21202,14 +23932,41 @@ const createShapeStyleControls = (options = {}) => {
         fontFamily: fontFamilyOptions && createFontFamilyControl(fontFamilyOptions),
         fontStyle_fontWeight: fontStyleOptions && createFontStyleControl(fontStyleOptions),
         fontSize: fontSizeOptions && createFontSizeControl(fontSizeOptions),
+        lineHeight: lineHeightOptions && createLineHeightControl(lineHeightOptions),
         textAlign: textAlignOptions && createTextAlignControl(textAlignOptions),
+        // generic options
+        frameColor: ['defaultColor'],
+        frameSize: [
+            'defaultPercentage',
+            {
+                min: 0.2,
+                max: 10,
+                title: (locale) => locale.labelSize,
+            },
+        ],
+        frameInset: [
+            'defaultPercentage',
+            { min: 0.5, max: 10, title: (locale) => locale.labelInset },
+        ],
+        frameOffset: [
+            'defaultPercentage',
+            { min: 0.5, max: 10, title: (locale) => locale.labelOffset },
+        ],
+        frameRadius: [
+            'defaultPercentage',
+            { min: 0.5, max: 10, title: (locale) => locale.labelRadius },
+        ],
+        frameAmount: [
+            'defaultNumber',
+            { min: 1, max: 5, step: 1, title: (locale) => locale.labelAmount },
+        ],
     };
 };
 //#endregion
 
 /* src/core/ui/components/Measure.svelte generated by Svelte v3.37.0 */
 
-function create_fragment$n(ctx) {
+function create_fragment$s(ctx) {
 	let div;
 	let current;
 	let mounted;
@@ -21270,7 +24027,7 @@ function create_fragment$n(ctx) {
 	};
 }
 
-function instance$n($$self, $$props, $$invalidate) {
+function instance$s($$self, $$props, $$invalidate) {
 	let { $$slots: slots = {}, $$scope } = $$props;
 	const dispatch = createEventDispatcher();
 	let { class: klass = null } = $$props;
@@ -21287,7 +24044,7 @@ function instance$n($$self, $$props, $$invalidate) {
 class Measure extends SvelteComponent {
 	constructor(options) {
 		super();
-		init(this, options, instance$n, create_fragment$n, safe_not_equal, { class: 0 });
+		init(this, options, instance$s, create_fragment$s, safe_not_equal, { class: 0 });
 	}
 }
 
@@ -21299,7 +24056,7 @@ const get_main_slot_context = ctx => ({});
 const get_header_slot_changes = dirty => ({});
 const get_header_slot_context = ctx => ({});
 
-// (261:0) {#if hasHeader}
+// (10:0) {#if hasHeader}
 function create_if_block_2$4(ctx) {
 	let div;
 	let current;
@@ -21344,7 +24101,7 @@ function create_if_block_2$4(ctx) {
 	};
 }
 
-// (268:22) <Measure class="PinturaStage" on:measure/>
+// (17:22) <Measure class="PinturaStage" on:measure />
 function fallback_block(ctx) {
 	let measure;
 	let current;
@@ -21375,7 +24132,7 @@ function fallback_block(ctx) {
 	};
 }
 
-// (271:0) {#if hasFooter}
+// (20:0) {#if hasFooter}
 function create_if_block_1$5(ctx) {
 	let div;
 	let current;
@@ -21420,7 +24177,7 @@ function create_if_block_1$5(ctx) {
 	};
 }
 
-function create_fragment$m(ctx) {
+function create_fragment$r(ctx) {
 	let t0;
 	let div;
 	let t1;
@@ -21544,7 +24301,7 @@ function create_fragment$m(ctx) {
 	};
 }
 
-function instance$m($$self, $$props, $$invalidate) {
+function instance$r($$self, $$props, $$invalidate) {
 	let { $$slots: slots = {}, $$scope } = $$props;
 	let { hasHeader = !!$$props.$$slots.header } = $$props;
 	let { hasFooter = !!$$props.$$slots.footer } = $$props;
@@ -21576,11 +24333,9 @@ function instance$m($$self, $$props, $$invalidate) {
 class Util extends SvelteComponent {
 	constructor(options) {
 		super();
-		init(this, options, instance$m, create_fragment$m, safe_not_equal, { hasHeader: 1, hasFooter: 2, root: 0 });
+		init(this, options, instance$r, create_fragment$r, safe_not_equal, { hasHeader: 1, hasFooter: 2, root: 0 });
 	}
 }
-
-var toFraction = (value, min, max) => (value - min) / (max - min);
 
 /* src/core/ui/components/RangeInput.svelte generated by Svelte v3.37.0 */
 
@@ -21592,15 +24347,15 @@ function create_if_block$5(ctx) {
 		c() {
 			div = element("div");
 			attr(div, "class", "PinturaRangeInputMeter");
-			attr(div, "style", div_style_value = `transform: translateX(${/*$position*/ ctx[9].x - /*svgPadding*/ ctx[10].x}px) translateY(${/*$position*/ ctx[9].y - /*svgPadding*/ ctx[10].y}px)`);
+			attr(div, "style", div_style_value = `transform: translateX(${/*$position*/ ctx[8].x - /*svgPadding*/ ctx[9].x}px) translateY(${/*$position*/ ctx[8].y - /*svgPadding*/ ctx[9].y}px)`);
 		},
 		m(target, anchor) {
 			insert(target, div, anchor);
-			div.innerHTML = /*svg*/ ctx[7];
+			div.innerHTML = /*svg*/ ctx[6];
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*svg*/ 128) div.innerHTML = /*svg*/ ctx[7];
-			if (dirty[0] & /*$position*/ 512 && div_style_value !== (div_style_value = `transform: translateX(${/*$position*/ ctx[9].x - /*svgPadding*/ ctx[10].x}px) translateY(${/*$position*/ ctx[9].y - /*svgPadding*/ ctx[10].y}px)`)) {
+			if (dirty[0] & /*svg*/ 64) div.innerHTML = /*svg*/ ctx[6];
+			if (dirty[0] & /*$position*/ 256 && div_style_value !== (div_style_value = `transform: translateX(${/*$position*/ ctx[8].x - /*svgPadding*/ ctx[9].x}px) translateY(${/*$position*/ ctx[8].y - /*svgPadding*/ ctx[9].y}px)`)) {
 				attr(div, "style", div_style_value);
 			}
 		},
@@ -21610,7 +24365,7 @@ function create_if_block$5(ctx) {
 	};
 }
 
-function create_fragment$l(ctx) {
+function create_fragment$q(ctx) {
 	let div1;
 	let span;
 	let t0;
@@ -21620,16 +24375,15 @@ function create_fragment$l(ctx) {
 	let button_disabled_value;
 	let t3;
 	let div0;
-	let nudgeable_action;
 	let mounted;
 	let dispose;
-	let if_block = /*$position*/ ctx[9] && create_if_block$5(ctx);
+	let if_block = /*$position*/ ctx[8] && create_if_block$5(ctx);
 
 	return {
 		c() {
 			div1 = element("div");
 			span = element("span");
-			t0 = text(/*valueLabel*/ ctx[4]);
+			t0 = text(/*valueLabel*/ ctx[3]);
 			t1 = space();
 			button = element("button");
 			t2 = text(/*labelReset*/ ctx[1]);
@@ -21639,10 +24393,10 @@ function create_fragment$l(ctx) {
 			attr(span, "class", "PinturaRangeInputValue");
 			attr(button, "class", "PinturaRangeInputReset");
 			attr(button, "type", "button");
-			button.disabled = button_disabled_value = /*value*/ ctx[0] === /*base*/ ctx[3];
+			button.disabled = button_disabled_value = /*value*/ ctx[0] === /*base*/ ctx[2];
 			attr(div0, "class", "PinturaRangeInputInner");
-			attr(div0, "style", /*rangeMask*/ ctx[8]);
-			attr(div0, "data-value-limited", /*isLimited*/ ctx[6]);
+			attr(div0, "style", /*rangeMask*/ ctx[7]);
+			attr(div0, "data-value-limited", /*isLimited*/ ctx[5]);
 			attr(div1, "class", "PinturaRangeInput");
 			attr(div1, "tabindex", "0");
 		},
@@ -21659,31 +24413,31 @@ function create_fragment$l(ctx) {
 
 			if (!mounted) {
 				dispose = [
-					listen(button, "click", /*handleReset*/ ctx[15]),
-					listen(div0, "interactionstart", /*handleDragStart*/ ctx[11]),
-					listen(div0, "interactionupdate", /*handleDragMove*/ ctx[13]),
-					listen(div0, "interactionend", /*handleDragEnd*/ ctx[14]),
-					listen(div0, "interactionrelease", /*handleDragRelease*/ ctx[12]),
+					listen(button, "click", /*handleReset*/ ctx[14]),
+					listen(div0, "interactionstart", /*handleDragStart*/ ctx[10]),
+					listen(div0, "interactionupdate", /*handleDragMove*/ ctx[12]),
+					listen(div0, "interactionend", /*handleDragEnd*/ ctx[13]),
+					listen(div0, "interactionrelease", /*handleDragRelease*/ ctx[11]),
 					action_destroyer(interactable.call(null, div0, { inertia: true })),
 					listen(div0, "measure", /*measure_handler*/ ctx[32]),
 					action_destroyer(measurable.call(null, div0)),
-					listen(div1, "wheel", /*handleWheel*/ ctx[17], { passive: false }),
-					listen(div1, "nudge", /*handleNudge*/ ctx[18]),
-					action_destroyer(nudgeable_action = nudgeable.call(null, div1, /*direction*/ ctx[2] = "horizontal"))
+					listen(div1, "wheel", /*handleWheel*/ ctx[16], { passive: false }),
+					listen(div1, "nudge", /*handleNudge*/ ctx[17]),
+					action_destroyer(nudgeable.call(null, div1, { direction: "horizontal" }))
 				];
 
 				mounted = true;
 			}
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*valueLabel*/ 16) set_data(t0, /*valueLabel*/ ctx[4]);
+			if (dirty[0] & /*valueLabel*/ 8) set_data(t0, /*valueLabel*/ ctx[3]);
 			if (dirty[0] & /*labelReset*/ 2) set_data(t2, /*labelReset*/ ctx[1]);
 
-			if (dirty[0] & /*value, base*/ 9 && button_disabled_value !== (button_disabled_value = /*value*/ ctx[0] === /*base*/ ctx[3])) {
+			if (dirty[0] & /*value, base*/ 5 && button_disabled_value !== (button_disabled_value = /*value*/ ctx[0] === /*base*/ ctx[2])) {
 				button.disabled = button_disabled_value;
 			}
 
-			if (/*$position*/ ctx[9]) {
+			if (/*$position*/ ctx[8]) {
 				if (if_block) {
 					if_block.p(ctx, dirty);
 				} else {
@@ -21696,15 +24450,13 @@ function create_fragment$l(ctx) {
 				if_block = null;
 			}
 
-			if (dirty[0] & /*rangeMask*/ 256) {
-				attr(div0, "style", /*rangeMask*/ ctx[8]);
+			if (dirty[0] & /*rangeMask*/ 128) {
+				attr(div0, "style", /*rangeMask*/ ctx[7]);
 			}
 
-			if (dirty[0] & /*isLimited*/ 64) {
-				attr(div0, "data-value-limited", /*isLimited*/ ctx[6]);
+			if (dirty[0] & /*isLimited*/ 32) {
+				attr(div0, "data-value-limited", /*isLimited*/ ctx[5]);
 			}
-
-			if (nudgeable_action && is_function(nudgeable_action.update) && dirty[0] & /*direction*/ 4) nudgeable_action.update.call(null, /*direction*/ ctx[2] = "horizontal");
 		},
 		i: noop,
 		o: noop,
@@ -21723,7 +24475,7 @@ const indicatorSpacing = 10;
 const indicatorInterval = 5;
 const indicatorCount = 40; // must be even
 
-function instance$l($$self, $$props, $$invalidate) {
+function instance$q($$self, $$props, $$invalidate) {
 	let range;
 	let valueMinLimited;
 	let valueMaxLimited;
@@ -21834,7 +24586,7 @@ function instance$l($$self, $$props, $$invalidate) {
 	//
 	const position = spring();
 
-	component_subscribe($$self, position, value => $$invalidate(9, $position = value));
+	component_subscribe($$self, position, value => $$invalidate(8, $position = value));
 
 	const valueToPosition = (value, axis) => {
 		const offset = (size[axis] - barSize[axis]) * 0.5;
@@ -21854,7 +24606,7 @@ function instance$l($$self, $$props, $$invalidate) {
 		return min + fraction * range;
 	};
 
-	position.subscribe(currentPosition => {
+	const positionUnsub = position.subscribe(currentPosition => {
 		// if not positioned yet or is not interacting we're not interested in this event
 		if (!currentPosition || !interactionOrigin) return;
 
@@ -21898,16 +24650,20 @@ function instance$l($$self, $$props, $$invalidate) {
 		updatePosition(detail[direction] * 8);
 	};
 
-	const measure_handler = e => $$invalidate(5, size = vectorCreateFromSize(e.detail));
+	onDestroy(() => {
+		positionUnsub();
+	});
+
+	const measure_handler = e => $$invalidate(4, size = vectorCreateFromSize(e.detail));
 
 	$$self.$$set = $$props => {
 		if ("labelReset" in $$props) $$invalidate(1, labelReset = $$props.labelReset);
-		if ("direction" in $$props) $$invalidate(2, direction = $$props.direction);
+		if ("direction" in $$props) $$invalidate(18, direction = $$props.direction);
 		if ("min" in $$props) $$invalidate(19, min = $$props.min);
 		if ("max" in $$props) $$invalidate(20, max = $$props.max);
-		if ("base" in $$props) $$invalidate(3, base = $$props.base);
+		if ("base" in $$props) $$invalidate(2, base = $$props.base);
 		if ("value" in $$props) $$invalidate(0, value = $$props.value);
-		if ("valueLabel" in $$props) $$invalidate(4, valueLabel = $$props.valueLabel);
+		if ("valueLabel" in $$props) $$invalidate(3, valueLabel = $$props.valueLabel);
 		if ("valueMin" in $$props) $$invalidate(21, valueMin = $$props.valueMin);
 		if ("valueMax" in $$props) $$invalidate(22, valueMax = $$props.valueMax);
 		if ("oninputstart" in $$props) $$invalidate(23, oninputstart = $$props.oninputstart);
@@ -21932,11 +24688,11 @@ function instance$l($$self, $$props, $$invalidate) {
 			$$invalidate(30, valueMaxLimited = valueMax != null ? Math.min(valueMax, max) : max);
 		}
 
-		if ($$self.$$.dirty[0] & /*base, min, max*/ 1572872) {
+		if ($$self.$$.dirty[0] & /*base, min, max*/ 1572868) {
 			$$invalidate(31, baseFraction = toFraction(base, min, max));
 		}
 
-		if ($$self.$$.dirty[0] & /*size*/ 32 | $$self.$$.dirty[1] & /*baseFraction*/ 1) {
+		if ($$self.$$.dirty[0] & /*size*/ 16 | $$self.$$.dirty[1] & /*baseFraction*/ 1) {
 			if (size) {
 				const centerY = size.y * 0.5;
 				let indicatorCenter = indicatorCount * baseFraction;
@@ -21957,7 +24713,7 @@ function instance$l($$self, $$props, $$invalidate) {
 					}
 				}
 
-				$$invalidate(7, svg = `<svg width="${svgWidth}" height="${svgHeight}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgWidth} ${svgHeight}" aria-hidden="true" focusable="false">
+				$$invalidate(6, svg = `<svg width="${svgWidth}" height="${svgHeight}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgWidth} ${svgHeight}" aria-hidden="true" focusable="false">
         ${centerShape}
         <rect rx="4" ry="4" y="${centerY - 4}"" height="8"/>
         <path fill-rule="evenodd" d="${d.trim()}"/></svg>`);
@@ -21969,21 +24725,21 @@ function instance$l($$self, $$props, $$invalidate) {
 			}
 		}
 
-		if ($$self.$$.dirty[0] & /*size, svgSize*/ 134217760) {
+		if ($$self.$$.dirty[0] & /*size, svgSize*/ 134217744) {
 			barSize = size && svgSize;
 		}
 
 		if ($$self.$$.dirty[0] & /*valueMinLimited, min, valueMaxLimited, max*/ 1612185600) {
-			$$invalidate(6, isLimited = valueMinLimited !== min || valueMaxLimited !== max);
+			$$invalidate(5, isLimited = valueMinLimited !== min || valueMaxLimited !== max);
 		}
 
-		if ($$self.$$.dirty[0] & /*isLimited, valueMinLimited, valueMaxLimited*/ 1610612800) {
-			$$invalidate(8, rangeMask = isLimited
+		if ($$self.$$.dirty[0] & /*isLimited, valueMinLimited, valueMaxLimited*/ 1610612768) {
+			$$invalidate(7, rangeMask = isLimited
 			? getMask(valueMinLimited, valueMaxLimited)
 			: "");
 		}
 
-		if ($$self.$$.dirty[0] & /*range, size, value, direction*/ 268435493) {
+		if ($$self.$$.dirty[0] & /*range, size, value, direction*/ 268697617) {
 			// if has size (range is in here so the position is updated if the range is changed)
 			if (range && size && size.x && size.y) {
 				position.set(valueToPosition(value, direction));
@@ -21994,7 +24750,6 @@ function instance$l($$self, $$props, $$invalidate) {
 	return [
 		value,
 		labelReset,
-		direction,
 		base,
 		valueLabel,
 		size,
@@ -22011,6 +24766,7 @@ function instance$l($$self, $$props, $$invalidate) {
 		position,
 		handleWheel,
 		handleNudge,
+		direction,
 		min,
 		max,
 		valueMin,
@@ -22035,17 +24791,17 @@ class RangeInput extends SvelteComponent {
 		init(
 			this,
 			options,
-			instance$l,
-			create_fragment$l,
+			instance$q,
+			create_fragment$q,
 			safe_not_equal,
 			{
 				labelReset: 1,
-				direction: 2,
+				direction: 18,
 				min: 19,
 				max: 20,
-				base: 3,
+				base: 2,
 				value: 0,
-				valueLabel: 4,
+				valueLabel: 3,
 				valueMin: 21,
 				valueMax: 22,
 				oninputstart: 23,
@@ -22060,7 +24816,7 @@ class RangeInput extends SvelteComponent {
 
 /* src/core/ui/components/Toolbar.svelte generated by Svelte v3.37.0 */
 
-function create_fragment$k(ctx) {
+function create_fragment$p(ctx) {
 	let div1;
 	let div0;
 	let current;
@@ -22133,7 +24889,7 @@ function create_fragment$k(ctx) {
 	};
 }
 
-function instance$k($$self, $$props, $$invalidate) {
+function instance$p($$self, $$props, $$invalidate) {
 	let layout;
 	let { $$slots: slots = {}, $$scope } = $$props;
 	let childWidth = 0;
@@ -22189,7 +24945,7 @@ function instance$k($$self, $$props, $$invalidate) {
 class Toolbar extends SvelteComponent {
 	constructor(options) {
 		super();
-		init(this, options, instance$k, create_fragment$k, safe_not_equal, {});
+		init(this, options, instance$p, create_fragment$p, safe_not_equal, {});
 	}
 }
 
@@ -22240,7 +24996,7 @@ function get_each_context$5(ctx, list, i) {
 	return child_ctx;
 }
 
-// (226:0) {#each mappedDirections as { key, translate, scale, type, opacity }
+// (107:0) {#each mappedDirections as { key, translate, scale, type, opacity }
 function create_each_block$5(key_1, ctx) {
 	let div;
 	let div_aria_label_value;
@@ -22326,7 +25082,7 @@ function create_each_block$5(key_1, ctx) {
 	};
 }
 
-function create_fragment$j(ctx) {
+function create_fragment$o(ctx) {
 	let each_blocks = [];
 	let each_1_lookup = new Map();
 	let each_1_anchor;
@@ -22372,7 +25128,7 @@ function create_fragment$j(ctx) {
 	};
 }
 
-function instance$j($$self, $$props, $$invalidate) {
+function instance$o($$self, $$props, $$invalidate) {
 	let mappedDirections;
 	let $selectionScale;
 	let $selectionOpacity;
@@ -22489,7 +25245,7 @@ function instance$j($$self, $$props, $$invalidate) {
 class RectManipulator extends SvelteComponent {
 	constructor(options) {
 		super();
-		init(this, options, instance$j, create_fragment$j, safe_not_equal, { rect: 6, visible: 7, style: 0 });
+		init(this, options, instance$o, create_fragment$o, safe_not_equal, { rect: 6, visible: 7, style: 0 });
 	}
 }
 
@@ -22909,7 +25665,7 @@ var radToDeg = (rad) => rad * 180 / Math.PI;
 
 /* src/core/ui/plugins/crop/components/ImageRotator.svelte generated by Svelte v3.37.0 */
 
-function create_fragment$i(ctx) {
+function create_fragment$n(ctx) {
 	let div;
 	let rangeinput;
 	let current;
@@ -22976,7 +25732,7 @@ function create_fragment$i(ctx) {
 
 const MARGIN = 1e-9;
 
-function instance$i($$self, $$props, $$invalidate) {
+function instance$n($$self, $$props, $$invalidate) {
 	let min;
 	let max;
 	let center;
@@ -23052,7 +25808,7 @@ class ImageRotator extends SvelteComponent {
 	constructor(options) {
 		super();
 
-		init(this, options, instance$i, create_fragment$i, safe_not_equal, {
+		init(this, options, instance$n, create_fragment$n, safe_not_equal, {
 			rotation: 13,
 			valueMin: 0,
 			valueMax: 1,
@@ -23067,7 +25823,7 @@ class ImageRotator extends SvelteComponent {
 
 /* src/core/ui/plugins/crop/components/ImageInfo.svelte generated by Svelte v3.37.0 */
 
-function create_fragment$h(ctx) {
+function create_fragment$m(ctx) {
 	let div;
 	let p;
 	let t0;
@@ -23102,7 +25858,7 @@ function create_fragment$h(ctx) {
 	};
 }
 
-function instance$h($$self, $$props, $$invalidate) {
+function instance$m($$self, $$props, $$invalidate) {
 	let { width } = $$props;
 	let { height } = $$props;
 
@@ -23117,7 +25873,7 @@ function instance$h($$self, $$props, $$invalidate) {
 class ImageInfo extends SvelteComponent {
 	constructor(options) {
 		super();
-		init(this, options, instance$h, create_fragment$h, safe_not_equal, { width: 0, height: 1 });
+		init(this, options, instance$m, create_fragment$m, safe_not_equal, { width: 0, height: 1 });
 	}
 }
 
@@ -23176,7 +25932,7 @@ function create_default_slot_2$2(ctx) {
 	};
 }
 
-// (1352:4) 
+// (1425:4) 
 function create_header_slot(ctx) {
 	let div;
 	let toolbar;
@@ -23203,7 +25959,7 @@ function create_header_slot(ctx) {
 		p(ctx, dirty) {
 			const toolbar_changes = {};
 
-			if (dirty[0] & /*tools*/ 1 | dirty[6] & /*$$scope*/ 2) {
+			if (dirty[0] & /*tools*/ 1 | dirty[6] & /*$$scope*/ 128) {
 				toolbar_changes.$$scope = { dirty, ctx };
 			}
 
@@ -23225,18 +25981,18 @@ function create_header_slot(ctx) {
 	};
 }
 
-// (1380:12) {#if shouldRenderImageSelection && shouldRenderImageSelectionRecenterButton}
+// (1454:12) {#if shouldRenderImageSelection && shouldRenderImageSelectionRecenterButton}
 function create_if_block_5$2(ctx) {
 	let button;
 	let current;
 
 	button = new Button({
 			props: {
-				onclick: /*handleRecenterAction*/ ctx[79],
+				onclick: /*handleRecenterAction*/ ctx[80],
 				label: /*locale*/ ctx[4].cropLabelButtonRecenter,
 				icon: /*locale*/ ctx[4].cropIconButtonRecenter,
 				class: "PinturaButtonCenter",
-				disabled: !/*canCenter*/ ctx[9],
+				disabled: !/*canCenter*/ ctx[10],
 				hideLabel: true,
 				style: `opacity: ${/*$recenterOpacity*/ ctx[27]}; transform: translate3d(${/*$recenterOffset*/ ctx[28].x}px, ${/*$recenterOffset*/ ctx[28].y}px, 0)`
 			}
@@ -23254,7 +26010,7 @@ function create_if_block_5$2(ctx) {
 			const button_changes = {};
 			if (dirty[0] & /*locale*/ 16) button_changes.label = /*locale*/ ctx[4].cropLabelButtonRecenter;
 			if (dirty[0] & /*locale*/ 16) button_changes.icon = /*locale*/ ctx[4].cropIconButtonRecenter;
-			if (dirty[0] & /*canCenter*/ 512) button_changes.disabled = !/*canCenter*/ ctx[9];
+			if (dirty[0] & /*canCenter*/ 1024) button_changes.disabled = !/*canCenter*/ ctx[10];
 			if (dirty[0] & /*$recenterOpacity, $recenterOffset*/ 402653184) button_changes.style = `opacity: ${/*$recenterOpacity*/ ctx[27]}; transform: translate3d(${/*$recenterOffset*/ ctx[28].x}px, ${/*$recenterOffset*/ ctx[28].y}px, 0)`;
 			button.$set(button_changes);
 		},
@@ -23273,22 +26029,22 @@ function create_if_block_5$2(ctx) {
 	};
 }
 
-// (1391:12) {#if shouldRenderImageSelection}
-function create_if_block_4$2(ctx) {
+// (1466:12) {#if shouldRenderImageSelection}
+function create_if_block_4$3(ctx) {
 	let rectmanipulator;
 	let current;
 
 	rectmanipulator = new RectManipulator({
 			props: {
-				rect: /*imageSelectionRectOffset*/ ctx[10],
-				visible: /*$isActive*/ ctx[11],
+				rect: /*imageSelectionRectOffset*/ ctx[11],
+				visible: /*$isActive*/ ctx[9],
 				style: /*cropImageSelectionCornerStyle*/ ctx[2]
 			}
 		});
 
-	rectmanipulator.$on("resizestart", /*handleSelectionGrab*/ ctx[59]);
-	rectmanipulator.$on("resizemove", /*handleSelectionDrag*/ ctx[60]);
-	rectmanipulator.$on("resizeend", /*handleSelectionRelease*/ ctx[61]);
+	rectmanipulator.$on("resizestart", /*handleSelectionGrab*/ ctx[60]);
+	rectmanipulator.$on("resizemove", /*handleSelectionDrag*/ ctx[61]);
+	rectmanipulator.$on("resizeend", /*handleSelectionRelease*/ ctx[62]);
 
 	return {
 		c() {
@@ -23300,8 +26056,8 @@ function create_if_block_4$2(ctx) {
 		},
 		p(ctx, dirty) {
 			const rectmanipulator_changes = {};
-			if (dirty[0] & /*imageSelectionRectOffset*/ 1024) rectmanipulator_changes.rect = /*imageSelectionRectOffset*/ ctx[10];
-			if (dirty[0] & /*$isActive*/ 2048) rectmanipulator_changes.visible = /*$isActive*/ ctx[11];
+			if (dirty[0] & /*imageSelectionRectOffset*/ 2048) rectmanipulator_changes.rect = /*imageSelectionRectOffset*/ ctx[11];
+			if (dirty[0] & /*$isActive*/ 512) rectmanipulator_changes.visible = /*$isActive*/ ctx[9];
 			if (dirty[0] & /*cropImageSelectionCornerStyle*/ 4) rectmanipulator_changes.style = /*cropImageSelectionCornerStyle*/ ctx[2];
 			rectmanipulator.$set(rectmanipulator_changes);
 		},
@@ -23320,8 +26076,8 @@ function create_if_block_4$2(ctx) {
 	};
 }
 
-// (1403:8) {#if shouldRenderInfoIndicator}
-function create_if_block_3$2(ctx) {
+// (1479:8) {#if shouldRenderInfoIndicator}
+function create_if_block_3$3(ctx) {
 	let imageinfo;
 	let current;
 
@@ -23361,7 +26117,7 @@ function create_if_block_3$2(ctx) {
 	};
 }
 
-// (1358:4) 
+// (1431:4) 
 function create_main_slot$1(ctx) {
 	let div1;
 	let div0;
@@ -23372,8 +26128,8 @@ function create_main_slot$1(ctx) {
 	let mounted;
 	let dispose;
 	let if_block0 = /*shouldRenderImageSelection*/ ctx[17] && /*shouldRenderImageSelectionRecenterButton*/ ctx[18] && create_if_block_5$2(ctx);
-	let if_block1 = /*shouldRenderImageSelection*/ ctx[17] && create_if_block_4$2(ctx);
-	let if_block2 = /*shouldRenderInfoIndicator*/ ctx[16] && create_if_block_3$2(ctx);
+	let if_block1 = /*shouldRenderImageSelection*/ ctx[17] && create_if_block_4$3(ctx);
+	let if_block2 = /*shouldRenderInfoIndicator*/ ctx[16] && create_if_block_3$3(ctx);
 
 	return {
 		c() {
@@ -23393,37 +26149,37 @@ function create_main_slot$1(ctx) {
 			if (if_block0) if_block0.m(div0, null);
 			append(div0, t0);
 			if (if_block1) if_block1.m(div0, null);
-			/*div0_binding*/ ctx[142](div0);
+			/*div0_binding*/ ctx[146](div0);
 			append(div1, t1);
 			if (if_block2) if_block2.m(div1, null);
 			current = true;
 
 			if (!mounted) {
 				dispose = [
-					listen(div0, "measure", /*measure_handler_1*/ ctx[140]),
+					listen(div0, "measure", /*measure_handler_1*/ ctx[144]),
 					action_destroyer(measurable.call(null, div0)),
 					listen(
 						div0,
 						"wheel",
 						function () {
-							if (is_function(/*cropEnableZoom*/ ctx[3] && /*handleWheel*/ ctx[78])) (/*cropEnableZoom*/ ctx[3] && /*handleWheel*/ ctx[78]).apply(this, arguments);
+							if (is_function(/*cropEnableZoom*/ ctx[3] && /*handleWheel*/ ctx[79])) (/*cropEnableZoom*/ ctx[3] && /*handleWheel*/ ctx[79]).apply(this, arguments);
 						},
 						{ passive: false }
 					),
-					listen(div0, "interactionstart", /*handleImageDragStart*/ ctx[65]),
-					listen(div0, "interactionupdate", /*handleImageDrag*/ ctx[66]),
-					listen(div0, "interactionrelease", /*handleImageDragRelease*/ ctx[68]),
-					listen(div0, "interactionend", /*handleImageDragEnd*/ ctx[67]),
+					listen(div0, "interactionstart", /*handleImageDragStart*/ ctx[66]),
+					listen(div0, "interactionupdate", /*handleImageDrag*/ ctx[67]),
+					listen(div0, "interactionrelease", /*handleImageDragRelease*/ ctx[69]),
+					listen(div0, "interactionend", /*handleImageDragEnd*/ ctx[68]),
 					action_destroyer(interactable_action = interactable.call(null, div0, {
 						drag: true,
 						pinch: /*cropEnableZoom*/ ctx[3],
 						inertia: true,
 						matchTarget: true,
-						getEventPosition: /*interactable_function*/ ctx[143]
+						getEventPosition: /*interactable_function*/ ctx[147]
 					})),
-					listen(div0, "gesturedown", /*handleGestureStart*/ ctx[75]),
-					listen(div0, "gestureupdate", /*handleGestureUpdate*/ ctx[76]),
-					listen(div0, "gestureup", /*handleGestureEnd*/ ctx[77]),
+					listen(div0, "gesturedown", /*handleGestureStart*/ ctx[76]),
+					listen(div0, "gestureupdate", /*handleGestureUpdate*/ ctx[77]),
+					listen(div0, "gestureup", /*handleGestureEnd*/ ctx[78]),
 					action_destroyer(gesturable.call(null, div0))
 				];
 
@@ -23464,7 +26220,7 @@ function create_main_slot$1(ctx) {
 						transition_in(if_block1, 1);
 					}
 				} else {
-					if_block1 = create_if_block_4$2(ctx);
+					if_block1 = create_if_block_4$3(ctx);
 					if_block1.c();
 					transition_in(if_block1, 1);
 					if_block1.m(div0, null);
@@ -23484,7 +26240,7 @@ function create_main_slot$1(ctx) {
 				pinch: /*cropEnableZoom*/ ctx[3],
 				inertia: true,
 				matchTarget: true,
-				getEventPosition: /*interactable_function*/ ctx[143]
+				getEventPosition: /*interactable_function*/ ctx[147]
 			});
 
 			if (/*shouldRenderInfoIndicator*/ ctx[16]) {
@@ -23495,7 +26251,7 @@ function create_main_slot$1(ctx) {
 						transition_in(if_block2, 1);
 					}
 				} else {
-					if_block2 = create_if_block_3$2(ctx);
+					if_block2 = create_if_block_3$3(ctx);
 					if_block2.c();
 					transition_in(if_block2, 1);
 					if_block2.m(div1, null);
@@ -23527,7 +26283,7 @@ function create_main_slot$1(ctx) {
 			if (detaching) detach(div1);
 			if (if_block0) if_block0.d();
 			if (if_block1) if_block1.d();
-			/*div0_binding*/ ctx[142](null);
+			/*div0_binding*/ ctx[146](null);
 			if (if_block2) if_block2.d();
 			mounted = false;
 			run_all(dispose);
@@ -23535,7 +26291,7 @@ function create_main_slot$1(ctx) {
 	};
 }
 
-// (1411:4) {#if shouldRenderFooter}
+// (1487:8) {#if shouldRenderFooter}
 function create_if_block$4(ctx) {
 	let tablist;
 	let t;
@@ -23551,9 +26307,9 @@ function create_if_block$4(ctx) {
 	let tablist_props = {
 		$$slots: {
 			default: [
-				create_default_slot_1$4,
-				({ tab }) => ({ 186: tab }),
-				({ tab }) => [0, 0, 0, 0, 0, 0, tab ? 1 : 0]
+				create_default_slot_1$3,
+				({ tab }) => ({ 192: tab }),
+				({ tab }) => [0, 0, 0, 0, 0, 0, tab ? 64 : 0]
 			]
 		},
 		$$scope: { ctx }
@@ -23564,7 +26320,7 @@ function create_if_block$4(ctx) {
 	}
 
 	tablist = new TabList({ props: tablist_props });
-	tablist.$on("select", /*select_handler*/ ctx[141]);
+	tablist.$on("select", /*select_handler*/ ctx[145]);
 
 	const tabpanels_spread_levels = [
 		{ class: "PinturaControlPanels" },
@@ -23576,9 +26332,9 @@ function create_if_block$4(ctx) {
 	let tabpanels_props = {
 		$$slots: {
 			default: [
-				create_default_slot$7,
-				({ panel }) => ({ 185: panel }),
-				({ panel }) => [0, 0, 0, 0, 0, panel ? 1073741824 : 0]
+				create_default_slot$9,
+				({ panel }) => ({ 191: panel }),
+				({ panel }) => [0, 0, 0, 0, 0, 0, panel ? 32 : 0]
 			]
 		},
 		$$scope: { ctx }
@@ -23611,7 +26367,7 @@ function create_if_block$4(ctx) {
 				])
 			: {};
 
-			if (dirty[6] & /*$$scope, tab*/ 3) {
+			if (dirty[6] & /*$$scope, tab*/ 192) {
 				tablist_changes.$$scope = { dirty, ctx };
 			}
 
@@ -23626,7 +26382,7 @@ function create_if_block$4(ctx) {
 				])
 			: {};
 
-			if (dirty[0] & /*$imageRotation, locale, $imageRotationRange, imageZoomLevelMin, $imageZoomLevelRange, $imageZoomLevel*/ 117457168 | dirty[5] & /*panel*/ 1073741824 | dirty[6] & /*$$scope*/ 2) {
+			if (dirty[0] & /*$imageRotation, locale, $imageRotationRange, imageZoomLevelMin, $imageZoomLevelRange, $imageZoomLevel*/ 117457168 | dirty[6] & /*$$scope, panel*/ 160) {
 				tabpanels_changes.$$scope = { dirty, ctx };
 			}
 
@@ -23651,10 +26407,10 @@ function create_if_block$4(ctx) {
 	};
 }
 
-// (1413:8) <TabList class="PinturaControlList" {tabs} {...tabsConfig} on:select={({ detail }) => transformSelected = detail} let:tab={tab}>
-function create_default_slot_1$4(ctx) {
+// (1488:12) <TabList                 class="PinturaControlList"                 {tabs}                 {...tabsConfig}                 on:select={({ detail }) => (transformSelected = detail)}                 let:tab             >
+function create_default_slot_1$3(ctx) {
 	let span;
-	let t_value = /*tab*/ ctx[186].label + "";
+	let t_value = /*tab*/ ctx[192].label + "";
 	let t;
 
 	return {
@@ -23667,7 +26423,7 @@ function create_default_slot_1$4(ctx) {
 			append(span, t);
 		},
 		p(ctx, dirty) {
-			if (dirty[6] & /*tab*/ 1 && t_value !== (t_value = /*tab*/ ctx[186].label + "")) set_data(t, t_value);
+			if (dirty[6] & /*tab*/ 64 && t_value !== (t_value = /*tab*/ ctx[192].label + "")) set_data(t, t_value);
 		},
 		d(detaching) {
 			if (detaching) detach(span);
@@ -23675,7 +26431,7 @@ function create_default_slot_1$4(ctx) {
 	};
 }
 
-// (1428:56) 
+// (1516:59) 
 function create_if_block_2$3(ctx) {
 	let rangeinput;
 	let current;
@@ -23691,9 +26447,9 @@ function create_if_block_2$3(ctx) {
 				value: /*$imageZoomLevel*/ ctx[26],
 				labelReset: /*locale*/ ctx[4].labelReset,
 				valueLabel: `${Math.round(/*$imageZoomLevel*/ ctx[26] * 100)}%`,
-				oninputstart: /*handleResizeStart*/ ctx[72],
-				oninputmove: /*handleResizeMove*/ ctx[73],
-				oninputend: /*handleResizeEnd*/ ctx[74]
+				oninputstart: /*handleResizeStart*/ ctx[73],
+				oninputmove: /*handleResizeMove*/ ctx[74],
+				oninputend: /*handleResizeEnd*/ ctx[75]
 			}
 		});
 
@@ -23730,7 +26486,7 @@ function create_if_block_2$3(ctx) {
 	};
 }
 
-// (1418:12) {#if panel === cropUniqueId + '-rotation' }
+// (1505:16) {#if panel === cropUniqueId + '-rotation'}
 function create_if_block_1$4(ctx) {
 	let imagerotator;
 	let current;
@@ -23742,9 +26498,9 @@ function create_if_block_1$4(ctx) {
 				labelReset: /*locale*/ ctx[4].labelReset,
 				valueMin: /*$imageRotationRange*/ ctx[24][0],
 				valueMax: /*$imageRotationRange*/ ctx[24][1],
-				oninputstart: /*handleRotateStart*/ ctx[62],
-				oninputmove: /*handleRotateMove*/ ctx[63],
-				oninputend: /*handleRotateEnd*/ ctx[64]
+				oninputstart: /*handleRotateStart*/ ctx[63],
+				oninputmove: /*handleRotateMove*/ ctx[64],
+				oninputend: /*handleRotateEnd*/ ctx[65]
 			}
 		});
 
@@ -23779,8 +26535,8 @@ function create_if_block_1$4(ctx) {
 	};
 }
 
-// (1417:8) <TabPanels class="PinturaControlPanels" panelClass="PinturaControlPanel" {panels} {...tabsConfig} let:panel>
-function create_default_slot$7(ctx) {
+// (1498:12) <TabPanels                 class="PinturaControlPanels"                 panelClass="PinturaControlPanel"                 {panels}                 {...tabsConfig}                 let:panel             >
+function create_default_slot$9(ctx) {
 	let current_block_type_index;
 	let if_block;
 	let if_block_anchor;
@@ -23789,8 +26545,8 @@ function create_default_slot$7(ctx) {
 	const if_blocks = [];
 
 	function select_block_type(ctx, dirty) {
-		if (/*panel*/ ctx[185] === /*cropUniqueId*/ ctx[84] + "-rotation") return 0;
-		if (/*panel*/ ctx[185] === /*cropUniqueId*/ ctx[84] + "-zoom") return 1;
+		if (/*panel*/ ctx[191] === /*cropUniqueId*/ ctx[85] + "-rotation") return 0;
+		if (/*panel*/ ctx[191] === /*cropUniqueId*/ ctx[85] + "-zoom") return 1;
 		return -1;
 	}
 
@@ -23866,8 +26622,8 @@ function create_default_slot$7(ctx) {
 	};
 }
 
-// (1410:4) 
-function create_footer_slot$4(ctx) {
+// (1486:4) 
+function create_footer_slot$5(ctx) {
 	let div;
 	let current;
 	let if_block = /*shouldRenderFooter*/ ctx[20] && create_if_block$4(ctx);
@@ -23928,19 +26684,19 @@ function create_footer_slot$4(ctx) {
 	};
 }
 
-function create_fragment$g(ctx) {
+function create_fragment$l(ctx) {
 	let util;
 	let updating_root;
 	let current;
 
 	function util_root_binding(value) {
-		/*util_root_binding*/ ctx[144](value);
+		/*util_root_binding*/ ctx[148](value);
 	}
 
 	let util_props = {
 		hasHeader: /*shouldRenderToolbar*/ ctx[19],
 		$$slots: {
-			footer: [create_footer_slot$4],
+			footer: [create_footer_slot$5],
 			main: [create_main_slot$1],
 			header: [create_header_slot]
 		},
@@ -23953,7 +26709,7 @@ function create_fragment$g(ctx) {
 
 	util = new Util({ props: util_props });
 	binding_callbacks.push(() => bind(util, "root", util_root_binding));
-	util.$on("measure", /*measure_handler*/ ctx[145]);
+	util.$on("measure", /*measure_handler*/ ctx[149]);
 
 	return {
 		c() {
@@ -23967,7 +26723,7 @@ function create_fragment$g(ctx) {
 			const util_changes = {};
 			if (dirty[0] & /*shouldRenderToolbar*/ 524288) util_changes.hasHeader = /*shouldRenderToolbar*/ ctx[19];
 
-			if (dirty[0] & /*footerStyle, panels, tabsConfig, $imageRotation, locale, $imageRotationRange, imageZoomLevelMin, $imageZoomLevelRange, $imageZoomLevel, tabs, transformSelected, shouldRenderFooter, $imageCropRect, shouldRenderInfoIndicator, stageRef, cropEnableZoom, $rootRect, imageSelectionRectOffset, $isActive, cropImageSelectionCornerStyle, shouldRenderImageSelection, canCenter, $recenterOpacity, $recenterOffset, shouldRenderImageSelectionRecenterButton, tools*/ 536338429 | dirty[6] & /*$$scope*/ 2) {
+			if (dirty[0] & /*footerStyle, panels, tabsConfig, $imageRotation, locale, $imageRotationRange, imageZoomLevelMin, $imageZoomLevelRange, $imageZoomLevel, tabs, transformSelected, shouldRenderFooter, $imageCropRect, shouldRenderInfoIndicator, stageRef, cropEnableZoom, $rootRect, imageSelectionRectOffset, $isActive, cropImageSelectionCornerStyle, shouldRenderImageSelection, canCenter, $recenterOpacity, $recenterOffset, shouldRenderImageSelectionRecenterButton, tools*/ 536338429 | dirty[6] & /*$$scope*/ 128) {
 				util_changes.$$scope = { dirty, ctx };
 			}
 
@@ -23997,7 +26753,7 @@ function create_fragment$g(ctx) {
 const imageZoomLevelMax = 1;
 const imageZoomLevelBase = 0;
 
-function instance$g($$self, $$props, $$invalidate) {
+function instance$l($$self, $$props, $$invalidate) {
 	let imageZoomLevelMin;
 	let imageSelectionOffset;
 	let imageSelectionCenter;
@@ -24033,6 +26789,12 @@ function instance$g($$self, $$props, $$invalidate) {
 	let $imageOutputSize;
 	let $imageCropMinSize;
 	let $imageCropLimitToImage;
+	let $env;
+
+	let $isActive,
+		$$unsubscribe_isActive = noop,
+		$$subscribe_isActive = () => ($$unsubscribe_isActive(), $$unsubscribe_isActive = subscribe(isActive, $$value => $$invalidate(9, $isActive = $$value)), isActive);
+
 	let $isInteracting;
 	let $imageSelectionRectSnapshot;
 	let $imageSelectionRect;
@@ -24047,13 +26809,8 @@ function instance$g($$self, $$props, $$invalidate) {
 	let $stageRect;
 	let $imageCropRangeAspectRatio;
 	let $imageSelectionRectPresentation;
-	let $env;
 	let $imageScalar;
-
-	let $isActive,
-		$$unsubscribe_isActive = noop,
-		$$subscribe_isActive = () => ($$unsubscribe_isActive(), $$unsubscribe_isActive = subscribe(isActive, $$value => $$invalidate(11, $isActive = $$value)), isActive);
-
+	let $framePadded;
 	let $imagePreviewModifiers;
 	let $imageOverlayMarkup;
 	let $imageSelectionGuides;
@@ -24100,6 +26857,8 @@ function instance$g($$self, $$props, $$invalidate) {
 	let { cropSelectPresetOptions = undefined } = $$props;
 	let { cropEnableSelectPreset = true } = $$props;
 	let { cropEnableButtonToggleCropLimit = false } = $$props;
+	let { cropWillRenderTools = passthrough } = $$props;
+	let { cropActiveTransformTool = "rotation" } = $$props;
 	let { locale = {} } = $$props;
 	let { tools = [] } = $$props;
 
@@ -24135,8 +26894,8 @@ function instance$g($$self, $$props, $$invalidate) {
 		return vectorEqual(imageCenter, cropCenter);
 	};
 
-	const canMatchCropAspectRatioToRotation = () => (// is custom crop mode
-	isCustomCrop() || // can match preset crop and preset is available
+	const canMatchCropAspectRatioToRotation = () => // is custom crop mode
+	(isCustomCrop() || // can match preset crop and preset is available
 	cropEnableRotateMatchImageAspectRatio === "always" && hasValidRotatedCropAspectRatio()) && isCropCentered($imageCropRect, $imageSize, $imageRotation) && isCropMaxSize($imageCropRect, $imageSize, $imageRotation);
 
 	const applyRotation = value => {
@@ -24153,40 +26912,41 @@ function instance$g($$self, $$props, $$invalidate) {
 	};
 
 	const { history, env, isInteracting, isInteractingFraction, rootRect, stageRect, utilRect, rootLineColor, animation, elasticityMultiplier, rangeInputElasticity, presentationScalar, // effect filtering
-	imagePreviewModifiers, // crop selection
-	imageFlipX, imageFlipY, imageRotation, imageRotationRange, imageOutputSize, imageSelectionRect, imageSelectionRectSnapshot, imageSelectionRectIntent, imageSelectionRectPresentation, imageCropRectIntent, imageCropRectOrigin, imageCropRect, imageCropMinSize, imageCropMaxSize, imageCropRange, imageCropAspectRatio, imageCropRectAspectRatio, imageCropLimitToImage, imageSize, imageScalar, imageOverlayMarkup } = stores; // the actual limited rectangle
+	imagePreviewModifiers, imageOutlineOpacity, // crop selection
+	imageFlipX, imageFlipY, imageRotation, imageRotationRange, imageOutputSize, imageSelectionRect, imageSelectionRectSnapshot, imageSelectionRectIntent, imageSelectionRectPresentation, imageCropRectIntent, imageCropRectOrigin, imageCropRect, imageCropMinSize, imageCropMaxSize, imageCropRange, imageCropAspectRatio, imageCropRectAspectRatio, imageCropLimitToImage, imageSize, imageScalar, imageOverlayMarkup, framePadded } = stores; // the actual limited rectangle
 	// used to calculate rectangle while dragging
 	// can be used to set set intended rectangle
 	// readonly
 
-	component_subscribe($$self, env, value => $$invalidate(130, $env = value));
-	component_subscribe($$self, isInteracting, value => $$invalidate(116, $isInteracting = value));
+	component_subscribe($$self, env, value => $$invalidate(119, $env = value));
+	component_subscribe($$self, isInteracting, value => $$invalidate(120, $isInteracting = value));
 	component_subscribe($$self, rootRect, value => $$invalidate(15, $rootRect = value));
-	component_subscribe($$self, stageRect, value => $$invalidate(121, $stageRect = value));
-	component_subscribe($$self, utilRect, value => $$invalidate(120, $utilRect = value));
-	component_subscribe($$self, animation, value => $$invalidate(138, $animation = value));
-	component_subscribe($$self, presentationScalar, value => $$invalidate(119, $presentationScalar = value));
-	component_subscribe($$self, imagePreviewModifiers, value => $$invalidate(133, $imagePreviewModifiers = value));
-	component_subscribe($$self, imageFlipX, value => $$invalidate(110, $imageFlipX = value));
-	component_subscribe($$self, imageFlipY, value => $$invalidate(109, $imageFlipY = value));
+	component_subscribe($$self, stageRect, value => $$invalidate(125, $stageRect = value));
+	component_subscribe($$self, utilRect, value => $$invalidate(124, $utilRect = value));
+	component_subscribe($$self, animation, value => $$invalidate(142, $animation = value));
+	component_subscribe($$self, presentationScalar, value => $$invalidate(123, $presentationScalar = value));
+	component_subscribe($$self, imagePreviewModifiers, value => $$invalidate(137, $imagePreviewModifiers = value));
+	component_subscribe($$self, imageFlipX, value => $$invalidate(113, $imageFlipX = value));
+	component_subscribe($$self, imageFlipY, value => $$invalidate(112, $imageFlipY = value));
 	component_subscribe($$self, imageRotation, value => $$invalidate(8, $imageRotation = value));
 	component_subscribe($$self, imageRotationRange, value => $$invalidate(24, $imageRotationRange = value));
-	component_subscribe($$self, imageOutputSize, value => $$invalidate(155, $imageOutputSize = value));
-	component_subscribe($$self, imageSelectionRect, value => $$invalidate(118, $imageSelectionRect = value));
-	component_subscribe($$self, imageSelectionRectSnapshot, value => $$invalidate(117, $imageSelectionRectSnapshot = value));
-	component_subscribe($$self, imageSelectionRectIntent, value => $$invalidate(157, $imageSelectionRectIntent = value));
-	component_subscribe($$self, imageSelectionRectPresentation, value => $$invalidate(124, $imageSelectionRectPresentation = value));
-	component_subscribe($$self, imageCropRectIntent, value => $$invalidate(159, $imageCropRectIntent = value));
-	component_subscribe($$self, imageCropRectOrigin, value => $$invalidate(158, $imageCropRectOrigin = value));
+	component_subscribe($$self, imageOutputSize, value => $$invalidate(160, $imageOutputSize = value));
+	component_subscribe($$self, imageSelectionRect, value => $$invalidate(122, $imageSelectionRect = value));
+	component_subscribe($$self, imageSelectionRectSnapshot, value => $$invalidate(121, $imageSelectionRectSnapshot = value));
+	component_subscribe($$self, imageSelectionRectIntent, value => $$invalidate(162, $imageSelectionRectIntent = value));
+	component_subscribe($$self, imageSelectionRectPresentation, value => $$invalidate(128, $imageSelectionRectPresentation = value));
+	component_subscribe($$self, imageCropRectIntent, value => $$invalidate(164, $imageCropRectIntent = value));
+	component_subscribe($$self, imageCropRectOrigin, value => $$invalidate(163, $imageCropRectOrigin = value));
 	component_subscribe($$self, imageCropRect, value => $$invalidate(7, $imageCropRect = value));
-	component_subscribe($$self, imageCropMinSize, value => $$invalidate(114, $imageCropMinSize = value));
-	component_subscribe($$self, imageCropMaxSize, value => $$invalidate(156, $imageCropMaxSize = value));
-	component_subscribe($$self, imageCropRange, value => $$invalidate(160, $imageCropRange = value));
-	component_subscribe($$self, imageCropAspectRatio, value => $$invalidate(154, $imageCropAspectRatio = value));
-	component_subscribe($$self, imageCropLimitToImage, value => $$invalidate(115, $imageCropLimitToImage = value));
-	component_subscribe($$self, imageSize, value => $$invalidate(108, $imageSize = value));
-	component_subscribe($$self, imageScalar, value => $$invalidate(132, $imageScalar = value));
-	component_subscribe($$self, imageOverlayMarkup, value => $$invalidate(162, $imageOverlayMarkup = value));
+	component_subscribe($$self, imageCropMinSize, value => $$invalidate(117, $imageCropMinSize = value));
+	component_subscribe($$self, imageCropMaxSize, value => $$invalidate(161, $imageCropMaxSize = value));
+	component_subscribe($$self, imageCropRange, value => $$invalidate(165, $imageCropRange = value));
+	component_subscribe($$self, imageCropAspectRatio, value => $$invalidate(159, $imageCropAspectRatio = value));
+	component_subscribe($$self, imageCropLimitToImage, value => $$invalidate(118, $imageCropLimitToImage = value));
+	component_subscribe($$self, imageSize, value => $$invalidate(111, $imageSize = value));
+	component_subscribe($$self, imageScalar, value => $$invalidate(135, $imageScalar = value));
+	component_subscribe($$self, imageOverlayMarkup, value => $$invalidate(167, $imageOverlayMarkup = value));
+	component_subscribe($$self, framePadded, value => $$invalidate(136, $framePadded = value));
 
 	//
 	// resizing crop
@@ -24481,7 +27241,7 @@ function instance$g($$self, $$props, $$invalidate) {
 		]);
 	});
 
-	component_subscribe($$self, imageCropRangeAspectRatio, value => $$invalidate(161, $imageCropRangeAspectRatio = value));
+	component_subscribe($$self, imageCropRangeAspectRatio, value => $$invalidate(166, $imageCropRangeAspectRatio = value));
 
 	// this is the max value range that can be set (triggers white range indicator bar)
 	const imageZoomLevelRange = derived(
@@ -24859,7 +27619,7 @@ function instance$g($$self, $$props, $$invalidate) {
 		set(index);
 	});
 
-	component_subscribe($$self, selectedPresetIndex, value => $$invalidate(112, $selectedPresetIndex = value));
+	component_subscribe($$self, selectedPresetIndex, value => $$invalidate(115, $selectedPresetIndex = value));
 
 	const getAspectRatioBySelectedIndex = selectedIndex => {
 		if (!cropSelectPresetOptions || selectedIndex === -1) return;
@@ -24912,7 +27672,7 @@ function instance$g($$self, $$props, $$invalidate) {
 		set(shapes);
 	});
 
-	component_subscribe($$self, imageSelectionGuides, value => $$invalidate(134, $imageSelectionGuides = value));
+	component_subscribe($$self, imageSelectionGuides, value => $$invalidate(138, $imageSelectionGuides = value));
 
 	const syncGuides = () => {
 		// remove existing guides
@@ -24926,7 +27686,11 @@ function instance$g($$self, $$props, $$invalidate) {
 	};
 
 	const cropUniqueId = `crop-${getUniqueId()}`;
-	let transformInitial = cropEnableRotationInput ? "rotation" : "zoom";
+
+	let transformInitial = cropEnableRotationInput
+	? cropActiveTransformTool
+	: "zoom";
+
 	let transformToolInitial = cropUniqueId + "-" + transformInitial;
 	let transformSelected = transformToolInitial;
 	let root = undefined;
@@ -24935,7 +27699,7 @@ function instance$g($$self, $$props, $$invalidate) {
 	let stageRef;
 
 	const footerOffset = spring($animation ? 20 : 0);
-	component_subscribe($$self, footerOffset, value => $$invalidate(139, $footerOffset = value));
+	component_subscribe($$self, footerOffset, value => $$invalidate(143, $footerOffset = value));
 
 	function measure_handler_1(event) {
 		bubble($$self, event);
@@ -24963,233 +27727,240 @@ function instance$g($$self, $$props, $$invalidate) {
 
 	$$self.$$set = $$props => {
 		if ("isActive" in $$props) $$subscribe_isActive($$invalidate(1, isActive = $$props.isActive));
-		if ("stores" in $$props) $$invalidate(87, stores = $$props.stores);
+		if ("stores" in $$props) $$invalidate(88, stores = $$props.stores);
 		if ("cropImageSelectionCornerStyle" in $$props) $$invalidate(2, cropImageSelectionCornerStyle = $$props.cropImageSelectionCornerStyle);
-		if ("cropWillRenderImageSelectionGuides" in $$props) $$invalidate(88, cropWillRenderImageSelectionGuides = $$props.cropWillRenderImageSelectionGuides);
-		if ("cropAutoCenterImageSelectionTimeout" in $$props) $$invalidate(89, cropAutoCenterImageSelectionTimeout = $$props.cropAutoCenterImageSelectionTimeout);
-		if ("cropEnableZoomMatchImageAspectRatio" in $$props) $$invalidate(90, cropEnableZoomMatchImageAspectRatio = $$props.cropEnableZoomMatchImageAspectRatio);
-		if ("cropEnableRotateMatchImageAspectRatio" in $$props) $$invalidate(91, cropEnableRotateMatchImageAspectRatio = $$props.cropEnableRotateMatchImageAspectRatio);
-		if ("cropEnableRotationInput" in $$props) $$invalidate(92, cropEnableRotationInput = $$props.cropEnableRotationInput);
+		if ("cropWillRenderImageSelectionGuides" in $$props) $$invalidate(89, cropWillRenderImageSelectionGuides = $$props.cropWillRenderImageSelectionGuides);
+		if ("cropAutoCenterImageSelectionTimeout" in $$props) $$invalidate(90, cropAutoCenterImageSelectionTimeout = $$props.cropAutoCenterImageSelectionTimeout);
+		if ("cropEnableZoomMatchImageAspectRatio" in $$props) $$invalidate(91, cropEnableZoomMatchImageAspectRatio = $$props.cropEnableZoomMatchImageAspectRatio);
+		if ("cropEnableRotateMatchImageAspectRatio" in $$props) $$invalidate(92, cropEnableRotateMatchImageAspectRatio = $$props.cropEnableRotateMatchImageAspectRatio);
+		if ("cropEnableRotationInput" in $$props) $$invalidate(93, cropEnableRotationInput = $$props.cropEnableRotationInput);
 		if ("cropEnableZoom" in $$props) $$invalidate(3, cropEnableZoom = $$props.cropEnableZoom);
-		if ("cropEnableZoomInput" in $$props) $$invalidate(93, cropEnableZoomInput = $$props.cropEnableZoomInput);
-		if ("cropEnableZoomAutoHide" in $$props) $$invalidate(94, cropEnableZoomAutoHide = $$props.cropEnableZoomAutoHide);
-		if ("cropEnableImageSelection" in $$props) $$invalidate(95, cropEnableImageSelection = $$props.cropEnableImageSelection);
-		if ("cropEnableInfoIndicator" in $$props) $$invalidate(96, cropEnableInfoIndicator = $$props.cropEnableInfoIndicator);
-		if ("cropEnableZoomTowardsWheelPosition" in $$props) $$invalidate(97, cropEnableZoomTowardsWheelPosition = $$props.cropEnableZoomTowardsWheelPosition);
-		if ("cropEnableLimitWheelInputToCropSelection" in $$props) $$invalidate(98, cropEnableLimitWheelInputToCropSelection = $$props.cropEnableLimitWheelInputToCropSelection);
-		if ("cropEnableCenterImageSelection" in $$props) $$invalidate(99, cropEnableCenterImageSelection = $$props.cropEnableCenterImageSelection);
-		if ("cropEnableButtonRotateLeft" in $$props) $$invalidate(100, cropEnableButtonRotateLeft = $$props.cropEnableButtonRotateLeft);
-		if ("cropEnableButtonRotateRight" in $$props) $$invalidate(101, cropEnableButtonRotateRight = $$props.cropEnableButtonRotateRight);
-		if ("cropEnableButtonFlipHorizontal" in $$props) $$invalidate(102, cropEnableButtonFlipHorizontal = $$props.cropEnableButtonFlipHorizontal);
-		if ("cropEnableButtonFlipVertical" in $$props) $$invalidate(103, cropEnableButtonFlipVertical = $$props.cropEnableButtonFlipVertical);
-		if ("cropSelectPresetOptions" in $$props) $$invalidate(104, cropSelectPresetOptions = $$props.cropSelectPresetOptions);
-		if ("cropEnableSelectPreset" in $$props) $$invalidate(105, cropEnableSelectPreset = $$props.cropEnableSelectPreset);
-		if ("cropEnableButtonToggleCropLimit" in $$props) $$invalidate(106, cropEnableButtonToggleCropLimit = $$props.cropEnableButtonToggleCropLimit);
+		if ("cropEnableZoomInput" in $$props) $$invalidate(94, cropEnableZoomInput = $$props.cropEnableZoomInput);
+		if ("cropEnableZoomAutoHide" in $$props) $$invalidate(95, cropEnableZoomAutoHide = $$props.cropEnableZoomAutoHide);
+		if ("cropEnableImageSelection" in $$props) $$invalidate(96, cropEnableImageSelection = $$props.cropEnableImageSelection);
+		if ("cropEnableInfoIndicator" in $$props) $$invalidate(97, cropEnableInfoIndicator = $$props.cropEnableInfoIndicator);
+		if ("cropEnableZoomTowardsWheelPosition" in $$props) $$invalidate(98, cropEnableZoomTowardsWheelPosition = $$props.cropEnableZoomTowardsWheelPosition);
+		if ("cropEnableLimitWheelInputToCropSelection" in $$props) $$invalidate(99, cropEnableLimitWheelInputToCropSelection = $$props.cropEnableLimitWheelInputToCropSelection);
+		if ("cropEnableCenterImageSelection" in $$props) $$invalidate(100, cropEnableCenterImageSelection = $$props.cropEnableCenterImageSelection);
+		if ("cropEnableButtonRotateLeft" in $$props) $$invalidate(101, cropEnableButtonRotateLeft = $$props.cropEnableButtonRotateLeft);
+		if ("cropEnableButtonRotateRight" in $$props) $$invalidate(102, cropEnableButtonRotateRight = $$props.cropEnableButtonRotateRight);
+		if ("cropEnableButtonFlipHorizontal" in $$props) $$invalidate(103, cropEnableButtonFlipHorizontal = $$props.cropEnableButtonFlipHorizontal);
+		if ("cropEnableButtonFlipVertical" in $$props) $$invalidate(104, cropEnableButtonFlipVertical = $$props.cropEnableButtonFlipVertical);
+		if ("cropSelectPresetOptions" in $$props) $$invalidate(105, cropSelectPresetOptions = $$props.cropSelectPresetOptions);
+		if ("cropEnableSelectPreset" in $$props) $$invalidate(106, cropEnableSelectPreset = $$props.cropEnableSelectPreset);
+		if ("cropEnableButtonToggleCropLimit" in $$props) $$invalidate(107, cropEnableButtonToggleCropLimit = $$props.cropEnableButtonToggleCropLimit);
+		if ("cropWillRenderTools" in $$props) $$invalidate(108, cropWillRenderTools = $$props.cropWillRenderTools);
+		if ("cropActiveTransformTool" in $$props) $$invalidate(109, cropActiveTransformTool = $$props.cropActiveTransformTool);
 		if ("locale" in $$props) $$invalidate(4, locale = $$props.locale);
 		if ("tools" in $$props) $$invalidate(0, tools = $$props.tools);
 	};
 
 	$$self.$$.update = () => {
-		if ($$self.$$.dirty[4] & /*$env*/ 64) {
-			$$invalidate(129, isOverlayMode = $env.layoutMode === "overlay");
+		if ($$self.$$.dirty[3] & /*$env*/ 67108864) {
+			$$invalidate(133, isOverlayMode = $env.layoutMode === "overlay");
 		}
 
-		if ($$self.$$.dirty[3] & /*cropEnableSelectPreset*/ 4096 | $$self.$$.dirty[4] & /*isOverlayMode*/ 32) {
-			$$invalidate(111, shouldRenderPresetSelect = cropEnableSelectPreset && !isOverlayMode);
+		if ($$self.$$.dirty[3] & /*cropEnableSelectPreset*/ 8192 | $$self.$$.dirty[4] & /*isOverlayMode*/ 512) {
+			$$invalidate(114, shouldRenderPresetSelect = cropEnableSelectPreset && !isOverlayMode);
 		}
 
-		if ($$self.$$.dirty[3] & /*$utilRect, $imageSelectionRect*/ 167772160) {
+		if ($$self.$$.dirty[3] & /*$imageSelectionRect*/ 536870912 | $$self.$$.dirty[4] & /*$utilRect*/ 1) {
 			// determine if we can center the crop, if we can, show the crop center button
-			$$invalidate(125, imageSelectionCenteredRect = $utilRect && $imageSelectionRect && rectCenterRect($utilRect, $imageSelectionRect));
+			$$invalidate(129, imageSelectionCenteredRect = $utilRect && $imageSelectionRect && rectCenterRect($utilRect, $imageSelectionRect));
 		}
 
-		if ($$self.$$.dirty[3] & /*$imageSelectionRect*/ 33554432 | $$self.$$.dirty[4] & /*imageSelectionCenteredRect*/ 2) {
-			$$invalidate(126, isImageSelectionDisplayed = !!($imageSelectionRect && imageSelectionCenteredRect));
+		if ($$self.$$.dirty[3] & /*$imageSelectionRect*/ 536870912 | $$self.$$.dirty[4] & /*imageSelectionCenteredRect*/ 32) {
+			$$invalidate(130, isImageSelectionDisplayed = !!($imageSelectionRect && imageSelectionCenteredRect));
 		}
 
-		if ($$self.$$.dirty[3] & /*$imageSelectionRect*/ 33554432 | $$self.$$.dirty[4] & /*isImageSelectionDisplayed, imageSelectionCenteredRect*/ 6) {
-			$$invalidate(113, isImageSelectionCentered = isImageSelectionDisplayed && rectEqual($imageSelectionRect, imageSelectionCenteredRect, value => fixPrecision(value, 5)));
+		if ($$self.$$.dirty[3] & /*$imageSelectionRect*/ 536870912 | $$self.$$.dirty[4] & /*isImageSelectionDisplayed, imageSelectionCenteredRect*/ 96) {
+			$$invalidate(116, isImageSelectionCentered = isImageSelectionDisplayed && rectEqual($imageSelectionRect, imageSelectionCenteredRect, value => fixPrecision(value, 5)));
 		}
 
-		if ($$self.$$.dirty[0] & /*locale, $imageRotation*/ 272 | $$self.$$.dirty[3] & /*cropEnableButtonRotateLeft, cropEnableButtonRotateRight, cropEnableButtonFlipHorizontal, $imageFlipY, $imageFlipX, cropEnableButtonFlipVertical, shouldRenderPresetSelect, cropSelectPresetOptions, $selectedPresetIndex, isImageSelectionCentered, $imageSize, $imageCropMinSize, cropEnableButtonToggleCropLimit, $imageCropLimitToImage*/ 8368000) {
-			// we do this so we don't get the weird "<Button/> will not be reactive if Button changes. Use <svelte:component this={Button}/> if you want this reactivity." warning
-			// const ButtonComponent = Button;
-			// dynamic toolbar
-			$$invalidate(0, tools = [
-				cropEnableButtonRotateLeft && [
-					"Button",
-					"rotate-left",
-					{
-						label: locale.cropLabelButtonRotateLeft,
-						labelClass: "PinturaToolbarContentWide",
-						icon: locale.cropIconButtonRotateLeft,
-						onclick: () => {
-							applyRotation(-Math.PI / 2);
-							history.write();
-						}
-					}
-				],
-				cropEnableButtonRotateRight && [
-					"Button",
-					"rotate-right",
-					{
-						label: locale.cropLabelButtonRotateRight,
-						labelClass: "PinturaToolbarContentWide",
-						icon: locale.cropIconButtonRotateRight,
-						onclick: () => {
-							applyRotation(Math.PI / 2);
-							history.write();
-						}
-					}
-				],
-				cropEnableButtonFlipHorizontal && [
-					"Button",
-					"flip-horizontal",
-					{
-						label: locale.cropLabelButtonFlipHorizontal,
-						labelClass: "PinturaToolbarContentWide",
-						icon: locale.cropIconButtonFlipHorizontal,
-						onclick: () => {
-							if (isRotatedSideways($imageRotation)) {
-								set_store_value(imageFlipY, $imageFlipY = !$imageFlipY, $imageFlipY);
-							} else {
-								set_store_value(imageFlipX, $imageFlipX = !$imageFlipX, $imageFlipX);
+		if ($$self.$$.dirty[0] & /*locale, $imageRotation*/ 272 | $$self.$$.dirty[3] & /*cropWillRenderTools, cropEnableButtonRotateLeft, cropEnableButtonRotateRight, cropEnableButtonFlipHorizontal, $imageFlipY, $imageFlipX, cropEnableButtonFlipVertical, shouldRenderPresetSelect, cropSelectPresetOptions, $selectedPresetIndex, isImageSelectionCentered, $imageSize, $imageCropMinSize, cropEnableButtonToggleCropLimit, $imageCropLimitToImage, $env*/ 134012672) {
+			$$invalidate(0, tools = cropWillRenderTools(
+				[
+					cropEnableButtonRotateLeft && [
+						"Button",
+						"rotate-left",
+						{
+							label: locale.cropLabelButtonRotateLeft,
+							labelClass: "PinturaToolbarContentWide",
+							icon: locale.cropIconButtonRotateLeft,
+							onclick: () => {
+								applyRotation(-Math.PI / 2);
+								history.write();
 							}
-
-							history.write();
 						}
-					}
-				],
-				cropEnableButtonFlipVertical && [
-					"Button",
-					"flip-vertical",
-					{
-						label: locale.cropLabelButtonFlipVertical,
-						labelClass: "PinturaToolbarContentWide",
-						icon: locale.cropIconButtonFlipVertical,
-						onclick: () => {
-							if (isRotatedSideways($imageRotation)) {
-								set_store_value(imageFlipX, $imageFlipX = !$imageFlipX, $imageFlipX);
-							} else {
-								set_store_value(imageFlipY, $imageFlipY = !$imageFlipY, $imageFlipY);
+					],
+					cropEnableButtonRotateRight && [
+						"Button",
+						"rotate-right",
+						{
+							label: locale.cropLabelButtonRotateRight,
+							labelClass: "PinturaToolbarContentWide",
+							icon: locale.cropIconButtonRotateRight,
+							onclick: () => {
+								applyRotation(Math.PI / 2);
+								history.write();
 							}
-
-							history.write();
 						}
-					}
-				],
-				shouldRenderPresetSelect && cropSelectPresetOptions && [
-					"Dropdown",
-					"select-preset",
-					{
-						icon: localize(locale.cropIconSelectPreset, locale, getAspectRatioBySelectedIndex($selectedPresetIndex)),
-						label: locale.cropLabelSelectPreset,
-						labelClass: "PinturaToolbarContentWide",
-						options: cropSelectPresetOptions,
-						selectedIndex: $selectedPresetIndex,
-						onchange: ({ value }) => {
-							if (isArray(value)) {
-								set_store_value(imageCropAspectRatio, $imageCropAspectRatio = getAspectRatio(value[0], value[1]), $imageCropAspectRatio);
-								set_store_value(imageOutputSize, $imageOutputSize = sizeCreateFromArray(value), $imageOutputSize);
-							} else {
-								set_store_value(imageCropAspectRatio, $imageCropAspectRatio = value, $imageCropAspectRatio);
-							}
-
-							if (isImageSelectionCentered) {
-								handleRecenterAction();
-							}
-
-							history.write();
-						},
-						optionMapper: option => {
-							// if no aspect ratio found we enable the option by default
-							let disabled = false;
-
-							// get aspect ratio for this option
-							const optionAspectRatio = isArray(option.value)
-							? option.value[0] / option.value[1]
-							: option.value;
-
-							// can be undefined in which case we don't need to check anything
-							if (optionAspectRatio) {
-								const maxCropSize = getMaxSizeInRect($imageSize, $imageRotation, optionAspectRatio);
-								disabled = maxCropSize.width < $imageCropMinSize.width || maxCropSize.height < $imageCropMinSize.height;
-							}
-
-							// add icon for this option
-							option.icon = getSelectionPresetOptionIcon(option.value, { bounds: 14 });
-
-							return { ...option, disabled };
-						}
-					}
-				],
-				cropEnableButtonToggleCropLimit && [
-					"Dropdown",
-					"select-crop-limit",
-					{
-						icon: localize(locale.cropIconCropBoundary, locale, $imageCropLimitToImage),
-						label: locale.cropLabelCropBoundary,
-						labelClass: "PinturaToolbarContentWide",
-						onchange: ({ value }) => {
-							set_store_value(imageCropLimitToImage, $imageCropLimitToImage = value, $imageCropLimitToImage);
-							history.write();
-						},
-						options: [
-							[
-								true,
-								locale.cropLabelCropBoundaryEdge,
-								{
-									icon: localize(locale.cropIconCropBoundary, locale, true)
+					],
+					cropEnableButtonFlipHorizontal && [
+						"Button",
+						"flip-horizontal",
+						{
+							label: locale.cropLabelButtonFlipHorizontal,
+							labelClass: "PinturaToolbarContentWide",
+							icon: locale.cropIconButtonFlipHorizontal,
+							onclick: () => {
+								if (isRotatedSideways($imageRotation)) {
+									set_store_value(imageFlipY, $imageFlipY = !$imageFlipY, $imageFlipY);
+								} else {
+									set_store_value(imageFlipX, $imageFlipX = !$imageFlipX, $imageFlipX);
 								}
-							],
-							[
-								false,
-								locale.cropLabelCropBoundaryNone,
-								{
-									icon: localize(locale.cropIconCropBoundary, locale, false)
+
+								history.write();
+							}
+						}
+					],
+					cropEnableButtonFlipVertical && [
+						"Button",
+						"flip-vertical",
+						{
+							label: locale.cropLabelButtonFlipVertical,
+							labelClass: "PinturaToolbarContentWide",
+							icon: locale.cropIconButtonFlipVertical,
+							onclick: () => {
+								if (isRotatedSideways($imageRotation)) {
+									set_store_value(imageFlipX, $imageFlipX = !$imageFlipX, $imageFlipX);
+								} else {
+									set_store_value(imageFlipY, $imageFlipY = !$imageFlipY, $imageFlipY);
 								}
+
+								history.write();
+							}
+						}
+					],
+					shouldRenderPresetSelect && cropSelectPresetOptions && [
+						"Dropdown",
+						"select-preset",
+						{
+							icon: localize(locale.cropIconSelectPreset, locale, getAspectRatioBySelectedIndex($selectedPresetIndex)),
+							label: locale.cropLabelSelectPreset,
+							labelClass: "PinturaToolbarContentWide",
+							options: cropSelectPresetOptions,
+							selectedIndex: $selectedPresetIndex,
+							onchange: ({ value }) => {
+								if (isArray(value)) {
+									set_store_value(imageCropAspectRatio, $imageCropAspectRatio = getAspectRatio(value[0], value[1]), $imageCropAspectRatio);
+									set_store_value(imageOutputSize, $imageOutputSize = sizeCreateFromArray(value), $imageOutputSize);
+								} else {
+									set_store_value(imageCropAspectRatio, $imageCropAspectRatio = value, $imageCropAspectRatio);
+								}
+
+								if (isImageSelectionCentered) {
+									handleRecenterAction();
+								}
+
+								history.write();
+							},
+							optionMapper: option => {
+								// if no aspect ratio found we enable the option by default
+								let disabled = false;
+
+								// get aspect ratio for this option
+								const optionAspectRatio = isArray(option.value)
+								? option.value[0] / option.value[1]
+								: option.value;
+
+								// can be undefined in which case we don't need to check anything
+								if (optionAspectRatio) {
+									const maxCropSize = getMaxSizeInRect($imageSize, $imageRotation, optionAspectRatio);
+									disabled = maxCropSize.width < $imageCropMinSize.width || maxCropSize.height < $imageCropMinSize.height;
+								}
+
+								// add icon for this option
+								option.icon = getSelectionPresetOptionIcon(option.value, { bounds: 14 });
+
+								return { ...option, disabled };
+							}
+						}
+					],
+					cropEnableButtonToggleCropLimit && [
+						"Dropdown",
+						"select-crop-limit",
+						{
+							icon: localize(locale.cropIconCropBoundary, locale, $imageCropLimitToImage),
+							label: locale.cropLabelCropBoundary,
+							labelClass: "PinturaToolbarContentWide",
+							onchange: ({ value }) => {
+								set_store_value(imageCropLimitToImage, $imageCropLimitToImage = value, $imageCropLimitToImage);
+								history.write();
+							},
+							options: [
+								[
+									true,
+									locale.cropLabelCropBoundaryEdge,
+									{
+										icon: localize(locale.cropIconCropBoundary, locale, true)
+									}
+								],
+								[
+									false,
+									locale.cropLabelCropBoundaryNone,
+									{
+										icon: localize(locale.cropIconCropBoundary, locale, false)
+									}
+								]
 							]
-						]
-					}
-				]
-			]);
+						}
+					]
+				].filter(Boolean),
+				$env,
+				() => ({})
+			).filter(Boolean));
 		}
 
-		if ($$self.$$.dirty[3] & /*$imageCropLimitToImage*/ 4194304) {
+		if ($$self.$$.dirty[0] & /*$isActive*/ 512) {
+			$isActive && imageOutlineOpacity.set(1);
+		}
+
+		if ($$self.$$.dirty[3] & /*$imageCropLimitToImage*/ 33554432) {
 			$$invalidate(14, imageZoomLevelMin = $imageCropLimitToImage ? 0 : -1);
 		}
 
-		if ($$self.$$.dirty[3] & /*$utilRect, $stageRect*/ 402653184) {
-			$$invalidate(122, imageSelectionOffset = $utilRect && vectorCreate(-($stageRect.x - $utilRect.x), -($stageRect.y - $utilRect.y)));
+		if ($$self.$$.dirty[4] & /*$utilRect, $stageRect*/ 3) {
+			$$invalidate(126, imageSelectionOffset = $utilRect && vectorCreate(-($stageRect.x - $utilRect.x), -($stageRect.y - $utilRect.y)));
 		}
 
-		if ($$self.$$.dirty[3] & /*imageSelectionOffset*/ 536870912 | $$self.$$.dirty[4] & /*$imageSelectionRectPresentation*/ 1) {
+		if ($$self.$$.dirty[4] & /*$imageSelectionRectPresentation, imageSelectionOffset*/ 20) {
 			// normalized crop bounds, we use these to limit the crop interactions to the view
-			$$invalidate(123, imageSelectionCenter = $imageSelectionRectPresentation && vectorCreate(snapToPixel($imageSelectionRectPresentation.x + $imageSelectionRectPresentation.width * 0.5 + imageSelectionOffset.x), snapToPixel($imageSelectionRectPresentation.y + $imageSelectionRectPresentation.height * 0.5 + imageSelectionOffset.y)));
+			$$invalidate(127, imageSelectionCenter = $imageSelectionRectPresentation && vectorCreate(snapToPixel($imageSelectionRectPresentation.x + $imageSelectionRectPresentation.width * 0.5 + imageSelectionOffset.x), snapToPixel($imageSelectionRectPresentation.y + $imageSelectionRectPresentation.height * 0.5 + imageSelectionOffset.y)));
 		}
 
-		if ($$self.$$.dirty[3] & /*$imageSelectionRectSnapshot*/ 16777216) {
-			$$invalidate(127, isResizingSelection = $imageSelectionRectSnapshot != null);
+		if ($$self.$$.dirty[3] & /*$imageSelectionRectSnapshot*/ 268435456) {
+			$$invalidate(131, isResizingSelection = $imageSelectionRectSnapshot != null);
 		}
 
-		if ($$self.$$.dirty[3] & /*$utilRect*/ 134217728 | $$self.$$.dirty[4] & /*imageSelectionCenteredRect*/ 2) {
-			$$invalidate(128, isMaxSelectionRect = $utilRect && imageSelectionCenteredRect && (imageSelectionCenteredRect.height === $utilRect.height || imageSelectionCenteredRect.width === $utilRect.width));
+		if ($$self.$$.dirty[4] & /*$utilRect, imageSelectionCenteredRect*/ 33) {
+			$$invalidate(132, isMaxSelectionRect = $utilRect && imageSelectionCenteredRect && (imageSelectionCenteredRect.height === $utilRect.height || imageSelectionCenteredRect.width === $utilRect.width));
 		}
 
-		if ($$self.$$.dirty[3] & /*$presentationScalar*/ 67108864 | $$self.$$.dirty[4] & /*isMaxSelectionRect, $imageScalar*/ 272) {
-			$$invalidate(131, canZoomToCenter = !isMaxSelectionRect && ($presentationScalar < 1 && $imageScalar < 1));
+		if ($$self.$$.dirty[3] & /*$presentationScalar*/ 1073741824 | $$self.$$.dirty[4] & /*isMaxSelectionRect, $imageScalar*/ 2304) {
+			$$invalidate(134, canZoomToCenter = !isMaxSelectionRect && $presentationScalar < 1 && $imageScalar < 1);
 		}
 
-		if ($$self.$$.dirty[3] & /*isImageSelectionCentered*/ 1048576 | $$self.$$.dirty[4] & /*isImageSelectionDisplayed, isResizingSelection, canZoomToCenter*/ 140) {
-			$$invalidate(9, canCenter = isImageSelectionDisplayed && !isResizingSelection && (!isImageSelectionCentered || canZoomToCenter));
+		if ($$self.$$.dirty[3] & /*isImageSelectionCentered*/ 8388608 | $$self.$$.dirty[4] & /*isImageSelectionDisplayed, isResizingSelection, canZoomToCenter*/ 1216) {
+			$$invalidate(10, canCenter = isImageSelectionDisplayed && !isResizingSelection && (!isImageSelectionCentered || canZoomToCenter));
 		}
 
-		if ($$self.$$.dirty[0] & /*$imageCropRect*/ 128 | $$self.$$.dirty[3] & /*cropEnableInfoIndicator*/ 8 | $$self.$$.dirty[4] & /*isOverlayMode*/ 32) {
+		if ($$self.$$.dirty[0] & /*$imageCropRect*/ 128 | $$self.$$.dirty[3] & /*cropEnableInfoIndicator*/ 16 | $$self.$$.dirty[4] & /*isOverlayMode*/ 512) {
 			$$invalidate(16, shouldRenderInfoIndicator = cropEnableInfoIndicator && !!$imageCropRect && !isOverlayMode);
 		}
 
-		if ($$self.$$.dirty[3] & /*imageSelectionOffset*/ 536870912 | $$self.$$.dirty[4] & /*$imageSelectionRectPresentation*/ 1) {
-			$$invalidate(10, imageSelectionRectOffset = $imageSelectionRectPresentation && imageSelectionOffset && {
+		if ($$self.$$.dirty[4] & /*$imageSelectionRectPresentation, imageSelectionOffset*/ 20) {
+			$$invalidate(11, imageSelectionRectOffset = $imageSelectionRectPresentation && imageSelectionOffset && {
 				x: $imageSelectionRectPresentation.x + imageSelectionOffset.x,
 				y: $imageSelectionRectPresentation.y + imageSelectionOffset.y,
 				width: $imageSelectionRectPresentation.width,
@@ -25197,38 +27968,38 @@ function instance$g($$self, $$props, $$invalidate) {
 			});
 		}
 
-		if ($$self.$$.dirty[0] & /*imageSelectionRectOffset*/ 1024 | $$self.$$.dirty[3] & /*cropEnableImageSelection*/ 4 | $$self.$$.dirty[4] & /*isOverlayMode*/ 32) {
+		if ($$self.$$.dirty[0] & /*imageSelectionRectOffset*/ 2048 | $$self.$$.dirty[3] & /*cropEnableImageSelection*/ 8 | $$self.$$.dirty[4] & /*isOverlayMode*/ 512) {
 			$$invalidate(17, shouldRenderImageSelection = cropEnableImageSelection && !!imageSelectionRectOffset && !isOverlayMode);
 		}
 
-		if ($$self.$$.dirty[2] & /*cropAutoCenterImageSelectionTimeout*/ 134217728 | $$self.$$.dirty[3] & /*cropEnableCenterImageSelection, imageSelectionCenter*/ 1073741888) {
+		if ($$self.$$.dirty[2] & /*cropAutoCenterImageSelectionTimeout*/ 268435456 | $$self.$$.dirty[3] & /*cropEnableCenterImageSelection*/ 128 | $$self.$$.dirty[4] & /*imageSelectionCenter*/ 8) {
 			$$invalidate(18, shouldRenderImageSelectionRecenterButton = cropEnableCenterImageSelection && !!imageSelectionCenter && !cropAutoCenterImageSelectionTimeout);
 		}
 
-		if ($$self.$$.dirty[0] & /*canCenter*/ 512 | $$self.$$.dirty[2] & /*cropAutoCenterImageSelectionTimeout*/ 134217728 | $$self.$$.dirty[3] & /*$isInteracting, cropAutoCenterImageSelectionTimeoutId*/ 8404992) {
+		if ($$self.$$.dirty[0] & /*canCenter*/ 1024 | $$self.$$.dirty[2] & /*cropAutoCenterImageSelectionTimeout*/ 268435456 | $$self.$$.dirty[3] & /*$isInteracting, cropAutoCenterImageSelectionTimeoutId*/ 134348800) {
 			if (canCenter && cropAutoCenterImageSelectionTimeout && !$isInteracting) {
 				clearTimeout(cropAutoCenterImageSelectionTimeoutId);
-				$$invalidate(107, cropAutoCenterImageSelectionTimeoutId = setTimeout(handleRecenterAction, cropAutoCenterImageSelectionTimeout));
+				$$invalidate(110, cropAutoCenterImageSelectionTimeoutId = setTimeout(handleRecenterAction, cropAutoCenterImageSelectionTimeout));
 			}
 		}
 
-		if ($$self.$$.dirty[3] & /*$isInteracting, cropAutoCenterImageSelectionTimeoutId*/ 8404992) {
+		if ($$self.$$.dirty[3] & /*$isInteracting, cropAutoCenterImageSelectionTimeoutId*/ 134348800) {
 			if ($isInteracting) clearTimeout(cropAutoCenterImageSelectionTimeoutId);
 		}
 
-		if ($$self.$$.dirty[0] & /*canCenter*/ 512) {
+		if ($$self.$$.dirty[0] & /*canCenter*/ 1024) {
 			recenterOpacity.set(canCenter ? 1 : 0);
 		}
 
-		if ($$self.$$.dirty[3] & /*imageSelectionCenter*/ 1073741824) {
+		if ($$self.$$.dirty[4] & /*imageSelectionCenter*/ 8) {
 			recenterOffset.set(imageSelectionCenter);
 		}
 
-		if ($$self.$$.dirty[0] & /*$isActive*/ 2048 | $$self.$$.dirty[4] & /*$imagePreviewModifiers*/ 512) {
+		if ($$self.$$.dirty[0] & /*$isActive*/ 512 | $$self.$$.dirty[4] & /*$framePadded, $imagePreviewModifiers*/ 12288) {
 			//
 			// enable seeing the image outside of the crop area, and disable the vignette effect
-			// 
-			if ($isActive) {
+			//
+			if ($isActive && !$framePadded) {
 				set_store_value(
 					imagePreviewModifiers,
 					$imagePreviewModifiers["crop"] = {
@@ -25242,37 +28013,37 @@ function instance$g($$self, $$props, $$invalidate) {
 			}
 		}
 
-		if ($$self.$$.dirty[4] & /*$imageSelectionGuides*/ 1024) {
+		if ($$self.$$.dirty[4] & /*$imageSelectionGuides*/ 16384) {
 			// if overlay top changes
 			$imageSelectionGuides && syncGuides();
 		}
 
-		if ($$self.$$.dirty[4] & /*$env*/ 64) {
+		if ($$self.$$.dirty[3] & /*$env*/ 67108864) {
 			//
 			// Transform tabs
 			//
-			$$invalidate(135, hasPlentyVerticalSpace = $env.verticalSpace !== "short");
+			$$invalidate(139, hasPlentyVerticalSpace = $env.verticalSpace !== "short");
 		}
 
-		if ($$self.$$.dirty[4] & /*hasPlentyVerticalSpace*/ 2048) {
-			$$invalidate(19, shouldRenderToolbar = hasPlentyVerticalSpace);
+		if ($$self.$$.dirty[4] & /*hasPlentyVerticalSpace, isOverlayMode*/ 33280) {
+			$$invalidate(19, shouldRenderToolbar = hasPlentyVerticalSpace && !isOverlayMode);
 		}
 
-		if ($$self.$$.dirty[0] & /*cropEnableZoom*/ 8 | $$self.$$.dirty[3] & /*cropEnableZoomInput*/ 1) {
-			$$invalidate(136, couldRenderZoomInput = cropEnableZoom && cropEnableZoomInput);
+		if ($$self.$$.dirty[0] & /*cropEnableZoom*/ 8 | $$self.$$.dirty[3] & /*cropEnableZoomInput*/ 2) {
+			$$invalidate(140, couldRenderZoomInput = cropEnableZoom && cropEnableZoomInput);
 		}
 
-		if ($$self.$$.dirty[3] & /*cropEnableZoomAutoHide*/ 2 | $$self.$$.dirty[4] & /*hasPlentyVerticalSpace, couldRenderZoomInput*/ 6144) {
-			$$invalidate(137, shouldRenderZoomInput = cropEnableZoomAutoHide
+		if ($$self.$$.dirty[3] & /*cropEnableZoomAutoHide*/ 4 | $$self.$$.dirty[4] & /*hasPlentyVerticalSpace, couldRenderZoomInput*/ 98304) {
+			$$invalidate(141, shouldRenderZoomInput = cropEnableZoomAutoHide
 			? hasPlentyVerticalSpace && couldRenderZoomInput
 			: couldRenderZoomInput);
 		}
 
-		if ($$self.$$.dirty[2] & /*cropEnableRotationInput*/ 1073741824 | $$self.$$.dirty[4] & /*shouldRenderZoomInput*/ 8192) {
+		if ($$self.$$.dirty[3] & /*cropEnableRotationInput*/ 1 | $$self.$$.dirty[4] & /*shouldRenderZoomInput*/ 131072) {
 			$$invalidate(20, shouldRenderFooter = cropEnableRotationInput || shouldRenderZoomInput);
 		}
 
-		if ($$self.$$.dirty[4] & /*shouldRenderZoomInput*/ 8192) {
+		if ($$self.$$.dirty[4] & /*shouldRenderZoomInput*/ 131072) {
 			if (!shouldRenderZoomInput) {
 				$$invalidate(5, transformSelected = transformToolInitial);
 			}
@@ -25285,7 +28056,7 @@ function instance$g($$self, $$props, $$invalidate) {
 			});
 		}
 
-		if ($$self.$$.dirty[0] & /*locale*/ 16 | $$self.$$.dirty[2] & /*cropEnableRotationInput*/ 1073741824 | $$self.$$.dirty[4] & /*shouldRenderZoomInput*/ 8192) {
+		if ($$self.$$.dirty[0] & /*locale*/ 16 | $$self.$$.dirty[3] & /*cropEnableRotationInput*/ 1 | $$self.$$.dirty[4] & /*shouldRenderZoomInput*/ 131072) {
 			$$invalidate(12, tabs = [
 				cropEnableRotationInput && {
 					id: cropUniqueId + "-rotation",
@@ -25302,17 +28073,17 @@ function instance$g($$self, $$props, $$invalidate) {
 			$$invalidate(22, panels = tabs.map(tab => tab.id));
 		}
 
-		if ($$self.$$.dirty[0] & /*stageRef*/ 64 | $$self.$$.dirty[4] & /*isOverlayMode*/ 32) {
+		if ($$self.$$.dirty[0] & /*stageRef*/ 64 | $$self.$$.dirty[4] & /*isOverlayMode*/ 512) {
 			if (stageRef && !stageRef.children.length && isOverlayMode) {
 				stageRef.dispatchEvent(new CustomEvent("measure", { detail: stageRef.rect }));
 			}
 		}
 
-		if ($$self.$$.dirty[0] & /*$isActive*/ 2048 | $$self.$$.dirty[4] & /*$animation*/ 16384) {
+		if ($$self.$$.dirty[0] & /*$isActive*/ 512 | $$self.$$.dirty[4] & /*$animation*/ 262144) {
 			$animation && footerOffset.set($isActive ? 0 : 20);
 		}
 
-		if ($$self.$$.dirty[4] & /*$footerOffset*/ 32768) {
+		if ($$self.$$.dirty[4] & /*$footerOffset*/ 524288) {
 			$$invalidate(23, footerStyle = $footerOffset
 			? `transform: translateY(${$footerOffset}px)`
 			: undefined);
@@ -25329,9 +28100,9 @@ function instance$g($$self, $$props, $$invalidate) {
 		stageRef,
 		$imageCropRect,
 		$imageRotation,
+		$isActive,
 		canCenter,
 		imageSelectionRectOffset,
-		$isActive,
 		tabs,
 		root,
 		imageZoomLevelMin,
@@ -25379,6 +28150,7 @@ function instance$g($$self, $$props, $$invalidate) {
 		imageSize,
 		imageScalar,
 		imageOverlayMarkup,
+		framePadded,
 		handleSelectionGrab,
 		handleSelectionDrag,
 		handleSelectionRelease,
@@ -25427,6 +28199,8 @@ function instance$g($$self, $$props, $$invalidate) {
 		cropSelectPresetOptions,
 		cropEnableSelectPreset,
 		cropEnableButtonToggleCropLimit,
+		cropWillRenderTools,
+		cropActiveTransformTool,
 		cropAutoCenterImageSelectionTimeoutId,
 		$imageSize,
 		$imageFlipY,
@@ -25436,6 +28210,7 @@ function instance$g($$self, $$props, $$invalidate) {
 		isImageSelectionCentered,
 		$imageCropMinSize,
 		$imageCropLimitToImage,
+		$env,
 		$isInteracting,
 		$imageSelectionRectSnapshot,
 		$imageSelectionRect,
@@ -25450,9 +28225,9 @@ function instance$g($$self, $$props, $$invalidate) {
 		isResizingSelection,
 		isMaxSelectionRect,
 		isOverlayMode,
-		$env,
 		canZoomToCenter,
 		$imageScalar,
+		$framePadded,
 		$imagePreviewModifiers,
 		$imageSelectionGuides,
 		hasPlentyVerticalSpace,
@@ -25476,34 +28251,36 @@ class Crop extends SvelteComponent {
 		init(
 			this,
 			options,
-			instance$g,
-			create_fragment$g,
+			instance$l,
+			create_fragment$l,
 			safe_not_equal,
 			{
-				name: 86,
+				name: 87,
 				isActive: 1,
-				stores: 87,
+				stores: 88,
 				cropImageSelectionCornerStyle: 2,
-				cropWillRenderImageSelectionGuides: 88,
-				cropAutoCenterImageSelectionTimeout: 89,
-				cropEnableZoomMatchImageAspectRatio: 90,
-				cropEnableRotateMatchImageAspectRatio: 91,
-				cropEnableRotationInput: 92,
+				cropWillRenderImageSelectionGuides: 89,
+				cropAutoCenterImageSelectionTimeout: 90,
+				cropEnableZoomMatchImageAspectRatio: 91,
+				cropEnableRotateMatchImageAspectRatio: 92,
+				cropEnableRotationInput: 93,
 				cropEnableZoom: 3,
-				cropEnableZoomInput: 93,
-				cropEnableZoomAutoHide: 94,
-				cropEnableImageSelection: 95,
-				cropEnableInfoIndicator: 96,
-				cropEnableZoomTowardsWheelPosition: 97,
-				cropEnableLimitWheelInputToCropSelection: 98,
-				cropEnableCenterImageSelection: 99,
-				cropEnableButtonRotateLeft: 100,
-				cropEnableButtonRotateRight: 101,
-				cropEnableButtonFlipHorizontal: 102,
-				cropEnableButtonFlipVertical: 103,
-				cropSelectPresetOptions: 104,
-				cropEnableSelectPreset: 105,
-				cropEnableButtonToggleCropLimit: 106,
+				cropEnableZoomInput: 94,
+				cropEnableZoomAutoHide: 95,
+				cropEnableImageSelection: 96,
+				cropEnableInfoIndicator: 97,
+				cropEnableZoomTowardsWheelPosition: 98,
+				cropEnableLimitWheelInputToCropSelection: 99,
+				cropEnableCenterImageSelection: 100,
+				cropEnableButtonRotateLeft: 101,
+				cropEnableButtonRotateRight: 102,
+				cropEnableButtonFlipHorizontal: 103,
+				cropEnableButtonFlipVertical: 104,
+				cropSelectPresetOptions: 105,
+				cropEnableSelectPreset: 106,
+				cropEnableButtonToggleCropLimit: 107,
+				cropWillRenderTools: 108,
+				cropActiveTransformTool: 109,
 				locale: 4,
 				tools: 0
 			},
@@ -25512,7 +28289,7 @@ class Crop extends SvelteComponent {
 	}
 
 	get name() {
-		return this.$$.ctx[86];
+		return this.$$.ctx[87];
 	}
 
 	get isActive() {
@@ -25525,7 +28302,7 @@ class Crop extends SvelteComponent {
 	}
 
 	get stores() {
-		return this.$$.ctx[87];
+		return this.$$.ctx[88];
 	}
 
 	set stores(stores) {
@@ -25543,7 +28320,7 @@ class Crop extends SvelteComponent {
 	}
 
 	get cropWillRenderImageSelectionGuides() {
-		return this.$$.ctx[88];
+		return this.$$.ctx[89];
 	}
 
 	set cropWillRenderImageSelectionGuides(cropWillRenderImageSelectionGuides) {
@@ -25552,7 +28329,7 @@ class Crop extends SvelteComponent {
 	}
 
 	get cropAutoCenterImageSelectionTimeout() {
-		return this.$$.ctx[89];
+		return this.$$.ctx[90];
 	}
 
 	set cropAutoCenterImageSelectionTimeout(cropAutoCenterImageSelectionTimeout) {
@@ -25561,7 +28338,7 @@ class Crop extends SvelteComponent {
 	}
 
 	get cropEnableZoomMatchImageAspectRatio() {
-		return this.$$.ctx[90];
+		return this.$$.ctx[91];
 	}
 
 	set cropEnableZoomMatchImageAspectRatio(cropEnableZoomMatchImageAspectRatio) {
@@ -25570,7 +28347,7 @@ class Crop extends SvelteComponent {
 	}
 
 	get cropEnableRotateMatchImageAspectRatio() {
-		return this.$$.ctx[91];
+		return this.$$.ctx[92];
 	}
 
 	set cropEnableRotateMatchImageAspectRatio(cropEnableRotateMatchImageAspectRatio) {
@@ -25579,7 +28356,7 @@ class Crop extends SvelteComponent {
 	}
 
 	get cropEnableRotationInput() {
-		return this.$$.ctx[92];
+		return this.$$.ctx[93];
 	}
 
 	set cropEnableRotationInput(cropEnableRotationInput) {
@@ -25597,7 +28374,7 @@ class Crop extends SvelteComponent {
 	}
 
 	get cropEnableZoomInput() {
-		return this.$$.ctx[93];
+		return this.$$.ctx[94];
 	}
 
 	set cropEnableZoomInput(cropEnableZoomInput) {
@@ -25606,7 +28383,7 @@ class Crop extends SvelteComponent {
 	}
 
 	get cropEnableZoomAutoHide() {
-		return this.$$.ctx[94];
+		return this.$$.ctx[95];
 	}
 
 	set cropEnableZoomAutoHide(cropEnableZoomAutoHide) {
@@ -25615,7 +28392,7 @@ class Crop extends SvelteComponent {
 	}
 
 	get cropEnableImageSelection() {
-		return this.$$.ctx[95];
+		return this.$$.ctx[96];
 	}
 
 	set cropEnableImageSelection(cropEnableImageSelection) {
@@ -25624,7 +28401,7 @@ class Crop extends SvelteComponent {
 	}
 
 	get cropEnableInfoIndicator() {
-		return this.$$.ctx[96];
+		return this.$$.ctx[97];
 	}
 
 	set cropEnableInfoIndicator(cropEnableInfoIndicator) {
@@ -25633,7 +28410,7 @@ class Crop extends SvelteComponent {
 	}
 
 	get cropEnableZoomTowardsWheelPosition() {
-		return this.$$.ctx[97];
+		return this.$$.ctx[98];
 	}
 
 	set cropEnableZoomTowardsWheelPosition(cropEnableZoomTowardsWheelPosition) {
@@ -25642,7 +28419,7 @@ class Crop extends SvelteComponent {
 	}
 
 	get cropEnableLimitWheelInputToCropSelection() {
-		return this.$$.ctx[98];
+		return this.$$.ctx[99];
 	}
 
 	set cropEnableLimitWheelInputToCropSelection(cropEnableLimitWheelInputToCropSelection) {
@@ -25651,7 +28428,7 @@ class Crop extends SvelteComponent {
 	}
 
 	get cropEnableCenterImageSelection() {
-		return this.$$.ctx[99];
+		return this.$$.ctx[100];
 	}
 
 	set cropEnableCenterImageSelection(cropEnableCenterImageSelection) {
@@ -25660,7 +28437,7 @@ class Crop extends SvelteComponent {
 	}
 
 	get cropEnableButtonRotateLeft() {
-		return this.$$.ctx[100];
+		return this.$$.ctx[101];
 	}
 
 	set cropEnableButtonRotateLeft(cropEnableButtonRotateLeft) {
@@ -25669,7 +28446,7 @@ class Crop extends SvelteComponent {
 	}
 
 	get cropEnableButtonRotateRight() {
-		return this.$$.ctx[101];
+		return this.$$.ctx[102];
 	}
 
 	set cropEnableButtonRotateRight(cropEnableButtonRotateRight) {
@@ -25678,7 +28455,7 @@ class Crop extends SvelteComponent {
 	}
 
 	get cropEnableButtonFlipHorizontal() {
-		return this.$$.ctx[102];
+		return this.$$.ctx[103];
 	}
 
 	set cropEnableButtonFlipHorizontal(cropEnableButtonFlipHorizontal) {
@@ -25687,7 +28464,7 @@ class Crop extends SvelteComponent {
 	}
 
 	get cropEnableButtonFlipVertical() {
-		return this.$$.ctx[103];
+		return this.$$.ctx[104];
 	}
 
 	set cropEnableButtonFlipVertical(cropEnableButtonFlipVertical) {
@@ -25696,7 +28473,7 @@ class Crop extends SvelteComponent {
 	}
 
 	get cropSelectPresetOptions() {
-		return this.$$.ctx[104];
+		return this.$$.ctx[105];
 	}
 
 	set cropSelectPresetOptions(cropSelectPresetOptions) {
@@ -25705,7 +28482,7 @@ class Crop extends SvelteComponent {
 	}
 
 	get cropEnableSelectPreset() {
-		return this.$$.ctx[105];
+		return this.$$.ctx[106];
 	}
 
 	set cropEnableSelectPreset(cropEnableSelectPreset) {
@@ -25714,11 +28491,29 @@ class Crop extends SvelteComponent {
 	}
 
 	get cropEnableButtonToggleCropLimit() {
-		return this.$$.ctx[106];
+		return this.$$.ctx[107];
 	}
 
 	set cropEnableButtonToggleCropLimit(cropEnableButtonToggleCropLimit) {
 		this.$set({ cropEnableButtonToggleCropLimit });
+		flush();
+	}
+
+	get cropWillRenderTools() {
+		return this.$$.ctx[108];
+	}
+
+	set cropWillRenderTools(cropWillRenderTools) {
+		this.$set({ cropWillRenderTools });
+		flush();
+	}
+
+	get cropActiveTransformTool() {
+		return this.$$.ctx[109];
+	}
+
+	set cropActiveTransformTool(cropActiveTransformTool) {
+		this.$set({ cropActiveTransformTool });
 		flush();
 	}
 
@@ -25746,7 +28541,7 @@ var _plugin_crop = { util: ['crop', Crop] };
 
 /* src/core/ui/plugins/filter/index.svelte generated by Svelte v3.37.0 */
 
-function create_option_slot$1(ctx) {
+function create_option_slot$2(ctx) {
 	let div1;
 	let div0;
 	let option = /*option*/ ctx[68];
@@ -25818,8 +28613,8 @@ function create_option_slot$1(ctx) {
 	};
 }
 
-// (478:8) <Scrollable              elasticity={elasticityMultiplier * scrollElasticity}              onscroll={offset => tileScrollOffset = offset}              bind:maskFeatherStartOpacity={tileLeftOpacity}             bind:maskFeatherEndOpacity={tileRightOpacity}             bind:maskFeatherSize={tileMargin}             on:measure={e => tileScrollContainerRect = e.detail}>
-function create_default_slot$6(ctx) {
+// (357:8) <Scrollable             elasticity={elasticityMultiplier * scrollElasticity}             onscroll={(offset) => (tileScrollOffset = offset)}             bind:maskFeatherStartOpacity={tileLeftOpacity}             bind:maskFeatherEndOpacity={tileRightOpacity}             bind:maskFeatherSize={tileMargin}             on:measure={(e) => (tileScrollContainerRect = e.detail)}         >
+function create_default_slot$8(ctx) {
 	let radiogroup;
 	let current;
 
@@ -25832,7 +28627,7 @@ function create_default_slot$6(ctx) {
 				onchange: /*handleChangeFilter*/ ctx[29],
 				$$slots: {
 					option: [
-						create_option_slot$1,
+						create_option_slot$2,
 						({ option }) => ({ 68: option }),
 						({ option }) => [0, 0, option ? 64 : 0]
 					]
@@ -25876,8 +28671,8 @@ function create_default_slot$6(ctx) {
 	};
 }
 
-// (477:4) 
-function create_footer_slot$3(ctx) {
+// (356:4) 
+function create_footer_slot$4(ctx) {
 	let div;
 	let scrollable;
 	let updating_maskFeatherStartOpacity;
@@ -25902,7 +28697,7 @@ function create_footer_slot$3(ctx) {
 	let scrollable_props = {
 		elasticity: /*elasticityMultiplier*/ ctx[15] * /*scrollElasticity*/ ctx[16],
 		onscroll: /*func*/ ctx[50],
-		$$slots: { default: [create_default_slot$6] },
+		$$slots: { default: [create_default_slot$8] },
 		$$scope: { ctx }
 	};
 
@@ -25991,13 +28786,13 @@ function create_footer_slot$3(ctx) {
 	};
 }
 
-function create_fragment$f(ctx) {
+function create_fragment$k(ctx) {
 	let util;
 	let current;
 
 	util = new Util({
 			props: {
-				$$slots: { footer: [create_footer_slot$3] },
+				$$slots: { footer: [create_footer_slot$4] },
 				$$scope: { ctx }
 			}
 		});
@@ -26038,7 +28833,7 @@ function create_fragment$f(ctx) {
 
 let FILTER_PREVIEW_CLASS_NAME = "PinturaFilterPreview";
 
-function instance$f($$self, $$props, $$invalidate) {
+function instance$k($$self, $$props, $$invalidate) {
 	let filterOptionsFlattened;
 	let selectedFilterIndex;
 	let footerStyle;
@@ -26231,7 +29026,7 @@ function instance$f($$self, $$props, $$invalidate) {
 			imageColorMatrix,
 			$imageColorMatrix = {
 				...$imageColorMatrix,
-				"filter": isFunction(filterFunctions[value])
+				filter: isFunction(filterFunctions[value])
 				? filterFunctions[value]()
 				: undefined
 			},
@@ -26456,8 +29251,8 @@ class Filter extends SvelteComponent {
 		init(
 			this,
 			options,
-			instance$f,
-			create_fragment$f,
+			instance$k,
+			create_fragment$k,
 			safe_not_equal,
 			{
 				name: 30,
@@ -26559,8 +29354,8 @@ function create_default_slot_2$1(ctx) {
 	};
 }
 
-// (153:8) <Scrollable elasticity={elasticityMultiplier * scrollElasticity} class="PinturaControlListScroller">
-function create_default_slot_1$3(ctx) {
+// (145:8) <Scrollable             elasticity={elasticityMultiplier * scrollElasticity}             class="PinturaControlListScroller"         >
+function create_default_slot_1$2(ctx) {
 	let tablist;
 	let current;
 
@@ -26626,8 +29421,8 @@ function create_default_slot_1$3(ctx) {
 	};
 }
 
-// (159:8) <TabPanels class="PinturaControlPanels" panelClass="PinturaControlPanel" {panels} {...tabsConfig} let:panel>
-function create_default_slot$5(ctx) {
+// (160:8) <TabPanels             class="PinturaControlPanels"             panelClass="PinturaControlPanel"             {panels}             {...tabsConfig}             let:panel         >
+function create_default_slot$7(ctx) {
 	let rangeinput;
 	let current;
 	const rangeinput_spread_levels = [/*$rangeInputConfig*/ ctx[5][/*panel*/ ctx[36]]];
@@ -26669,8 +29464,8 @@ function create_default_slot$5(ctx) {
 	};
 }
 
-// (151:4) 
-function create_footer_slot$2(ctx) {
+// (144:4) 
+function create_footer_slot$3(ctx) {
 	let div;
 	let scrollable;
 	let t;
@@ -26681,7 +29476,7 @@ function create_footer_slot$2(ctx) {
 			props: {
 				elasticity: /*elasticityMultiplier*/ ctx[9] * /*scrollElasticity*/ ctx[8],
 				class: "PinturaControlListScroller",
-				$$slots: { default: [create_default_slot_1$3] },
+				$$slots: { default: [create_default_slot_1$2] },
 				$$scope: { ctx }
 			}
 		});
@@ -26696,7 +29491,7 @@ function create_footer_slot$2(ctx) {
 	let tabpanels_props = {
 		$$slots: {
 			default: [
-				create_default_slot$5,
+				create_default_slot$7,
 				({ panel }) => ({ 36: panel }),
 				({ panel }) => [0, panel ? 32 : 0]
 			]
@@ -26773,13 +29568,13 @@ function create_footer_slot$2(ctx) {
 	};
 }
 
-function create_fragment$e(ctx) {
+function create_fragment$j(ctx) {
 	let util;
 	let current;
 
 	util = new Util({
 			props: {
-				$$slots: { footer: [create_footer_slot$2] },
+				$$slots: { footer: [create_footer_slot$3] },
 				$$scope: { ctx }
 			}
 		});
@@ -26818,7 +29613,7 @@ function create_fragment$e(ctx) {
 	};
 }
 
-function instance$e($$self, $$props, $$invalidate) {
+function instance$j($$self, $$props, $$invalidate) {
 	let tabs;
 	let tabSelected;
 	let tabsConfig;
@@ -27015,8 +29810,8 @@ class Finetune extends SvelteComponent {
 		init(
 			this,
 			options,
-			instance$e,
-			create_fragment$e,
+			instance$j,
+			create_fragment$j,
 			safe_not_equal,
 			{
 				name: 13,
@@ -27098,7 +29893,7 @@ function get_each_context$4(ctx, list, i) {
 	return child_ctx;
 }
 
-// (307:0) {#if type ==='edge' && resizeAxis !== 'both'}
+// (247:4) {#if type === 'edge' && resizeAxis !== 'both'}
 function create_if_block_1$3(ctx) {
 	let div;
 	let div_style_value;
@@ -27124,7 +29919,7 @@ function create_if_block_1$3(ctx) {
 	};
 }
 
-// (291:0) {#each resizeControls as { key, index, translate, scale, rotate, dir, center, type }
+// (226:0) {#each resizeControls as { key, index, translate, scale, rotate, dir, center, type }
 function create_each_block$4(key_1, ctx) {
 	let div;
 	let div_aria_label_value;
@@ -27242,7 +30037,7 @@ function create_each_block$4(key_1, ctx) {
 	};
 }
 
-// (311:0) {#if enableRotating && rotationControlActive}
+// (255:0) {#if enableRotating && rotationControlActive}
 function create_if_block$3(ctx) {
 	let div;
 	let div_style_value;
@@ -27290,7 +30085,7 @@ function create_if_block$3(ctx) {
 	};
 }
 
-function create_fragment$d(ctx) {
+function create_fragment$i(ctx) {
 	let each_blocks = [];
 	let each_1_lookup = new Map();
 	let t;
@@ -27358,7 +30153,7 @@ function create_fragment$d(ctx) {
 	};
 }
 
-function instance$d($$self, $$props, $$invalidate) {
+function instance$i($$self, $$props, $$invalidate) {
 	let resizeAxis;
 	let resizeControls;
 	let rotationControlActive;
@@ -27608,8 +30403,8 @@ class ShapeManipulator extends SvelteComponent {
 		init(
 			this,
 			options,
-			instance$d,
-			create_fragment$d,
+			instance$i,
+			create_fragment$i,
 			safe_not_equal,
 			{
 				points: 15,
@@ -27658,7 +30453,7 @@ var createSoftKeyboardObserver = (cb) => {
 
 /* src/core/ui/components/InputForm.svelte generated by Svelte v3.37.0 */
 
-function create_fragment$c(ctx) {
+function create_fragment$h(ctx) {
 	let div2;
 	let div1;
 	let button0;
@@ -27786,7 +30581,7 @@ function create_fragment$c(ctx) {
 
 const panelDelay = 200;
 
-function instance$c($$self, $$props, $$invalidate) {
+function instance$h($$self, $$props, $$invalidate) {
 	let computedStyle;
 	let shouldStickToKeyboard;
 	let style;
@@ -27853,6 +30648,7 @@ function instance$c($$self, $$props, $$invalidate) {
 	const focus = () => {
 		const field = root.querySelector("input, textarea");
 		field.focus();
+		field.select();
 	};
 
 	const show = () => {
@@ -27876,7 +30672,11 @@ function instance$c($$self, $$props, $$invalidate) {
 	};
 
 	const handleSoftKeyboard = keyboardState => {
-		if (!shouldStickToKeyboard) return;
+		// shouldn't stick, we'll stick it to the top of the viewport so the keyboard doesn't obscure the input field
+		if (!shouldStickToKeyboard) {
+			$$invalidate(16, panelPosition = `top: 4.5em; bottom: auto`);
+			return;
+		}
 
 		// no need to continue, already hidden
 		if (keyboardState === "hidden" && !panelVisible) {
@@ -28019,8 +30819,8 @@ class InputForm extends SvelteComponent {
 		init(
 			this,
 			options,
-			instance$c,
-			create_fragment$c,
+			instance$h,
+			create_fragment$h,
 			safe_not_equal,
 			{
 				onconfirm: 0,
@@ -28040,23 +30840,554 @@ class InputForm extends SvelteComponent {
 	}
 }
 
+var t = (text) => document.createTextNode(text);
+
+/* src/core/ui/components/ContentEditable.svelte generated by Svelte v3.37.0 */
+
+function create_fragment$g(ctx) {
+	let pre;
+	let pre_data_wrap_content_value;
+	let mounted;
+	let dispose;
+
+	return {
+		c() {
+			pre = element("pre");
+			attr(pre, "class", "PinturaContentEditable");
+			attr(pre, "data-wrap-content", pre_data_wrap_content_value = /*wrapLines*/ ctx[3] ? "wrap" : "nowrap");
+			attr(pre, "contenteditable", "");
+			attr(pre, "spellcheck", /*spellcheck*/ ctx[0]);
+			attr(pre, "autocorrect", /*autocorrect*/ ctx[1]);
+			attr(pre, "autocapitalize", /*autocapitalize*/ ctx[2]);
+			attr(pre, "style", /*style*/ ctx[4]);
+		},
+		m(target, anchor) {
+			insert(target, pre, anchor);
+			/*pre_binding*/ ctx[20](pre);
+
+			if (!mounted) {
+				dispose = [
+					listen(pre, "input", /*handleInput*/ ctx[9]),
+					listen(pre, "paste", /*handlePaste*/ ctx[10]),
+					listen(pre, "keydown", /*handleKeydown*/ ctx[7]),
+					listen(pre, "keyup", /*handleKeyup*/ ctx[8]),
+					listen(pre, "blur", /*handleBlur*/ ctx[6])
+				];
+
+				mounted = true;
+			}
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*wrapLines*/ 8 && pre_data_wrap_content_value !== (pre_data_wrap_content_value = /*wrapLines*/ ctx[3] ? "wrap" : "nowrap")) {
+				attr(pre, "data-wrap-content", pre_data_wrap_content_value);
+			}
+
+			if (dirty[0] & /*spellcheck*/ 1) {
+				attr(pre, "spellcheck", /*spellcheck*/ ctx[0]);
+			}
+
+			if (dirty[0] & /*autocorrect*/ 2) {
+				attr(pre, "autocorrect", /*autocorrect*/ ctx[1]);
+			}
+
+			if (dirty[0] & /*autocapitalize*/ 4) {
+				attr(pre, "autocapitalize", /*autocapitalize*/ ctx[2]);
+			}
+
+			if (dirty[0] & /*style*/ 16) {
+				attr(pre, "style", /*style*/ ctx[4]);
+			}
+		},
+		i: noop,
+		o: noop,
+		d(detaching) {
+			if (detaching) detach(pre);
+			/*pre_binding*/ ctx[20](null);
+			mounted = false;
+			run_all(dispose);
+		}
+	};
+}
+
+function instance$g($$self, $$props, $$invalidate) {
+	let isReady;
+	let { spellcheck = "false" } = $$props;
+	let { autocorrect = "off" } = $$props;
+	let { autocapitalize = "off" } = $$props;
+	let { wrapLines = true } = $$props;
+	let { textStyles = false } = $$props;
+	let { formatInput = passthrough } = $$props;
+	let { formatPaste = passthrough } = $$props;
+	let { style = undefined } = $$props;
+	let { innerHTML = undefined } = $$props;
+	let { oninput = noop$1 } = $$props;
+	const confirm = () => confirmInputState();
+	const focus = () => element && element.focus();
+
+	const select = () => {
+		if (!element) return;
+		const range = document.createRange();
+		range.selectNodeContents(element);
+		const selection = window.getSelection();
+		selection.removeAllRanges();
+		selection.addRange(range);
+	};
+
+	// events
+	const dispatchEvent = createEventDispatcher();
+
+	// reference to contenteditable element
+	let element;
+
+	// use <br> with Firefox
+	if (isBrowser()) document.execCommand("defaultParagraphSeparator", false, "br");
+
+	const setInnerHTML = html => {
+		if (html === element.innerHTML) return;
+		$$invalidate(5, element.innerHTML = html, element);
+		if (element === document.activeElement) select();
+	};
+
+	const removeTextStyles = html => {
+		return html.replace(/<\/?(?:i|b|em|strong)>/, "");
+	};
+
+	const updateInnerHTML = () => {
+		// sync property
+		$$invalidate(11, innerHTML = element.innerHTML);
+
+		// let others know
+		dispatchEvent("input", innerHTML);
+
+		oninput(innerHTML);
+
+		// always scroll to top
+		requestAnimationFrame(() => element && element.scrollTo(0, 0));
+	};
+
+	const confirmInputState = () => {
+		// bookmark caret positions
+		insertBookmarks(element);
+
+		// remove styles
+		const html = textStyles
+		? element.innerHTML
+		: removeTextStyles(element.innerHTML);
+
+		// update HTML (don't remove caret positions)
+		$$invalidate(5, element.innerHTML = formatInput(html), element);
+
+		// select bookmarks and remove from DOM
+		selectBookmarks(element);
+
+		// content updated
+		updateInnerHTML();
+	};
+
+	const handleBlur = () => dispatchEvent("blur");
+
+	const handleKeydown = e => {
+		// use <br> with webkit
+		if (e.keyCode !== 13) return;
+
+		const caretPosition = getCaretPosition(element);
+
+		const htmlBreak = caretPosition === element.textContent.length
+		? "<br><br>"
+		: "<br>";
+
+		// only if can wrap
+		wrapLines && document.execCommand("insertHTML", false, htmlBreak);
+
+		// prevent normal action
+		e.preventDefault();
+	};
+
+	const handleKeyup = () => {
+		
+	};
+
+	const handleInput = e => {
+		const { inputType } = e;
+
+		// more info on when inputType is which value
+		// https://rawgit.com/w3c/input-events/v1/index.html#interface-InputEvent-Attributes
+		if (inputType === "insertCompositionText" || inputType === "deleteCompositionText") {
+			// we're composing (to for example write é, or Japanese characters),
+			// if so, wait for composition end before formatting content
+			return;
+		}
+
+		confirmInputState();
+	};
+
+	const handlePaste = e => {
+		e.preventDefault();
+
+		// remove styles
+		const plainText = e.clipboardData.getData("text/plain");
+
+		const html = textStyles ? plainText : removeTextStyles(plainText);
+
+		// format the pasted text before adding
+		const text = formatPaste(html);
+
+		if (!text.length) return;
+
+		// get range for current selection and replace with text
+		const range = window.getSelection().getRangeAt(0);
+
+		range.deleteContents();
+		range.insertNode(document.createTextNode(text));
+
+		// content updated
+		updateInnerHTML();
+	};
+
+	const createBookmark = name => {
+		const bookmarkNode = h("span");
+		bookmarkNode.dataset.bookmark = name;
+		return bookmarkNode;
+	};
+
+	const insertBookmark = (node, offset, name) => {
+		// create the bookmark element
+		const bookmarkNode = createBookmark(name);
+
+		// split up in two text nodes and insert
+		if (node.nodeType === Node.TEXT_NODE) {
+			const text = node.textContent;
+
+			if (name === "start") {
+				const before = t(text.substr(0, offset));
+				const after = t(text.substr(offset));
+				node.replaceWith(before, bookmarkNode, after);
+			} else {
+				const before = t(text.substr(0, offset));
+				const after = t(text.substr(offset));
+				node.replaceWith(before, bookmarkNode, after);
+			}
+		} else // is node
+		if (node.nodeType === Node.ELEMENT_NODE) {
+			node.insertBefore(bookmarkNode, node.childNodes[offset]);
+		}
+	};
+
+	const insertBookmarks = element => {
+		const selection = window.getSelection();
+		if (!(selection.getRangeAt && selection.rangeCount)) return;
+		const range = selection.getRangeAt(0);
+		const { startOffset, endOffset, startContainer, endContainer } = range;
+
+		// range needs to be in element
+		if (!element.contains(range.startContainer) || !element.contains(range.endContainer)) return;
+
+		// should break up one text container
+		if (startContainer.nodeType === Node.TEXT_NODE && startContainer === endContainer) {
+			const text = startContainer.textContent;
+			const before = text.substr(0, startOffset);
+			const bookmarkStart = createBookmark("start");
+
+			const selected = endOffset - startOffset > 0
+			? text.substr(startOffset, endOffset)
+			: "";
+
+			const bookmarkEnd = createBookmark("end");
+			const after = text.substr(endOffset);
+			startContainer.replaceWith(before, bookmarkStart, selected, bookmarkEnd, after);
+		} else // should add to separate containers
+		{
+			insertBookmark(startContainer, startOffset, "start");
+
+			insertBookmark(
+				endContainer,
+				// if is same container need to move to next index as we've just added start bookmark
+				endOffset + (startContainer === endContainer ? 1 : 0),
+				"end"
+			);
+		}
+	};
+
+	const selectBookmarks = element => {
+		// get locations of bookmarks
+		const bookmarkStart = findBookmark(element, "start");
+
+		const bookmarkEnd = findBookmark(element, "end");
+
+		// remove bookmarks (if found)
+		if (!bookmarkStart || !bookmarkEnd) return;
+
+		// set caret positions
+		const range = document.createRange();
+
+		range.setStart(bookmarkStart, 0);
+		range.setEnd(bookmarkEnd, 0);
+		const selection = window.getSelection();
+		selection.removeAllRanges();
+		selection.addRange(range);
+
+		// remove bookmarks
+		bookmarkStart.remove();
+
+		bookmarkEnd.remove();
+	};
+
+	const findBookmark = (element, name) => {
+		const children = element.children;
+
+		for (let i = 0; i < children.length; i++) {
+			const node = children[i];
+			if (node.dataset.bookmark === name) return node;
+
+			if (node.children.length) {
+				const bookmarkNode = findBookmark(node, name);
+				if (bookmarkNode) return bookmarkNode;
+			}
+		}
+
+		return undefined;
+	};
+
+	const getCaretPosition = element => {
+		const range = window.getSelection().getRangeAt(0);
+		const preCaretRange = range.cloneRange();
+		preCaretRange.selectNodeContents(element);
+		preCaretRange.setEnd(range.endContainer, range.endOffset);
+		return preCaretRange.toString().length;
+	};
+
+	function pre_binding($$value) {
+		binding_callbacks[$$value ? "unshift" : "push"](() => {
+			element = $$value;
+			$$invalidate(5, element);
+		});
+	}
+
+	$$self.$$set = $$props => {
+		if ("spellcheck" in $$props) $$invalidate(0, spellcheck = $$props.spellcheck);
+		if ("autocorrect" in $$props) $$invalidate(1, autocorrect = $$props.autocorrect);
+		if ("autocapitalize" in $$props) $$invalidate(2, autocapitalize = $$props.autocapitalize);
+		if ("wrapLines" in $$props) $$invalidate(3, wrapLines = $$props.wrapLines);
+		if ("textStyles" in $$props) $$invalidate(12, textStyles = $$props.textStyles);
+		if ("formatInput" in $$props) $$invalidate(13, formatInput = $$props.formatInput);
+		if ("formatPaste" in $$props) $$invalidate(14, formatPaste = $$props.formatPaste);
+		if ("style" in $$props) $$invalidate(4, style = $$props.style);
+		if ("innerHTML" in $$props) $$invalidate(11, innerHTML = $$props.innerHTML);
+		if ("oninput" in $$props) $$invalidate(15, oninput = $$props.oninput);
+	};
+
+	$$self.$$.update = () => {
+		if ($$self.$$.dirty[0] & /*element*/ 32) {
+			// set value when html property is set and element reference is bound
+			$$invalidate(19, isReady = !!element);
+		}
+
+		if ($$self.$$.dirty[0] & /*isReady, innerHTML*/ 526336) {
+			if (isReady && innerHTML) setInnerHTML(innerHTML);
+		}
+	};
+
+	return [
+		spellcheck,
+		autocorrect,
+		autocapitalize,
+		wrapLines,
+		style,
+		element,
+		handleBlur,
+		handleKeydown,
+		handleKeyup,
+		handleInput,
+		handlePaste,
+		innerHTML,
+		textStyles,
+		formatInput,
+		formatPaste,
+		oninput,
+		confirm,
+		focus,
+		select,
+		isReady,
+		pre_binding
+	];
+}
+
+class ContentEditable extends SvelteComponent {
+	constructor(options) {
+		super();
+
+		init(
+			this,
+			options,
+			instance$g,
+			create_fragment$g,
+			safe_not_equal,
+			{
+				spellcheck: 0,
+				autocorrect: 1,
+				autocapitalize: 2,
+				wrapLines: 3,
+				textStyles: 12,
+				formatInput: 13,
+				formatPaste: 14,
+				style: 4,
+				innerHTML: 11,
+				oninput: 15,
+				confirm: 16,
+				focus: 17,
+				select: 18
+			},
+			[-1, -1]
+		);
+	}
+
+	get spellcheck() {
+		return this.$$.ctx[0];
+	}
+
+	set spellcheck(spellcheck) {
+		this.$set({ spellcheck });
+		flush();
+	}
+
+	get autocorrect() {
+		return this.$$.ctx[1];
+	}
+
+	set autocorrect(autocorrect) {
+		this.$set({ autocorrect });
+		flush();
+	}
+
+	get autocapitalize() {
+		return this.$$.ctx[2];
+	}
+
+	set autocapitalize(autocapitalize) {
+		this.$set({ autocapitalize });
+		flush();
+	}
+
+	get wrapLines() {
+		return this.$$.ctx[3];
+	}
+
+	set wrapLines(wrapLines) {
+		this.$set({ wrapLines });
+		flush();
+	}
+
+	get textStyles() {
+		return this.$$.ctx[12];
+	}
+
+	set textStyles(textStyles) {
+		this.$set({ textStyles });
+		flush();
+	}
+
+	get formatInput() {
+		return this.$$.ctx[13];
+	}
+
+	set formatInput(formatInput) {
+		this.$set({ formatInput });
+		flush();
+	}
+
+	get formatPaste() {
+		return this.$$.ctx[14];
+	}
+
+	set formatPaste(formatPaste) {
+		this.$set({ formatPaste });
+		flush();
+	}
+
+	get style() {
+		return this.$$.ctx[4];
+	}
+
+	set style(style) {
+		this.$set({ style });
+		flush();
+	}
+
+	get innerHTML() {
+		return this.$$.ctx[11];
+	}
+
+	set innerHTML(innerHTML) {
+		this.$set({ innerHTML });
+		flush();
+	}
+
+	get oninput() {
+		return this.$$.ctx[15];
+	}
+
+	set oninput(oninput) {
+		this.$set({ oninput });
+		flush();
+	}
+
+	get confirm() {
+		return this.$$.ctx[16];
+	}
+
+	get focus() {
+		return this.$$.ctx[17];
+	}
+
+	get select() {
+		return this.$$.ctx[18];
+	}
+}
+
+var textToHTML = (text) => {
+    const html = text
+        // collapse space sequences
+        .replace(/ {2,}/g, ' ')
+        // handle non breaking space characters
+        .replace(/&/g, '&amp;')
+        .replace(/\u00a0/g, '&nbsp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        // lines
+        .split('\n')
+        // to br's
+        .join('<br>');
+    return html;
+};
+
+var htmlToText = (html) => {
+    const text = html
+        .split('<br>')
+        .join('\n')
+        .replace(/&nbsp;/g, String.fromCharCode(160))
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>');
+    return text;
+};
+
 /* src/core/ui/components/ShapeLayoutEditor.svelte generated by Svelte v3.37.0 */
 
 function get_each_context$3(ctx, list, i) {
 	const child_ctx = ctx.slice();
-	child_ctx[171] = list[i];
-	child_ctx[173] = i;
+	child_ctx[197] = list[i];
+	child_ctx[199] = i;
 	return child_ctx;
 }
 
-// (2382:8) {#each shapeNavList as item, index (item.id) }
+// (2860:12) {#each shapeNavList as item, index (item.id)}
 function create_each_block$3(key_1, ctx) {
 	let li;
 	let button;
 	let colorpreview;
 	let t0;
 	let span;
-	let t1_value = /*item*/ ctx[171].name + "";
+	let t1_value = /*item*/ ctx[197].name + "";
 	let t1;
 	let button_aria_label_value;
 	let t2;
@@ -28065,11 +31396,11 @@ function create_each_block$3(key_1, ctx) {
 	let dispose;
 
 	colorpreview = new ColorPreview({
-			props: { color: /*item*/ ctx[171].color }
+			props: { color: /*item*/ ctx[197].color }
 		});
 
 	function click_handler(...args) {
-		return /*click_handler*/ ctx[121](/*index*/ ctx[173], ...args);
+		return /*click_handler*/ ctx[130](/*index*/ ctx[199], ...args);
 	}
 
 	return {
@@ -28085,7 +31416,7 @@ function create_each_block$3(key_1, ctx) {
 			t2 = space();
 			attr(button, "class", "PinturaShapeListItem");
 			attr(button, "type", "button");
-			attr(button, "aria-label", button_aria_label_value = "Select shape " + /*item*/ ctx[171].name);
+			attr(button, "aria-label", button_aria_label_value = "Select shape " + /*item*/ ctx[197].name);
 			this.first = li;
 		},
 		m(target, anchor) {
@@ -28106,11 +31437,11 @@ function create_each_block$3(key_1, ctx) {
 		p(new_ctx, dirty) {
 			ctx = new_ctx;
 			const colorpreview_changes = {};
-			if (dirty[0] & /*shapeNavList*/ 524288) colorpreview_changes.color = /*item*/ ctx[171].color;
+			if (dirty[0] & /*shapeNavList*/ 4194304) colorpreview_changes.color = /*item*/ ctx[197].color;
 			colorpreview.$set(colorpreview_changes);
-			if ((!current || dirty[0] & /*shapeNavList*/ 524288) && t1_value !== (t1_value = /*item*/ ctx[171].name + "")) set_data(t1, t1_value);
+			if ((!current || dirty[0] & /*shapeNavList*/ 4194304) && t1_value !== (t1_value = /*item*/ ctx[197].name + "")) set_data(t1, t1_value);
 
-			if (!current || dirty[0] & /*shapeNavList*/ 524288 && button_aria_label_value !== (button_aria_label_value = "Select shape " + /*item*/ ctx[171].name)) {
+			if (!current || dirty[0] & /*shapeNavList*/ 4194304 && button_aria_label_value !== (button_aria_label_value = "Select shape " + /*item*/ ctx[197].name)) {
 				attr(button, "aria-label", button_aria_label_value);
 			}
 		},
@@ -28132,27 +31463,27 @@ function create_each_block$3(key_1, ctx) {
 	};
 }
 
-// (2393:4) {#if shouldRenderShapeManipulator}
-function create_if_block_2$2(ctx) {
+// (2876:4) {#if shouldRenderShapeManipulator}
+function create_if_block_4$2(ctx) {
 	let shapemanipulator;
 	let current;
 
 	shapemanipulator = new ShapeManipulator({
 			props: {
 				visible: true,
-				points: /*shapeManipulatorPoints*/ ctx[8],
-				rotatorPoint: /*shapeManipulatorRotationPointPosition*/ ctx[14],
-				enableResizing: /*allowedResizeControls*/ ctx[13],
-				enableRotating: /*allowRotateControls*/ ctx[6]
+				points: /*shapeManipulatorPoints*/ ctx[11],
+				rotatorPoint: /*shapeManipulatorRotationPointPosition*/ ctx[16],
+				enableResizing: /*allowedResizeControls*/ ctx[15],
+				enableRotating: /*allowRotateControls*/ ctx[9]
 			}
 		});
 
-	shapemanipulator.$on("resizestart", /*handleManipulatorResizeGrab*/ ctx[25]);
-	shapemanipulator.$on("resizemove", /*handleManipulatorResizeDrag*/ ctx[26]);
-	shapemanipulator.$on("resizeend", /*handleManipulatorResizeEnd*/ ctx[27]);
-	shapemanipulator.$on("rotatestart", /*handleManipulatorRotateGrab*/ ctx[28]);
-	shapemanipulator.$on("rotatemove", /*handleManipulatorRotateDrag*/ ctx[29]);
-	shapemanipulator.$on("rotateend", /*handleManipulatorRotateEnd*/ ctx[30]);
+	shapemanipulator.$on("resizestart", /*handleManipulatorResizeGrab*/ ctx[28]);
+	shapemanipulator.$on("resizemove", /*handleManipulatorResizeDrag*/ ctx[29]);
+	shapemanipulator.$on("resizeend", /*handleManipulatorResizeEnd*/ ctx[30]);
+	shapemanipulator.$on("rotatestart", /*handleManipulatorRotateGrab*/ ctx[31]);
+	shapemanipulator.$on("rotatemove", /*handleManipulatorRotateDrag*/ ctx[32]);
+	shapemanipulator.$on("rotateend", /*handleManipulatorRotateEnd*/ ctx[33]);
 
 	return {
 		c() {
@@ -28164,10 +31495,10 @@ function create_if_block_2$2(ctx) {
 		},
 		p(ctx, dirty) {
 			const shapemanipulator_changes = {};
-			if (dirty[0] & /*shapeManipulatorPoints*/ 256) shapemanipulator_changes.points = /*shapeManipulatorPoints*/ ctx[8];
-			if (dirty[0] & /*shapeManipulatorRotationPointPosition*/ 16384) shapemanipulator_changes.rotatorPoint = /*shapeManipulatorRotationPointPosition*/ ctx[14];
-			if (dirty[0] & /*allowedResizeControls*/ 8192) shapemanipulator_changes.enableResizing = /*allowedResizeControls*/ ctx[13];
-			if (dirty[0] & /*allowRotateControls*/ 64) shapemanipulator_changes.enableRotating = /*allowRotateControls*/ ctx[6];
+			if (dirty[0] & /*shapeManipulatorPoints*/ 2048) shapemanipulator_changes.points = /*shapeManipulatorPoints*/ ctx[11];
+			if (dirty[0] & /*shapeManipulatorRotationPointPosition*/ 65536) shapemanipulator_changes.rotatorPoint = /*shapeManipulatorRotationPointPosition*/ ctx[16];
+			if (dirty[0] & /*allowedResizeControls*/ 32768) shapemanipulator_changes.enableResizing = /*allowedResizeControls*/ ctx[15];
+			if (dirty[0] & /*allowRotateControls*/ 512) shapemanipulator_changes.enableRotating = /*allowRotateControls*/ ctx[9];
 			shapemanipulator.$set(shapemanipulator_changes);
 		},
 		i(local) {
@@ -28185,21 +31516,164 @@ function create_if_block_2$2(ctx) {
 	};
 }
 
-// (2408:4) {#if shouldRenderTextInput}
+// (2892:4) {#if shouldRenderTextInput}
 function create_if_block_1$2(ctx) {
+	let current_block_type_index;
+	let if_block;
+	let if_block_anchor;
+	let current;
+	const if_block_creators = [create_if_block_2$2, create_if_block_3$2];
+	const if_blocks = [];
+
+	function select_block_type(ctx, dirty) {
+		if (/*textInputMode*/ ctx[3] === "modal") return 0;
+		if (/*textInputMode*/ ctx[3] === "inline") return 1;
+		return -1;
+	}
+
+	if (~(current_block_type_index = select_block_type(ctx))) {
+		if_block = if_blocks[current_block_type_index] = if_block_creators[current_block_type_index](ctx);
+	}
+
+	return {
+		c() {
+			if (if_block) if_block.c();
+			if_block_anchor = empty();
+		},
+		m(target, anchor) {
+			if (~current_block_type_index) {
+				if_blocks[current_block_type_index].m(target, anchor);
+			}
+
+			insert(target, if_block_anchor, anchor);
+			current = true;
+		},
+		p(ctx, dirty) {
+			let previous_block_index = current_block_type_index;
+			current_block_type_index = select_block_type(ctx);
+
+			if (current_block_type_index === previous_block_index) {
+				if (~current_block_type_index) {
+					if_blocks[current_block_type_index].p(ctx, dirty);
+				}
+			} else {
+				if (if_block) {
+					group_outros();
+
+					transition_out(if_blocks[previous_block_index], 1, 1, () => {
+						if_blocks[previous_block_index] = null;
+					});
+
+					check_outros();
+				}
+
+				if (~current_block_type_index) {
+					if_block = if_blocks[current_block_type_index];
+
+					if (!if_block) {
+						if_block = if_blocks[current_block_type_index] = if_block_creators[current_block_type_index](ctx);
+						if_block.c();
+					} else {
+						if_block.p(ctx, dirty);
+					}
+
+					transition_in(if_block, 1);
+					if_block.m(if_block_anchor.parentNode, if_block_anchor);
+				} else {
+					if_block = null;
+				}
+			}
+		},
+		i(local) {
+			if (current) return;
+			transition_in(if_block);
+			current = true;
+		},
+		o(local) {
+			transition_out(if_block);
+			current = false;
+		},
+		d(detaching) {
+			if (~current_block_type_index) {
+				if_blocks[current_block_type_index].d(detaching);
+			}
+
+			if (detaching) detach(if_block_anchor);
+		}
+	};
+}
+
+// (2916:45) 
+function create_if_block_3$2(ctx) {
+	let div;
+	let contenteditable;
+	let current;
+
+	let contenteditable_props = {
+		formatInput: /*formatContentEditable*/ ctx[35],
+		wrapLines: !!/*activeMarkupComputed*/ ctx[8].width,
+		style: /*textInputTextStyles*/ ctx[18]
+	};
+
+	contenteditable = new ContentEditable({ props: contenteditable_props });
+	/*contenteditable_binding*/ ctx[133](contenteditable);
+	contenteditable.$on("input", /*handleTextInput*/ ctx[36]);
+	contenteditable.$on("keyup", /*handleTextInputKeyUp*/ ctx[39]);
+
+	return {
+		c() {
+			div = element("div");
+			create_component(contenteditable.$$.fragment);
+			attr(div, "class", "PinturaInlineInput");
+			attr(div, "style", /*textInputPositionStyles*/ ctx[19]);
+		},
+		m(target, anchor) {
+			insert(target, div, anchor);
+			mount_component(contenteditable, div, null);
+			current = true;
+		},
+		p(ctx, dirty) {
+			const contenteditable_changes = {};
+			if (dirty[0] & /*activeMarkupComputed*/ 256) contenteditable_changes.wrapLines = !!/*activeMarkupComputed*/ ctx[8].width;
+			if (dirty[0] & /*textInputTextStyles*/ 262144) contenteditable_changes.style = /*textInputTextStyles*/ ctx[18];
+			contenteditable.$set(contenteditable_changes);
+
+			if (!current || dirty[0] & /*textInputPositionStyles*/ 524288) {
+				attr(div, "style", /*textInputPositionStyles*/ ctx[19]);
+			}
+		},
+		i(local) {
+			if (current) return;
+			transition_in(contenteditable.$$.fragment, local);
+			current = true;
+		},
+		o(local) {
+			transition_out(contenteditable.$$.fragment, local);
+			current = false;
+		},
+		d(detaching) {
+			if (detaching) detach(div);
+			/*contenteditable_binding*/ ctx[133](null);
+			destroy_component(contenteditable);
+		}
+	};
+}
+
+// (2893:8) {#if textInputMode === 'modal'}
+function create_if_block_2$2(ctx) {
 	let inputform;
 	let current;
 
 	inputform = new InputForm({
 			props: {
 				panelOffset: /*offset*/ ctx[1],
-				onconfirm: /*handleTextConfirm*/ ctx[36],
-				oncancel: /*handleTextCancel*/ ctx[37],
-				labelCancel: /*locale*/ ctx[3].shapeLabelInputCancel,
-				iconCancel: /*locale*/ ctx[3].shapeIconInputCancel,
-				labelConfirm: /*locale*/ ctx[3].shapeLabelInputConfirm,
-				iconConfirm: /*locale*/ ctx[3].shapeIconInputConfirm,
-				$$slots: { default: [create_default_slot$4] },
+				onconfirm: /*handleTextConfirm*/ ctx[40],
+				oncancel: /*handleTextCancel*/ ctx[41],
+				labelCancel: /*locale*/ ctx[4].shapeLabelInputCancel,
+				iconCancel: /*locale*/ ctx[4].shapeIconInputCancel,
+				labelConfirm: /*locale*/ ctx[4].shapeLabelInputConfirm,
+				iconConfirm: /*locale*/ ctx[4].shapeIconInputConfirm,
+				$$slots: { default: [create_default_slot$6] },
 				$$scope: { ctx }
 			}
 		});
@@ -28215,12 +31689,12 @@ function create_if_block_1$2(ctx) {
 		p(ctx, dirty) {
 			const inputform_changes = {};
 			if (dirty[0] & /*offset*/ 2) inputform_changes.panelOffset = /*offset*/ ctx[1];
-			if (dirty[0] & /*locale*/ 8) inputform_changes.labelCancel = /*locale*/ ctx[3].shapeLabelInputCancel;
-			if (dirty[0] & /*locale*/ 8) inputform_changes.iconCancel = /*locale*/ ctx[3].shapeIconInputCancel;
-			if (dirty[0] & /*locale*/ 8) inputform_changes.labelConfirm = /*locale*/ ctx[3].shapeLabelInputConfirm;
-			if (dirty[0] & /*locale*/ 8) inputform_changes.iconConfirm = /*locale*/ ctx[3].shapeIconInputConfirm;
+			if (dirty[0] & /*locale*/ 16) inputform_changes.labelCancel = /*locale*/ ctx[4].shapeLabelInputCancel;
+			if (dirty[0] & /*locale*/ 16) inputform_changes.iconCancel = /*locale*/ ctx[4].shapeIconInputCancel;
+			if (dirty[0] & /*locale*/ 16) inputform_changes.labelConfirm = /*locale*/ ctx[4].shapeLabelInputConfirm;
+			if (dirty[0] & /*locale*/ 16) inputform_changes.iconConfirm = /*locale*/ ctx[4].shapeIconInputConfirm;
 
-			if (dirty[0] & /*markupTextInputStyle, textInputText, textInput*/ 100352 | dirty[5] & /*$$scope*/ 524288) {
+			if (dirty[0] & /*textInputTextStyles, textInput, textInputText*/ 393280 | dirty[6] & /*$$scope*/ 16384) {
 				inputform_changes.$$scope = { dirty, ctx };
 			}
 
@@ -28241,8 +31715,8 @@ function create_if_block_1$2(ctx) {
 	};
 }
 
-// (2409:4) <InputForm          panelOffset={offset}         onconfirm={handleTextConfirm}          oncancel={handleTextCancel}         labelCancel={locale.shapeLabelInputCancel}         iconCancel={locale.shapeIconInputCancel}         labelConfirm={locale.shapeLabelInputConfirm}         iconConfirm={locale.shapeIconInputConfirm}>
-function create_default_slot$4(ctx) {
+// (2894:12) <InputForm                 panelOffset={offset}                 onconfirm={handleTextConfirm}                 oncancel={handleTextCancel}                 labelCancel={locale.shapeLabelInputCancel}                 iconCancel={locale.shapeIconInputCancel}                 labelConfirm={locale.shapeLabelInputConfirm}                 iconConfirm={locale.shapeIconInputConfirm}             >
+function create_default_slot$6(ctx) {
 	let textarea;
 	let mounted;
 	let dispose;
@@ -28250,46 +31724,47 @@ function create_default_slot$4(ctx) {
 	return {
 		c() {
 			textarea = element("textarea");
-			attr(textarea, "style", /*markupTextInputStyle*/ ctx[16]);
 			attr(textarea, "spellcheck", "false");
 			attr(textarea, "autocorrect", "off");
 			attr(textarea, "autocapitalize", "off");
-			textarea.value = /*textInputText*/ ctx[15];
+			attr(textarea, "style", /*textInputTextStyles*/ ctx[18]);
 		},
 		m(target, anchor) {
 			insert(target, textarea, anchor);
-			/*textarea_binding*/ ctx[122](textarea);
+			/*textarea_binding*/ ctx[131](textarea);
+			set_input_value(textarea, /*textInputText*/ ctx[17]);
 
 			if (!mounted) {
 				dispose = [
-					listen(textarea, "keydown", /*handleTextInputKeyDown*/ ctx[34]),
-					listen(textarea, "keypress", /*handleTextInputAttempt*/ ctx[33]),
-					listen(textarea, "keyup", /*handleTextInputKeyUp*/ ctx[35]),
-					listen(textarea, "input", /*handleTextInput*/ ctx[32])
+					listen(textarea, "keydown", /*handleTextInputKeyDown*/ ctx[38]),
+					listen(textarea, "keypress", /*handleTextInputAttempt*/ ctx[37]),
+					listen(textarea, "keyup", /*handleTextInputKeyUp*/ ctx[39]),
+					listen(textarea, "input", /*handleTextInput*/ ctx[36]),
+					listen(textarea, "input", /*textarea_input_handler*/ ctx[132])
 				];
 
 				mounted = true;
 			}
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*markupTextInputStyle*/ 65536) {
-				attr(textarea, "style", /*markupTextInputStyle*/ ctx[16]);
+			if (dirty[0] & /*textInputTextStyles*/ 262144) {
+				attr(textarea, "style", /*textInputTextStyles*/ ctx[18]);
 			}
 
-			if (dirty[0] & /*textInputText*/ 32768) {
-				textarea.value = /*textInputText*/ ctx[15];
+			if (dirty[0] & /*textInputText*/ 131072) {
+				set_input_value(textarea, /*textInputText*/ ctx[17]);
 			}
 		},
 		d(detaching) {
 			if (detaching) detach(textarea);
-			/*textarea_binding*/ ctx[122](null);
+			/*textarea_binding*/ ctx[131](null);
 			mounted = false;
 			run_all(dispose);
 		}
 	};
 }
 
-// (2427:4) {#if $markupControlsOpacity > 0}
+// (2930:4) {#if $markupControlsOpacity > 0}
 function create_if_block$2(ctx) {
 	let div;
 	let dynamiccomponenttree;
@@ -28298,7 +31773,7 @@ function create_if_block$2(ctx) {
 	let dispose;
 
 	dynamiccomponenttree = new DynamicComponentTree_1({
-			props: { items: /*shapeControls*/ ctx[18] }
+			props: { items: /*shapeControls*/ ctx[21] }
 		});
 
 	return {
@@ -28306,7 +31781,7 @@ function create_if_block$2(ctx) {
 			div = element("div");
 			create_component(dynamiccomponenttree.$$.fragment);
 			attr(div, "class", "PinturaShapeControls");
-			attr(div, "style", /*markupControlsStyle*/ ctx[17]);
+			attr(div, "style", /*markupControlsStyle*/ ctx[20]);
 		},
 		m(target, anchor) {
 			insert(target, div, anchor);
@@ -28315,7 +31790,7 @@ function create_if_block$2(ctx) {
 
 			if (!mounted) {
 				dispose = [
-					listen(div, "measure", /*measure_handler_1*/ ctx[123]),
+					listen(div, "measure", /*measure_handler_1*/ ctx[134]),
 					action_destroyer(measurable.call(null, div))
 				];
 
@@ -28324,11 +31799,11 @@ function create_if_block$2(ctx) {
 		},
 		p(ctx, dirty) {
 			const dynamiccomponenttree_changes = {};
-			if (dirty[0] & /*shapeControls*/ 262144) dynamiccomponenttree_changes.items = /*shapeControls*/ ctx[18];
+			if (dirty[0] & /*shapeControls*/ 2097152) dynamiccomponenttree_changes.items = /*shapeControls*/ ctx[21];
 			dynamiccomponenttree.$set(dynamiccomponenttree_changes);
 
-			if (!current || dirty[0] & /*markupControlsStyle*/ 131072) {
-				attr(div, "style", /*markupControlsStyle*/ ctx[17]);
+			if (!current || dirty[0] & /*markupControlsStyle*/ 1048576) {
+				attr(div, "style", /*markupControlsStyle*/ ctx[20]);
 			}
 		},
 		i(local) {
@@ -28349,7 +31824,7 @@ function create_if_block$2(ctx) {
 	};
 }
 
-function create_fragment$b(ctx) {
+function create_fragment$f(ctx) {
 	let div;
 	let nav;
 	let ul;
@@ -28362,8 +31837,8 @@ function create_fragment$b(ctx) {
 	let current;
 	let mounted;
 	let dispose;
-	let each_value = /*shapeNavList*/ ctx[19];
-	const get_key = ctx => /*item*/ ctx[171].id;
+	let each_value = /*shapeNavList*/ ctx[22];
+	const get_key = ctx => /*item*/ ctx[197].id;
 
 	for (let i = 0; i < each_value.length; i += 1) {
 		let child_ctx = get_each_context$3(ctx, each_value, i);
@@ -28371,9 +31846,9 @@ function create_fragment$b(ctx) {
 		each_1_lookup.set(key, each_blocks[i] = create_each_block$3(key, child_ctx));
 	}
 
-	let if_block0 = /*shouldRenderShapeManipulator*/ ctx[7] && create_if_block_2$2(ctx);
-	let if_block1 = /*shouldRenderTextInput*/ ctx[9] && create_if_block_1$2(ctx);
-	let if_block2 = /*$markupControlsOpacity*/ ctx[10] > 0 && create_if_block$2(ctx);
+	let if_block0 = /*shouldRenderShapeManipulator*/ ctx[10] && create_if_block_4$2(ctx);
+	let if_block1 = /*shouldRenderTextInput*/ ctx[12] && create_if_block_1$2(ctx);
+	let if_block2 = /*$markupControlsOpacity*/ ctx[13] > 0 && create_if_block$2(ctx);
 
 	return {
 		c() {
@@ -28392,7 +31867,7 @@ function create_fragment$b(ctx) {
 			t2 = space();
 			if (if_block2) if_block2.c();
 			attr(nav, "class", "PinturaShapeList");
-			attr(nav, "data-visible", /*showShapeList*/ ctx[12]);
+			attr(nav, "data-visible", /*showShapeList*/ ctx[14]);
 			attr(div, "class", "PinturaShapeEditor");
 			attr(div, "tabindex", "0");
 		},
@@ -28415,23 +31890,24 @@ function create_fragment$b(ctx) {
 
 			if (!mounted) {
 				dispose = [
-					listen(nav, "focusin", /*handleFocusIn*/ ctx[40]),
-					listen(nav, "focusout", /*handleFocusOut*/ ctx[41]),
-					listen(div, "keydown", /*handleKey*/ ctx[31]),
-					listen(div, "nudge", /*handleNudge*/ ctx[39]),
-					listen(div, "measure", /*measure_handler*/ ctx[120]),
+					listen(nav, "focusin", /*handleFocusIn*/ ctx[44]),
+					listen(nav, "focusout", /*handleFocusOut*/ ctx[45]),
+					listen(div, "keydown", /*handleKey*/ ctx[34]),
+					listen(div, "nudge", /*handleNudge*/ ctx[43]),
+					listen(div, "measure", /*measure_handler*/ ctx[129]),
 					action_destroyer(measurable.call(null, div)),
 					action_destroyer(nudgeable.call(null, div)),
-					listen(div, "interactionstart", /*handleInteractionStart*/ ctx[21]),
-					listen(div, "interactionupdate", /*handleInteractionUpdate*/ ctx[22]),
-					listen(div, "interactionrelease", /*handleInteractionRelease*/ ctx[23]),
-					listen(div, "interactionend", /*handleInteractionEnd*/ ctx[24]),
+					listen(div, "pointermove", /*handlePointerMove*/ ctx[46]),
+					listen(div, "interactionstart", /*handleInteractionStart*/ ctx[24]),
+					listen(div, "interactionupdate", /*handleInteractionUpdate*/ ctx[25]),
+					listen(div, "interactionrelease", /*handleInteractionRelease*/ ctx[26]),
+					listen(div, "interactionend", /*handleInteractionEnd*/ ctx[27]),
 					action_destroyer(interactable_action = interactable.call(null, div, {
 						drag: true,
 						pinch: true,
 						inertia: true,
 						matchTarget: true,
-						getEventPosition: /*interactable_function*/ ctx[124]
+						getEventPosition: /*interactable_function*/ ctx[135]
 					}))
 				];
 
@@ -28439,26 +31915,26 @@ function create_fragment$b(ctx) {
 			}
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*shapeNavList, selectShape, markup*/ 524305) {
-				each_value = /*shapeNavList*/ ctx[19];
+			if (dirty[0] & /*shapeNavList, selectShape, markup*/ 4194337) {
+				each_value = /*shapeNavList*/ ctx[22];
 				group_outros();
 				each_blocks = update_keyed_each(each_blocks, dirty, get_key, 1, ctx, each_value, each_1_lookup, ul, outro_and_destroy_block, create_each_block$3, null, get_each_context$3);
 				check_outros();
 			}
 
-			if (!current || dirty[0] & /*showShapeList*/ 4096) {
-				attr(nav, "data-visible", /*showShapeList*/ ctx[12]);
+			if (!current || dirty[0] & /*showShapeList*/ 16384) {
+				attr(nav, "data-visible", /*showShapeList*/ ctx[14]);
 			}
 
-			if (/*shouldRenderShapeManipulator*/ ctx[7]) {
+			if (/*shouldRenderShapeManipulator*/ ctx[10]) {
 				if (if_block0) {
 					if_block0.p(ctx, dirty);
 
-					if (dirty[0] & /*shouldRenderShapeManipulator*/ 128) {
+					if (dirty[0] & /*shouldRenderShapeManipulator*/ 1024) {
 						transition_in(if_block0, 1);
 					}
 				} else {
-					if_block0 = create_if_block_2$2(ctx);
+					if_block0 = create_if_block_4$2(ctx);
 					if_block0.c();
 					transition_in(if_block0, 1);
 					if_block0.m(div, t1);
@@ -28473,11 +31949,11 @@ function create_fragment$b(ctx) {
 				check_outros();
 			}
 
-			if (/*shouldRenderTextInput*/ ctx[9]) {
+			if (/*shouldRenderTextInput*/ ctx[12]) {
 				if (if_block1) {
 					if_block1.p(ctx, dirty);
 
-					if (dirty[0] & /*shouldRenderTextInput*/ 512) {
+					if (dirty[0] & /*shouldRenderTextInput*/ 4096) {
 						transition_in(if_block1, 1);
 					}
 				} else {
@@ -28496,11 +31972,11 @@ function create_fragment$b(ctx) {
 				check_outros();
 			}
 
-			if (/*$markupControlsOpacity*/ ctx[10] > 0) {
+			if (/*$markupControlsOpacity*/ ctx[13] > 0) {
 				if (if_block2) {
 					if_block2.p(ctx, dirty);
 
-					if (dirty[0] & /*$markupControlsOpacity*/ 1024) {
+					if (dirty[0] & /*$markupControlsOpacity*/ 8192) {
 						transition_in(if_block2, 1);
 					}
 				} else {
@@ -28524,7 +32000,7 @@ function create_fragment$b(ctx) {
 				pinch: true,
 				inertia: true,
 				matchTarget: true,
-				getEventPosition: /*interactable_function*/ ctx[124]
+				getEventPosition: /*interactable_function*/ ctx[135]
 			});
 		},
 		i(local) {
@@ -28569,12 +32045,11 @@ const ROTATION_CONTROL_OFFSET = 20;
 const MIN_TEXT_MARKUP_WIDTH = 10;
 const shapeControlDist = 16;
 
-function instance$b($$self, $$props, $$invalidate) {
+function instance$f($$self, $$props, $$invalidate) {
 	let activeMarkup;
 	let activeShapeId;
 	let activeMarkupComputed;
 	let activeMarkupItemIsDraft;
-	let shapeProps;
 	let shapeActivePoints;
 	let allowResizeControls;
 	let allowRotateControls;
@@ -28591,7 +32066,8 @@ function instance$b($$self, $$props, $$invalidate) {
 	let textSizeDisplayOrigin;
 	let textRectDisplayOrigin;
 	let textInputText;
-	let markupTextInputStyle;
+	let textInputTextStyles;
+	let textInputPositionStyles;
 	let controlledMarkupItem;
 	let allowShapeFlip;
 	let allowShapeChangeTextLayout;
@@ -28599,6 +32075,7 @@ function instance$b($$self, $$props, $$invalidate) {
 	let allowShapeRemove;
 	let allowShapeReorder;
 	let allowShapeInput;
+	let allowShapeAdjustOpacity;
 	let markupControlsAnchorPosition;
 	let shapeControlsPosition;
 	let markupControlsStyle;
@@ -28619,6 +32096,8 @@ function instance$b($$self, $$props, $$invalidate) {
 	let { parentRect } = $$props;
 	let { rootRect } = $$props;
 	let { utilRect } = $$props;
+	let { hoverColor } = $$props;
+	let { textInputMode = "inline" } = $$props;
 	let { oninteractionstart = noop$1 } = $$props;
 	let { oninteractionupdate = noop$1 } = $$props;
 	let { oninteractionrelease = noop$1 } = $$props;
@@ -28627,6 +32106,7 @@ function instance$b($$self, $$props, $$invalidate) {
 	let { onupdateshape = noop$1 } = $$props;
 	let { onselectshape = noop$1 } = $$props;
 	let { onremoveshape = noop$1 } = $$props;
+	let { onhovershape = noop$1 } = $$props;
 	let { beforeSelectShape = () => true } = $$props;
 	let { beforeDeselectShape = () => true } = $$props;
 	let { beforeRemoveShape = () => true } = $$props;
@@ -28637,6 +32117,7 @@ function instance$b($$self, $$props, $$invalidate) {
 	let { eraseRadius = undefined } = $$props;
 	let { selectRadius = undefined } = $$props;
 	let { enableButtonFlipVertical = false } = $$props;
+	let { enableTapToAddText = true } = $$props;
 	let { locale } = $$props;
 
 	//
@@ -28647,9 +32128,7 @@ function instance$b($$self, $$props, $$invalidate) {
 		shapeUpdateProps(shape, propsToUpdate, parentRect);
 	};
 
-	//
-	// Helpers
-	//
+	//#region polygon helpers
 	const circleOverlapsWithLine = (point, radius, from, to) => {
 		const ac = vectorCreate(point.x - from.x, point.y - from.y);
 		const ab = vectorCreate(to.x - from.x, to.y - from.y);
@@ -28663,17 +32142,22 @@ function instance$b($$self, $$props, $$invalidate) {
 		return h2 <= radius * radius;
 	};
 
+	const circleOverlapsWithPath = (position, radius, points) => {
+		const l = points.length;
+
+		for (let i = 0; i < l - 1; i++) {
+			if (circleOverlapsWithLine(position, radius, points[i], points[i + 1])) return true;
+		}
+
+		return false;
+	};
+
 	const circleOverlapsWithPolygon = (position, radius, points) => {
 		// if center is in polygon
 		if (pointInPoly(position, points)) return true;
 
-		const count = points.length;
-
-		for (let i = 0; i < count - 1; i++) {
-			if (circleOverlapsWithLine(position, radius, points[i], points[i + 1])) return true;
-		}
-
-		return circleOverlapsWithLine(position, radius, points[0], points[count - 1]);
+		if (circleOverlapsWithPath(position, radius, points)) return true;
+		return circleOverlapsWithLine(position, radius, points[0], points[points.length - 1]);
 	};
 
 	const circleOverlapsWithEllipse = (position, radius, ellipse, rotation, flipX, flipY) => {
@@ -28686,25 +32170,21 @@ function instance$b($$self, $$props, $$invalidate) {
 	const shapeToPoly = (computedShape, resolution = 12) => {
 		if (shapeIsRect(computedShape)) {
 			return rectRotate(computedShape, computedShape.rotation, rectCenter(computedShape));
-		}
-
-		if (shapeIsText(computedShape)) {
-			return rectRotate(getMarkupShapeRect(computedShape), computedShape.rotation, rectCenter(computedShape));
-		}
-
-		if (shapeIsEllipse(computedShape)) {
+		} else if (shapeIsText(computedShape)) {
+			const computedRect = getMarkupShapeRect(computedShape);
+			return rectRotate(computedRect, computedShape.rotation, rectCenter(computedRect));
+		} else if (shapeIsEllipse(computedShape)) {
 			return ellipseToPolygon(vectorCreate(computedShape.x, computedShape.y), computedShape.rx, computedShape.ry, computedShape.rotation, computedShape.flipX, computedShape.flipY, resolution);
 		}
 
 		return [];
 	};
 
-	//
-	// Shape creator
-	//
+	//#endregion
+	//#region createShape eraseShape
 	const keysPressedStored = getContext("keysPressed");
 
-	component_subscribe($$self, keysPressedStored, value => $$invalidate(132, $keysPressedStored = value));
+	component_subscribe($$self, keysPressedStored, value => $$invalidate(145, $keysPressedStored = value));
 
 	const getShapeUpdateRotation = (rotation, flipX, flipY) => {
 		if (rotation === 0) return rotation;
@@ -28823,7 +32303,7 @@ function instance$b($$self, $$props, $$invalidate) {
 					// hide initially
 					draft.opacity = 0;
 
-					// 
+					//
 					if (isEllipse) {
 						draft.rx = isRelative ? toPercentage(0) : 0;
 						draft.ry = isRelative ? toPercentage(0) : 0;
@@ -28892,7 +32372,7 @@ function instance$b($$self, $$props, $$invalidate) {
 
 					if (e.detail.isTap) {
 						// will cancel if is not text shape
-						if (!shapeIsText(draft) || interactionTarget) return discardMarkupItemDraft();
+						if (!shapeIsText(draft) || !enableTapToAddText || interactionTarget) return discardMarkupItemDraft();
 
 						// will add 'auto' text shape if not targetting other shape
 						delete draft.width;
@@ -28903,7 +32383,7 @@ function instance$b($$self, $$props, $$invalidate) {
 						// position the shape correctly
 						const draftComputedShape = shapeComputeDisplay({ ...draft }, parentRect);
 
-						const size = textSize(draft.text, draftComputedShape);
+						const size = textToSize(draft.text, draftComputedShape);
 						size.width *= contextScale;
 						size.height *= contextScale;
 
@@ -29039,7 +32519,8 @@ function instance$b($$self, $$props, $$invalidate) {
 			update: e => {
 				const { translation } = e.detail;
 				const positionCurrent = vectorCreate(origin.x + translation.x, origin.y + translation.y);
-				const shapesFound = getMarkupBetweenPoints(mapEditorPointToImagePoint(positionPrevious), mapEditorPointToImagePoint(positionCurrent), eraseRadius);
+				const shapesThatCanBeErased = markup.filter(shape => !shape.disableErase);
+				const shapesFound = getShapesBetweenPoints(shapesThatCanBeErased, mapEditorPointToImagePoint(positionPrevious), mapEditorPointToImagePoint(positionCurrent), eraseRadius);
 				const shapesRemoved = removeMarkupItems(shapesFound);
 				shapesRemoved.forEach(onremoveshape);
 				positionPrevious = vectorClone(positionCurrent);
@@ -29051,6 +32532,7 @@ function instance$b($$self, $$props, $$invalidate) {
 		};
 	};
 
+	//#endregion
 	//
 	// Mapping coordinates
 	//
@@ -29070,9 +32552,7 @@ function instance$b($$self, $$props, $$invalidate) {
 	// const handleImagePan = (e) => {
 	// TODO: PAN image
 	// }
-	//
-	// markup manipulate
-	//
+	//#region translateShape rotateShape resizeShape
 	const translateShape = (shapeCurrent, shapeOriginComputed, translation) => {
 		if (shapeIsLine(shapeCurrent)) {
 			const beginImageOffset = getImagePointWithScreenTranslation(shapeLineGetStartPoint(shapeOriginComputed), translation);
@@ -29099,7 +32579,7 @@ function instance$b($$self, $$props, $$invalidate) {
 	const IndexFlipXMap = { 0: 1, 1: 0, 2: 3, 3: 2 };
 	const IndexFlipYMap = { 0: 3, 1: 2, 2: 1, 3: 0 };
 
-	const resizeMarkup = (shapeCurrent, shapeOriginComputed, indexes, translation, options) => {
+	const resizeShape = (shapeCurrent, shapeOriginComputed, indexes, translation, options) => {
 		if (shapeIsLine(shapeCurrent)) {
 			const [targetIndex] = indexes;
 
@@ -29136,7 +32616,7 @@ function instance$b($$self, $$props, $$invalidate) {
 				hasAutoHeight = true;
 
 				shapeOriginRect = rectCreateFromAny(shapeOriginComputed);
-				const size = textSize(shapeOriginComputed.text, shapeOriginComputed);
+				const size = textToSize(shapeOriginComputed.text, shapeOriginComputed);
 				shapeOriginRect.height = size.height;
 			}
 
@@ -29344,7 +32824,7 @@ function instance$b($$self, $$props, $$invalidate) {
 
 	let rotatorInitialPosition;
 
-	const rotateMarkup = (shapeCurrent, shapeOriginComputed, translation, options) => {
+	const rotateShape = (shapeCurrent, shapeOriginComputed, translation, options) => {
 		// calculate angle between translated rotation control and origin
 		const shapeRect = getMarkupShapeRect(shapeComputeDisplay(shapeDeepCopy(shapeCurrent), parentRect));
 
@@ -29363,26 +32843,32 @@ function instance$b($$self, $$props, $$invalidate) {
 
 	const getMarkupItemDraft = () => {
 		if (!markup.length) return;
-		const lastMarkupItem = markup[markup.length - 1];
-		return lastMarkupItem.isDraft ? lastMarkupItem : undefined;
+		return markup.find(shapeIsDraft);
+	};
+
+	const getMarkupItemDraftIndex = () => {
+		if (!markup.length) return;
+		return markup.findIndex(shapeIsDraft);
 	};
 
 	const addMarkupItemDraft = (shape, sync = true) => {
 		if (getMarkupItemDraft()) return;
-		shape = Object.assign(shape, { isDraft: true });
+		shapeMakeDraft(shape);
 		return addShape(shape, sync);
 	};
 
 	const confirmMarkupItemDraft = () => {
 		const markupItem = getMarkupItemDraft();
 		if (!markupItem) return;
-		updateMarkupShapeProperty(markupItem, "isDraft", false);
+		shapeMakeFinal(markupItem);
+		syncShapes();
 		return markupItem;
 	};
 
 	const discardMarkupItemDraft = () => {
 		if (!getMarkupItemDraft()) return;
-		$$invalidate(0, markup = markup.slice(0, -1));
+		markup.splice(getMarkupItemDraftIndex(), 1);
+		syncShapes();
 	};
 
 	const createMarkupItem = (props = {}) => ({ id: getUniqueId(), ...props });
@@ -29446,19 +32932,17 @@ function instance$b($$self, $$props, $$invalidate) {
 	const getActiveMarkupItem = () => [...markup].reverse().find(shapeIsSelected);
 	const hasActiveMarkupItem = () => !!getActiveMarkupItem();
 
-	const removeShape = (shapeToRemove, sync = true) => {
+	const removeShape = shapeToRemove => {
 		if (!beforeRemoveShape(shapeToRemove)) return false;
-		const markupWithoutShape = markup.filter(shape => shape !== shapeToRemove);
+		$$invalidate(0, markup = markup.filter(shape => shape !== shapeToRemove));
 		onremoveshape(shapeToRemove);
-		if (!sync) return;
-		$$invalidate(0, markup = markupWithoutShape);
 	};
 
 	const removeActiveMarkupItem = () => {
 		const activeShape = getActiveMarkupItem();
 		if (!activeShape) return;
 
-		// get removable markup items, 
+		// get removable markup items,
 		const removableShapes = markup.filter(shape => shapeCanRemove(shape) && shapeCanSelect(shape));
 
 		// find index of active shape so we can select the next active shape on removal
@@ -29487,15 +32971,21 @@ function instance$b($$self, $$props, $$invalidate) {
 		// clear text state cache, when a text shape is blurred the changes are confirmed
 		Object.keys(ShapeTextStateCache).forEach(key => ShapeTextStateCache[key] = {});
 
+		// remember shape
 		previousSelectedShape = getSelectedShape();
-		updateMarkupShapeItems({ isSelected: false, isEditing: false });
+
+		updateMarkupShapeItems({
+			isSelected: false,
+			isEditing: false,
+			_prerender: false
+		});
 	};
 
 	const getSelectedShape = () => markup.find(shapeIsSelected);
 
 	const selectShape = (shape, sync = true) => {
 		// can't select draft
-		if (shape.isDraft) return;
+		if (shapeIsDraft(shape)) return;
 
 		// get currently selected shape
 		const selectedShape = getSelectedShape() || previousSelectedShape;
@@ -29522,15 +33012,30 @@ function instance$b($$self, $$props, $$invalidate) {
 	};
 
 	const deselectMarkupItem = markupItem => {
-		updateMarkupShape(markupItem, { isSelected: false, isEditing: false });
+		// we're blurring an active text field, should confirm state
+		if (textInput && markupItem.isEditing) textInput.confirm();
+
+		updateMarkupShape(markupItem, {
+			isSelected: false,
+			isEditing: false,
+			_prerender: false
+		});
 	};
 
 	const editMarkupItem = markupItem => {
-		updateMarkupShape(markupItem, { isSelected: true, isEditing: true });
+		updateMarkupShape(markupItem, {
+			isSelected: true,
+			isEditing: true,
+			_prerender: textInputMode === "inline"
+		});
 	};
 
 	const finishEditMarkupItem = markupItem => {
-		updateMarkupShape(markupItem, { isSelected: true, isEditing: false });
+		updateMarkupShape(markupItem, {
+			isSelected: true,
+			isEditing: false,
+			_prerender: false
+		});
 	};
 
 	const removeMarkupItems = shapesToRemove => {
@@ -29540,7 +33045,7 @@ function instance$b($$self, $$props, $$invalidate) {
 	};
 
 	const getTextShapeRect = shape => {
-		const size = textSize(shape.text, shape);
+		const size = textToSize(shape.text, shape);
 
 		return rectCreate(
 			shape.x,
@@ -29611,6 +33116,9 @@ function instance$b($$self, $$props, $$invalidate) {
 		if (shapeIsLine(computedShape)) {
 			// radius around click position, test if line intersects
 			return circleOverlapsWithLine(position, Math.max(16, r), shapeLineGetStartPoint(computedShape), shapeLineGetEndPoint(computedShape)); // always increase range when selecting lines
+		} else if (shapeIsPath(computedShape)) {
+			// radius around click position, test if line intersects
+			return circleOverlapsWithPath(position, Math.max(16, r), computedShape.points); // always increase range when selecting lines
 		}
 
 		return false;
@@ -29618,11 +33126,11 @@ function instance$b($$self, $$props, $$invalidate) {
 		if (a.priority < b.priority) return 1;
 		if (a.priority > b.priority) return -1;
 		return 0;
-	});
+	}).map(item => item.shape);
 
-	const getMarkupBetweenPoints = (a, b, range = 0) => {
+	const getShapesBetweenPoints = (shapes, a, b, range = 0) => {
 		// make sure range is not negative
-		let r = Math.abs(range);
+		const r = Math.abs(range);
 
 		// eraseLine should be in image space
 		const eraseLine = lineExtend(lineCreate(a, b), r);
@@ -29631,35 +33139,44 @@ function instance$b($$self, $$props, $$invalidate) {
 		const erasePoly = lineExtrude(eraseLine, r);
 
 		// loop over shapes and find intersecting shapes
-		return markup.// .filter(shapeCanErase)
+		return shapes.// .filter(shapeCanErase)
 		filter(shape => {
 			const computedShape = shapeComputeDisplay(shapeDeepCopy(shape), parentRect);
 
 			// if shape is line or path
-			if (shapeIsLine(computedShape) || shapeIsPath(computedShape)) return !!linePointsIntersection(eraseLine, getMarkupShapePoints(computedShape));
+			if (shapeIsLine(computedShape) || shapeIsPath(computedShape)) {
+				const points = computedShape.points
+				? [...computedShape.points]
+				: [
+						shapeLineGetStartPoint(computedShape),
+						shapeLineGetEndPoint(computedShape)
+					];
+
+				return !!linePointsIntersection(eraseLine, points);
+			}
 
 			// else turn into polygon and compare polygons
 			return polyIntersectsWithPoly(erasePoly, shapeToPoly(computedShape));
 		});
 	};
 
-	//
-	// Generic interaction
-	//
+	//#region shape base interaction
 	let interactionTimer = undefined;
 
 	let interactionTarget = undefined;
 	let interactionShape = undefined;
+	let interactionShapeOrigin = undefined;
 	let interactionShapeOriginComputed = undefined;
 	let isInteracting = false;
 
 	const handleInteractionStart = e => {
 		const { origin } = e.detail;
 		interactionShape = undefined;
+		interactionShapeOrigin = undefined;
 		interactionShapeOriginComputed = undefined;
 		interactionTarget = undefined;
 		clearTimeout(interactionTimer);
-		interactionTimer = setTimeout(() => $$invalidate(97, isInteracting = true), 250);
+		interactionTimer = setTimeout(() => $$invalidate(106, isInteracting = true), 250);
 
 		// if is editing text
 		const draft = getMarkupItemDraft();
@@ -29670,14 +33187,23 @@ function instance$b($$self, $$props, $$invalidate) {
 		const point = mapEditorPointToImagePoint(vectorClone(origin));
 
 		const foundShapes = getShapesNearPosition(point, selectRadius);
-		const targettedMarkupItem = foundShapes.length && foundShapes.shift().shape;
+		const targettedMarkupItem = foundShapes.length && foundShapes.shift();
+
+		// deselect
+		if (!targettedMarkupItem && activeMarkup && shapeIsTextEditing(activeMarkup)) {
+			deselectMarkupItem(activeMarkup);
+		}
 
 		// check if markup was targetted
 		if (targettedMarkupItem && shapeIsSelected(targettedMarkupItem)) {
-			// clone shape we're interacting with so we can update it properly
 			interactionShape = targettedMarkupItem;
 
+			// create a deep copy so we can check on end interaction if the shape was changed
+			interactionShapeOrigin = shapeDeepCopy(interactionShape);
+
+			// clone shape we're interacting with so we can update it properly
 			interactionShapeOriginComputed = shapeComputeDisplay(shapeDeepCopy(interactionShape), parentRect);
+
 			return;
 		}
 
@@ -29687,10 +33213,15 @@ function instance$b($$self, $$props, $$invalidate) {
 		// started interacting
 		const didStartInteraction = oninteractionstart(e);
 
-		// drag current targetted it as fallback interction, helps make sticker interaction easier
+		// drag current targetted it as fallback interaction, helps make sticker interaction easier
 		if (!didStartInteraction && targettedMarkupItem) {
 			selectShape(targettedMarkupItem);
 			interactionShape = targettedMarkupItem;
+
+			// create a deep copy so we can check on end interaction if the shape was changed
+			interactionShapeOrigin = shapeDeepCopy(interactionShape);
+
+			// clone shape we're interacting with so we can update it properly
 			interactionShapeOriginComputed = shapeComputeDisplay(shapeDeepCopy(interactionShape), parentRect);
 		}
 	};
@@ -29712,13 +33243,14 @@ function instance$b($$self, $$props, $$invalidate) {
 
 	const handleInteractionRelease = e => {
 		clearTimeout(interactionTimer);
-		$$invalidate(97, isInteracting = false);
+		interactionTimer = undefined;
+		$$invalidate(106, isInteracting = false);
 
 		// test if is text and if we double tapped, if so, switch to text edit mode
 		if (interactionShape) {
-			if (interactionShape.isEditing) {
+			if (shapeIsTextEditing(interactionShape)) {
 				handleTextCancel();
-			} else if (e.detail.isDoubleTap && shapeIsText(interactionShape) && shapeCanInput(interactionShape) !== false) {
+			} else if (e.detail.isTap && shapeIsText(interactionShape) && shapeCanInput(interactionShape) !== false) {
 				editMarkupItem(interactionShape);
 			}
 
@@ -29729,17 +33261,17 @@ function instance$b($$self, $$props, $$invalidate) {
 	};
 
 	const handleInteractionEnd = e => {
+		const isSelectInteraction = interactionTarget && e.detail.isTap;
+
 		// shape remains active so user can resize, rotate
 		if (interactionShape) {
-			onupdateshape(interactionShape);
+			if (!shapeEqual(interactionShape, interactionShapeOrigin)) onupdateshape(interactionShape);
 			interactionShape = undefined;
 			return;
 		}
 
 		// can we deselect the current shape?
 		const currentSelectedShape = getSelectedShape();
-
-		const isSelectInteraction = interactionTarget && e.detail.isTap;
 
 		const allowDeselectShape = currentSelectedShape
 		? beforeDeselectShape(currentSelectedShape, interactionTarget)
@@ -29756,6 +33288,7 @@ function instance$b($$self, $$props, $$invalidate) {
 		}
 	};
 
+	//#endregion
 	//
 	// Shape manipulation
 	//
@@ -29793,6 +33326,7 @@ function instance$b($$self, $$props, $$invalidate) {
 		let origin;
 		let dir;
 
+		// const shouldFlipOverYAxis = (shape.flipY || contextFlipY) && !(shape.flipY && contextFlipY);
 		if (shape.flipY) {
 			origin = vectorCenter([points[0], points[1]]);
 			dir = vectorNormalize(vectorCreate(points[1].x - points[2].x, points[1].y - points[2].y));
@@ -29821,11 +33355,41 @@ function instance$b($$self, $$props, $$invalidate) {
 		};
 	};
 
+	const showHover = shape => {
+		const points = getMarkupShapePoints(shapeComputeDisplay(shapeDeepCopy(shape), parentRect)).map(mapImagePointToEditorPoint);
+		const pathClose = shapeIsPath(shape) || shapeIsLine(shape) ? false : true;
+
+		const outlineShadow = {
+			id: "hover",
+			points: points.map(p => vectorCreate(p.x + 1, p.y + 1)),
+			strokeColor: [0, 0, 0, 0.1],
+			strokeWidth: 2,
+			pathClose
+		};
+
+		const outline = {
+			id: "hover",
+			points,
+			strokeColor: hoverColor, //[3 / 255, 169 / 255, 244 / 255],
+			strokeWidth: 2,
+			pathClose
+		};
+
+		hideHover();
+		$$invalidate(47, ui = [...ui, outlineShadow, outline]);
+	};
+
+	const hideHover = () => {
+		$$invalidate(47, ui = ui.filter(shape => shape.id !== "hover"));
+	};
+
+	let hoverShape;
+
 	// draw shape manipulator edges
 	let shapeManipulatorUid = `markup-manipulator-segment`;
 
 	const claimManipulatorLines = () => {
-		$$invalidate(42, ui = ui.map(shape => {
+		$$invalidate(47, ui = ui.map(shape => {
 			if (shape.id !== shapeManipulatorUid) return shape;
 			shape._group = uid;
 			return shape;
@@ -29841,30 +33405,28 @@ function instance$b($$self, $$props, $$invalidate) {
 		const manipulatorOpacity = current ? Math.max(current.opacity, opacity) : opacity;
 
 		// create manipulator outline segments
-		const points = [...shapeActiveScreenPoints, shapeActiveScreenPoints[0]];
-
-		const l = points.length;
 		const segments = [];
+
 		const shadowOpacity = 0.1 * manipulatorOpacity;
 		const lineOpacity = manipulatorOpacity;
 		const strokeColorShadow = [0, 0, 0];
 		const strokeColor = [1, 1, 1];
 		const strokeWidth = 1.5;
 
-		// shadows
-		for (let i = 0; i < l - 1; i++) {
-			const a = points[i];
-			const b = points[i + 1];
+		const pathClose = shapeIsPath(activeMarkup) || shapeIsLine(activeMarkup)
+		? false
+		: true;
 
-			segments.push({
-				id: shapeManipulatorUid,
-				points: [vectorCreate(a.x + 1, a.y + 1), vectorCreate(b.x + 1, b.y + 1)],
-				strokeColor: strokeColorShadow,
-				strokeWidth: 2,
-				opacity: shadowOpacity,
-				_group: uid
-			});
-		}
+		// shadows
+		segments.push({
+			id: shapeManipulatorUid,
+			points: shapeActiveScreenPoints.map(p => vectorCreate(p.x + 1, p.y + 1)),
+			pathClose,
+			strokeColor: strokeColorShadow,
+			strokeWidth: 2,
+			opacity: shadowOpacity,
+			_group: uid
+		});
 
 		if (shapeManipulatorRotationPoint) {
 			// add rotator line shadow
@@ -29882,16 +33444,15 @@ function instance$b($$self, $$props, $$invalidate) {
 		}
 
 		// lines
-		for (let i = 0; i < l - 1; i++) {
-			segments.push({
-				id: shapeManipulatorUid,
-				points: [points[i], points[i + 1]],
-				strokeColor,
-				strokeWidth,
-				opacity: lineOpacity,
-				_group: uid
-			});
-		}
+		segments.push({
+			id: shapeManipulatorUid,
+			points: shapeActiveScreenPoints,
+			pathClose,
+			strokeColor,
+			strokeWidth,
+			opacity: lineOpacity,
+			_group: uid
+		});
 
 		if (shapeManipulatorRotationPoint) {
 			// add rotator line
@@ -29915,52 +33476,54 @@ function instance$b($$self, $$props, $$invalidate) {
 		}
 
 		// replace existing segments
-		$$invalidate(42, ui = [...ui.filter(guide => guide.id !== shapeManipulatorUid), ...segments]);
+		$$invalidate(47, ui = [...ui.filter(guide => guide.id !== shapeManipulatorUid), ...segments]);
 	};
 
 	const removeMarkupManipulatorLines = () => {
-		$$invalidate(42, ui = ui.filter(guide => guide.opacity === 0 && guide.id !== shapeManipulatorUid));
+		$$invalidate(47, ui = ui.filter(guide => guide.opacity === 0 && guide.id !== shapeManipulatorUid));
 	};
 
-	onDestroy(() => {
-		// clean up invisible lines
-		removeMarkupManipulatorLines();
-	});
+	const togglePrerender = isActive => {
+		if (!isActive) return updateMarkupShapeItems({ _prerender: false });
+		const shape = markup.find(markupItem => markupItem.isEditing);
+		if (!shape) return;
+		updateMarkupShape(shape, { _prerender: true });
+	};
 
 	const handleManipulatorResizeGrab = e => {
-		$$invalidate(97, isInteracting = true);
+		$$invalidate(106, isInteracting = true);
 		interactionShape = activeMarkup;
 		interactionShapeOriginComputed = activeMarkupComputed;
 	};
 
 	const handleManipulatorResizeDrag = e => {
 		const { translation, indexes, shiftKey } = e.detail;
-		resizeMarkup(interactionShape, interactionShapeOriginComputed, indexes, translation, { shiftKey });
+		resizeShape(interactionShape, interactionShapeOriginComputed, indexes, translation, { shiftKey });
 	};
 
 	const handleManipulatorResizeEnd = e => {
 		selectShape(interactionShape);
 		interactionShape = undefined;
-		$$invalidate(97, isInteracting = false);
+		$$invalidate(106, isInteracting = false);
 		onupdateshape(activeMarkup);
 	};
 
 	const handleManipulatorRotateGrab = e => {
 		rotatorInitialPosition = getShapeRotationPoint(activeMarkupComputed).origin;
-		$$invalidate(97, isInteracting = true);
+		$$invalidate(106, isInteracting = true);
 		interactionShape = activeMarkup;
 		interactionShapeOriginComputed = activeMarkupComputed;
 	};
 
 	const handleManipulatorRotateDrag = e => {
 		const { translation, shiftKey } = e.detail;
-		rotateMarkup(interactionShape, interactionShapeOriginComputed, translation, { shiftKey });
+		rotateShape(interactionShape, interactionShapeOriginComputed, translation, { shiftKey });
 	};
 
 	const handleManipulatorRotateEnd = () => {
 		selectShape(interactionShape);
 		interactionShape = undefined;
-		$$invalidate(97, isInteracting = false);
+		$$invalidate(106, isInteracting = false);
 		onupdateshape(activeMarkup);
 	};
 
@@ -29976,6 +33539,8 @@ function instance$b($$self, $$props, $$invalidate) {
 
 		// if is escape deselect active item
 		if ((/escape/i).test(key)) {
+			e.preventDefault();
+			e.stopPropagation();
 			return deselectMarkupItem(activeMarkup);
 		}
 
@@ -29993,13 +33558,17 @@ if (/arrow/i.test(key)) {
 }
 */
 		// if is remove active
-		if ((/backspace/i).test(key) && !(/input|textarea/i).test(e.target.nodeName)) {
+		if ((/backspace/i).test(key) && !isTextInputElement(e.target)) {
 			// prevent back navigation on Firefox
 			e.preventDefault();
 
 			// remove the item
 			removeActiveMarkupItem();
 		}
+	};
+
+	const isTextInputElement = element => {
+		return element.isContentEditable || (/input|textarea/i).test(element.nodeName);
 	};
 
 	//
@@ -30009,11 +33578,108 @@ if (/arrow/i.test(key)) {
 
 	const getTextShapeOriginSnapshot = () => ({ ...activeMarkup });
 
-	const handleTextInput = () => {
-		const value = shapeIsTextLine(activeMarkup)
-		? filterNewlines(textInput.value)
-		: textInput.value;
+	const getTextInputTextStyles = (shapeComputed, mode) => {
+		const { textAlign = "left", fontFamily = "sans-serif", fontWeight = "normal", fontStyle = "normal" } = shapeComputed;
+		const fontSize = shapeComputed.fontSize;
+		const imp = "!important";
+		const cosmetic = `text-align:${textAlign}${imp};font-family:${fontFamily}${imp};font-weight:${fontWeight}${imp};font-style:${fontStyle}${imp};`;
+		if (mode === "modal") return cosmetic;
+		const color = colorArrayToRGBA(shapeComputed.color);
+		const lineHeight = shapeComputed.lineHeight;
+		const initialLineOffset = Math.max(0, fontSize - lineHeight) * 0.5;
+		return `--bottom-inset:${initialLineOffset}px;padding:${initialLineOffset}px 0 0${imp};color:${color}${imp};font-size:${fontSize}px${imp};line-height:${lineHeight}px${imp};${cosmetic}`;
+	};
 
+	const getTextInputPositionStyles = (shapeComputed, offset, contextScale, contextRotation) => {
+		let center;
+		let size;
+
+		if (shapeComputed.width && shapeComputed.height) {
+			// text box
+			center = rectCenter(shapeComputed);
+
+			size = sizeCreateFromAny(shapeComputed);
+		} else {
+			// text line
+			size = textToSize(activeMarkup.text, activeMarkupComputed);
+
+			// if has fix width, we'll use that
+			size.width = activeMarkupComputed.width || size.width;
+
+			center = vectorCreate(shapeComputed.x + size.width * 0.5, shapeComputed.y + size.height * 0.5);
+		}
+
+		const lineHeight = Math.max(0, shapeComputed.fontSize - shapeComputed.lineHeight) + shapeComputed.lineHeight;
+		const position = mapImagePointToEditorPoint(center);
+		let tx = position.x - offset.x - size.width * 0.5;
+		let ty = position.y - offset.y - size.height * 0.5;
+		let flipX = shapeComputed.flipX;
+		let flipY = shapeComputed.flipY;
+		let r = shapeComputed.rotation;
+
+		if (contextFlipX && contextFlipY) {
+			flipX = !flipX;
+			flipY = !flipY;
+		} else if (contextFlipX) {
+			flipX = !flipX;
+			r = -r;
+		} else if (contextFlipY) {
+			flipY = !flipY;
+			r = -r;
+		}
+
+		r += contextRotation;
+		const sx = contextScale * (flipX ? -1 : 1);
+		const sy = contextScale * (flipY ? -1 : 1);
+		return `--line-height:${lineHeight}px;width:${size.width}px;height:${size.height}px;transform:translate(${tx}px,${ty}px) rotate(${r}rad) scale(${sx}, ${sy})`;
+	};
+
+	// sets the contenteditable text when user clicks text shape
+	const syncTextInput = () => updateTextInputValue(textInputText);
+
+	const updateTextInputValue = text => $$invalidate(6, textInput.innerHTML = textToHTML(text), textInput);
+
+	// cleans up single line text
+	const removeLineBreaks = text => {
+		const lines = text.// split on lines so we can create compressed normal line of text
+		split(/[\n\r]/g);
+
+		if (lines.length > 1) {
+			return lines.// remove spaces around lines
+			map(str => str.trim()).// remove empty strings
+			filter(str => str.length).// create new line
+			join(" ");
+		}
+
+		// just return line
+		return lines[0];
+	};
+
+	const getTextInputValue = element => {
+		let textInputValue;
+
+		if (element.value === undefined) {
+			textInputValue = htmlToText(element.innerHTML);
+		} else {
+			textInputValue = element.value;
+		}
+
+		const value = shapeIsTextLine(activeMarkup)
+		? removeLineBreaks(textInputValue)
+		: textInputValue;
+
+		return value;
+	};
+
+	const formatContentEditable = html => {
+		// check if can input
+		const canInput = shapeCanInput(activeMarkup, html);
+
+		return canInput === true ? html : canInput;
+	};
+
+	const handleTextInput = () => {
+		const value = getTextInputValue(textInput);
 		const canInput = shapeCanInput(activeMarkup, value);
 		const text = canInput === true ? value : canInput;
 		let x = textShapeDisplayOrigin.x;
@@ -30025,7 +33691,7 @@ if (/arrow/i.test(key)) {
 			const originRotatedRect = rectRotate({ ...textRectDisplayOrigin }, activeMarkup.rotation);
 
 			// draw current rect
-			const size = textSize(text, activeMarkupComputed);
+			const size = textToSize(text, activeMarkupComputed);
 
 			const currentRotatedRect = rectRotate({ x, y, ...size }, activeMarkup.rotation);
 			const [originTopLeft, ,originBottomRight] = originRotatedRect;
@@ -30057,6 +33723,64 @@ if (/arrow/i.test(key)) {
 		});
 	};
 
+	const handleTextInputAttempt = e => {
+		const { target, key } = e;
+		const currentValue = target.value || target.innerText;
+		const selectionStart = target.selectionStart || 0;
+		const selectionEnd = target.selectionEnd || currentValue.length;
+		const currentValueStart = currentValue.substring(0, selectionStart);
+		const currentValueEnd = currentValue.substring(selectionEnd);
+		const intendedValue = currentValueStart + key + currentValueEnd;
+		const filteredValue = shapeCanInput(activeMarkup, intendedValue);
+		if (filteredValue !== intendedValue) return e.preventDefault();
+	};
+
+	// prevent moving shape when focusing text field, and close field if escape pressed
+	const handleTextInputKeyDown = e => {
+		if (shapeIsTextLine(activeMarkup) && (/enter/i).test(e.code)) return e.preventDefault();
+		if ((/arrow/i).test(e.code)) return e.stopPropagation();
+		if ((/escape/i).test(e.key)) return handleTextCancel();
+	};
+
+	// handle alt/ctrl/cmd + return
+	const handleTextInputKeyUp = e => {
+		// get key type
+		const { key, ctrlKey, altKey } = e;
+
+		// confirm multi line text elements
+		if ((/enter/i).test(key) && (ctrlKey || altKey)) return handleTextConfirm();
+	};
+
+	const handleTextConfirm = () => {
+		// if was draft, now need to confirm
+		let wasDraft = shapeIsDraft(activeMarkup);
+
+		if (shapeIsDraft(activeMarkup)) confirmMarkupItemDraft();
+
+		// final text input check
+		handleTextInput();
+
+		// done
+		finishEditMarkupItem(activeMarkup);
+
+		if (wasDraft) onaddshape(activeMarkup); else onupdateshape(activeMarkup);
+	};
+
+	const handleTextCancel = () => {
+		if (shapeIsDraft(activeMarkup)) {
+			discardMarkupItemDraft();
+		} else {
+			updateMarkupShape(activeMarkup, {
+				text: textShapeOrigin.text,
+				x: textShapeOrigin.x,
+				y: textShapeOrigin.y
+			});
+
+			finishEditMarkupItem(activeMarkup);
+		}
+	};
+
+	//#region shape popup menu actions
 	const getShapeSizeTranslation = (originRect, targetRect, { flipX, flipY, rotation }, anchor = "top left") => {
 		let a, b;
 
@@ -30103,13 +33827,14 @@ if (/arrow/i.test(key)) {
 	);
 
 	const ShapeTextStateCache = {};
+	const handleEditTextActiveMarkup = () => editMarkupItem(activeMarkup);
 
 	const handleTextSwitchLayout = () => {
-		const shapeTextSize = textSize(activeMarkup.text, activeMarkupComputed);
+		const shapeTextSize = textToSize(activeMarkup.text, activeMarkupComputed);
 		const isFixedBox = hasProp(activeMarkup, "height");
 		const isAutoHeightBox = !isFixedBox && hasProp(activeMarkup, "width");
 
-		// set/get cache entries for this text shapw
+		// set/get cache entries for this text shape
 		const key = activeMarkup.id;
 
 		let cache = ShapeTextStateCache[key];
@@ -30121,7 +33846,7 @@ if (/arrow/i.test(key)) {
 
 		const toAutoWidth = sizeFrom => {
 			const { width, ...autoSizeProps } = activeMarkupComputed;
-			const sizeTo = textSize(activeMarkup.text, autoSizeProps);
+			const sizeTo = textToSize(activeMarkup.text, autoSizeProps);
 
 			// this will change dimensions so if rotated we have to calculate new position
 			const translation = getShapeSizeTranslation(rectCreate(activeMarkupComputed.x, activeMarkupComputed.y, sizeFrom.width, sizeFrom.height), rectCreate(activeMarkupComputed.x, activeMarkupComputed.y, sizeTo.width, sizeTo.height), activeMarkupComputed, `top ${activeMarkup.textAlign}`);
@@ -30218,73 +33943,6 @@ if (/arrow/i.test(key)) {
 		}
 	};
 
-	const handleEditTextActiveMarkup = () => editMarkupItem(activeMarkup);
-
-	const handleTextInputAttempt = e => {
-		const currentValue = e.target.value;
-		const selectionStart = e.target.selectionStart;
-		const selectionEnd = e.target.selectionEnd;
-		const currentValueStart = currentValue.substring(0, selectionStart);
-		const currentValueEnd = currentValue.substring(selectionEnd);
-		const intendedValue = currentValueStart + e.key + currentValueEnd;
-		const filteredValue = shapeCanInput(activeMarkup, intendedValue);
-		if (filteredValue !== intendedValue) return e.preventDefault();
-	};
-
-	const filterNewlines = value => value.// split on lines so we can create compressed normal line of text
-	split(/[\n\r]/g).// rempve spaces around lines
-	map(str => str.trim()).// remove empty strings
-	filter(str => str.length).// create new line
-	join(" ");
-
-	// prevent moving shape when focusing text field, and close field if escape pressed
-	const handleTextInputKeyDown = e => {
-		if (shapeIsTextLine(activeMarkup) && (/enter/i).test(e.code)) return e.preventDefault();
-		if ((/arrow/i).test(e.code)) return e.stopPropagation();
-		if ((/escape/i).test(e.key)) return handleTextCancel();
-	};
-
-	// handle alt/ctrl/cmd + return
-	const handleTextInputKeyUp = e => {
-		// get key type
-		const { key, ctrlKey, altKey } = e;
-
-		// confirm multi line text elements
-		if ((/enter/i).test(key) && ctrlKey | altKey) return handleTextConfirm();
-	};
-
-	const handleTextConfirm = () => {
-		// if was draft, now need to confirm
-		let wasDraft = activeMarkup.isDraft;
-
-		if (activeMarkup.isDraft) confirmMarkupItemDraft();
-
-		// final text input check
-		handleTextInput();
-
-		// done
-		finishEditMarkupItem(activeMarkup);
-
-		if (wasDraft) onaddshape(activeMarkup); else onupdateshape(activeMarkup);
-	};
-
-	const handleTextCancel = () => {
-		if (activeMarkup.isDraft) {
-			discardMarkupItemDraft();
-		} else {
-			updateMarkupShape(activeMarkup, {
-				text: textShapeOrigin.text,
-				x: textShapeOrigin.x,
-				y: textShapeOrigin.y
-			});
-
-			finishEditMarkupItem(activeMarkup);
-		}
-	};
-
-	//
-	// Controls
-	//
 	const handleFlipX = e => {
 		e.stopPropagation();
 		const flipX = activeMarkup.flipX || false;
@@ -30296,6 +33954,11 @@ if (/arrow/i.test(key)) {
 		e.stopPropagation();
 		const flipY = activeMarkup.flipY || false;
 		updateMarkupShapeProperty(activeMarkup, "flipY", !flipY);
+		onupdateshape(activeMarkup);
+	};
+
+	const handleAdjustOpacity = value => {
+		updateMarkupShapeProperty(activeMarkup, "opacity", value);
 		onupdateshape(activeMarkup);
 	};
 
@@ -30353,6 +34016,7 @@ if (/arrow/i.test(key)) {
 		selectShape(clone);
 	};
 
+	//#endregion
 	const getMarkupControlsAnchorPosition = rect => vectorApply(vectorCreate(rect.x + rect.width * 0.5, rect.y), snapToPixel);
 
 	//
@@ -30360,7 +34024,7 @@ if (/arrow/i.test(key)) {
 	//
 	const markupControlsOpacity = spring(0, { stiffness: 0.2, damping: 0.7 });
 
-	component_subscribe($$self, markupControlsOpacity, value => $$invalidate(10, $markupControlsOpacity = value));
+	component_subscribe($$self, markupControlsOpacity, value => $$invalidate(13, $markupControlsOpacity = value));
 	let shapeControlsSize;
 
 	const getShapeControlPositionOnCanvas = position => {
@@ -30444,6 +34108,7 @@ if (/arrow/i.test(key)) {
 	const handleNudge = e => {
 		const shape = getActiveMarkupItem();
 		if (!shape) return;
+		if (shapeIsTextEditing(shape)) return;
 		if (!shapeCanMove(shape)) return;
 		interactionShape = shape;
 		interactionShapeOriginComputed = shapeComputeDisplay(shapeDeepCopy(interactionShape), parentRect);
@@ -30454,15 +34119,48 @@ if (/arrow/i.test(key)) {
 	let showShapeList = false;
 
 	const handleFocusIn = e => {
-		$$invalidate(12, showShapeList = true);
+		$$invalidate(14, showShapeList = true);
 	};
 
 	const handleFocusOut = ({ relatedTarget }) => {
 		// still in list
 		if (relatedTarget && relatedTarget.classList.contains("shape-selector__button")) return;
 
-		$$invalidate(12, showShapeList = false);
+		$$invalidate(14, showShapeList = false);
 	};
+
+	// change cursor style
+	let lastImagePosition = vectorCreateEmpty();
+
+	const handlePointerMove = e => {
+		// if interactionTimer is set an interaction was started
+		if (isInteracting || interactionTimer) return setHoverShape(undefined);
+
+		const editorPosition = getEventPositionInEditor(e, rootRect);
+		const imagePosition = vectorApply(mapEditorPointToImagePoint(editorPosition), v => Math.round(v));
+		if (vectorEqual(imagePosition, lastImagePosition)) return;
+		lastImagePosition = vectorClone(imagePosition);
+		determineCursorAtImagePosition(imagePosition);
+	};
+
+	const determineCursorAtImagePosition = imagePosition => {
+		const [shape] = getShapesNearPosition(imagePosition, 0);
+		setHoverShape(shape);
+	};
+
+	const setHoverShape = shape => {
+		// let others know we're hovering this shape
+		onhovershape(shape);
+
+		// update interface
+		$$invalidate(107, hoverShape = shape);
+	};
+
+	// clean up
+	onDestroy(() => {
+		// clean up invisible lines
+		removeMarkupManipulatorLines();
+	});
 
 	function measure_handler(event) {
 		bubble($$self, event);
@@ -30473,118 +34171,147 @@ if (/arrow/i.test(key)) {
 	function textarea_binding($$value) {
 		binding_callbacks[$$value ? "unshift" : "push"](() => {
 			textInput = $$value;
-			$$invalidate(11, textInput);
+			$$invalidate(6, textInput);
 		});
 	}
 
-	const measure_handler_1 = e => $$invalidate(5, shapeControlsSize = e.detail);
+	function textarea_input_handler() {
+		textInputText = this.value;
+		(((($$invalidate(17, textInputText), $$invalidate(12, shouldRenderTextInput)), $$invalidate(108, activeMarkup)), $$invalidate(115, isTextMarkupSelected)), $$invalidate(0, markup));
+	}
+
+	function contenteditable_binding($$value) {
+		binding_callbacks[$$value ? "unshift" : "push"](() => {
+			textInput = $$value;
+			$$invalidate(6, textInput);
+		});
+	}
+
+	const measure_handler_1 = e => $$invalidate(7, shapeControlsSize = e.detail);
 	const interactable_function = e => getEventPositionInEditor(e, rootRect);
 
 	$$self.$$set = $$props => {
-		if ("uid" in $$props) $$invalidate(43, uid = $$props.uid);
-		if ("ui" in $$props) $$invalidate(42, ui = $$props.ui);
+		if ("uid" in $$props) $$invalidate(48, uid = $$props.uid);
+		if ("ui" in $$props) $$invalidate(47, ui = $$props.ui);
 		if ("markup" in $$props) $$invalidate(0, markup = $$props.markup);
 		if ("offset" in $$props) $$invalidate(1, offset = $$props.offset);
-		if ("contextRotation" in $$props) $$invalidate(44, contextRotation = $$props.contextRotation);
-		if ("contextFlipX" in $$props) $$invalidate(45, contextFlipX = $$props.contextFlipX);
-		if ("contextFlipY" in $$props) $$invalidate(46, contextFlipY = $$props.contextFlipY);
-		if ("contextScale" in $$props) $$invalidate(47, contextScale = $$props.contextScale);
-		if ("active" in $$props) $$invalidate(48, active = $$props.active);
-		if ("opacity" in $$props) $$invalidate(49, opacity = $$props.opacity);
-		if ("parentRect" in $$props) $$invalidate(50, parentRect = $$props.parentRect);
+		if ("contextRotation" in $$props) $$invalidate(49, contextRotation = $$props.contextRotation);
+		if ("contextFlipX" in $$props) $$invalidate(50, contextFlipX = $$props.contextFlipX);
+		if ("contextFlipY" in $$props) $$invalidate(51, contextFlipY = $$props.contextFlipY);
+		if ("contextScale" in $$props) $$invalidate(52, contextScale = $$props.contextScale);
+		if ("active" in $$props) $$invalidate(53, active = $$props.active);
+		if ("opacity" in $$props) $$invalidate(54, opacity = $$props.opacity);
+		if ("parentRect" in $$props) $$invalidate(55, parentRect = $$props.parentRect);
 		if ("rootRect" in $$props) $$invalidate(2, rootRect = $$props.rootRect);
-		if ("utilRect" in $$props) $$invalidate(51, utilRect = $$props.utilRect);
-		if ("oninteractionstart" in $$props) $$invalidate(52, oninteractionstart = $$props.oninteractionstart);
-		if ("oninteractionupdate" in $$props) $$invalidate(53, oninteractionupdate = $$props.oninteractionupdate);
-		if ("oninteractionrelease" in $$props) $$invalidate(54, oninteractionrelease = $$props.oninteractionrelease);
-		if ("oninteractionend" in $$props) $$invalidate(55, oninteractionend = $$props.oninteractionend);
-		if ("onaddshape" in $$props) $$invalidate(56, onaddshape = $$props.onaddshape);
-		if ("onupdateshape" in $$props) $$invalidate(57, onupdateshape = $$props.onupdateshape);
-		if ("onselectshape" in $$props) $$invalidate(58, onselectshape = $$props.onselectshape);
-		if ("onremoveshape" in $$props) $$invalidate(59, onremoveshape = $$props.onremoveshape);
-		if ("beforeSelectShape" in $$props) $$invalidate(60, beforeSelectShape = $$props.beforeSelectShape);
-		if ("beforeDeselectShape" in $$props) $$invalidate(61, beforeDeselectShape = $$props.beforeDeselectShape);
-		if ("beforeRemoveShape" in $$props) $$invalidate(62, beforeRemoveShape = $$props.beforeRemoveShape);
-		if ("beforeUpdateShape" in $$props) $$invalidate(63, beforeUpdateShape = $$props.beforeUpdateShape);
-		if ("willRenderShapeControls" in $$props) $$invalidate(64, willRenderShapeControls = $$props.willRenderShapeControls);
-		if ("mapEditorPointToImagePoint" in $$props) $$invalidate(65, mapEditorPointToImagePoint = $$props.mapEditorPointToImagePoint);
-		if ("mapImagePointToEditorPoint" in $$props) $$invalidate(66, mapImagePointToEditorPoint = $$props.mapImagePointToEditorPoint);
-		if ("eraseRadius" in $$props) $$invalidate(67, eraseRadius = $$props.eraseRadius);
-		if ("selectRadius" in $$props) $$invalidate(68, selectRadius = $$props.selectRadius);
-		if ("enableButtonFlipVertical" in $$props) $$invalidate(69, enableButtonFlipVertical = $$props.enableButtonFlipVertical);
-		if ("locale" in $$props) $$invalidate(3, locale = $$props.locale);
+		if ("utilRect" in $$props) $$invalidate(56, utilRect = $$props.utilRect);
+		if ("hoverColor" in $$props) $$invalidate(57, hoverColor = $$props.hoverColor);
+		if ("textInputMode" in $$props) $$invalidate(3, textInputMode = $$props.textInputMode);
+		if ("oninteractionstart" in $$props) $$invalidate(58, oninteractionstart = $$props.oninteractionstart);
+		if ("oninteractionupdate" in $$props) $$invalidate(59, oninteractionupdate = $$props.oninteractionupdate);
+		if ("oninteractionrelease" in $$props) $$invalidate(60, oninteractionrelease = $$props.oninteractionrelease);
+		if ("oninteractionend" in $$props) $$invalidate(61, oninteractionend = $$props.oninteractionend);
+		if ("onaddshape" in $$props) $$invalidate(62, onaddshape = $$props.onaddshape);
+		if ("onupdateshape" in $$props) $$invalidate(63, onupdateshape = $$props.onupdateshape);
+		if ("onselectshape" in $$props) $$invalidate(64, onselectshape = $$props.onselectshape);
+		if ("onremoveshape" in $$props) $$invalidate(65, onremoveshape = $$props.onremoveshape);
+		if ("onhovershape" in $$props) $$invalidate(66, onhovershape = $$props.onhovershape);
+		if ("beforeSelectShape" in $$props) $$invalidate(67, beforeSelectShape = $$props.beforeSelectShape);
+		if ("beforeDeselectShape" in $$props) $$invalidate(68, beforeDeselectShape = $$props.beforeDeselectShape);
+		if ("beforeRemoveShape" in $$props) $$invalidate(69, beforeRemoveShape = $$props.beforeRemoveShape);
+		if ("beforeUpdateShape" in $$props) $$invalidate(70, beforeUpdateShape = $$props.beforeUpdateShape);
+		if ("willRenderShapeControls" in $$props) $$invalidate(71, willRenderShapeControls = $$props.willRenderShapeControls);
+		if ("mapEditorPointToImagePoint" in $$props) $$invalidate(72, mapEditorPointToImagePoint = $$props.mapEditorPointToImagePoint);
+		if ("mapImagePointToEditorPoint" in $$props) $$invalidate(73, mapImagePointToEditorPoint = $$props.mapImagePointToEditorPoint);
+		if ("eraseRadius" in $$props) $$invalidate(74, eraseRadius = $$props.eraseRadius);
+		if ("selectRadius" in $$props) $$invalidate(75, selectRadius = $$props.selectRadius);
+		if ("enableButtonFlipVertical" in $$props) $$invalidate(76, enableButtonFlipVertical = $$props.enableButtonFlipVertical);
+		if ("enableTapToAddText" in $$props) $$invalidate(77, enableTapToAddText = $$props.enableTapToAddText);
+		if ("locale" in $$props) $$invalidate(4, locale = $$props.locale);
 	};
 
 	$$self.$$.update = () => {
 		if ($$self.$$.dirty[0] & /*markup*/ 1) {
-			$$invalidate(98, activeMarkup = markup && (getMarkupItemDraft() || getActiveMarkupItem()));
+			$$invalidate(108, activeMarkup = markup && (getMarkupItemDraft() || getActiveMarkupItem()));
 		}
 
-		if ($$self.$$.dirty[3] & /*activeMarkup*/ 32) {
-			$$invalidate(99, activeShapeId = activeMarkup && !shapeIsDraft(activeMarkup)
+		if ($$self.$$.dirty[3] & /*activeMarkup*/ 32768) {
+			$$invalidate(109, activeShapeId = activeMarkup && !shapeIsDraft(activeMarkup)
 			? activeMarkup.id
 			: undefined);
 		}
 
-		if ($$self.$$.dirty[0] & /*rootRect*/ 4 | $$self.$$.dirty[1] & /*parentRect*/ 524288 | $$self.$$.dirty[3] & /*activeMarkup*/ 32) {
+		if ($$self.$$.dirty[0] & /*rootRect*/ 4 | $$self.$$.dirty[1] & /*parentRect*/ 16777216 | $$self.$$.dirty[3] & /*activeMarkup*/ 32768) {
 			// rootRect is in there so it recomputes the shape when the editor is resized
-			$$invalidate(100, activeMarkupComputed = rootRect && activeMarkup && shapeComputeDisplay(shapeDeepCopy(activeMarkup), parentRect));
+			$$invalidate(8, activeMarkupComputed = rootRect && activeMarkup && shapeComputeDisplay(shapeDeepCopy(activeMarkup), parentRect));
 		}
 
-		if ($$self.$$.dirty[3] & /*activeMarkup*/ 32) {
-			$$invalidate(101, activeMarkupItemIsDraft = !!(activeMarkup && shapeIsDraft(activeMarkup)));
+		if ($$self.$$.dirty[3] & /*activeMarkup*/ 32768) {
+			$$invalidate(110, activeMarkupItemIsDraft = !!(activeMarkup && shapeIsDraft(activeMarkup)));
 		}
 
-		if ($$self.$$.dirty[3] & /*activeMarkup*/ 32) {
-			$$invalidate(102, shapeProps = activeMarkup || undefined);
-		}
-
-		if ($$self.$$.dirty[1] & /*opacity*/ 262144 | $$self.$$.dirty[3] & /*activeMarkup, activeMarkupComputed*/ 160) {
+		if ($$self.$$.dirty[0] & /*activeMarkupComputed*/ 256 | $$self.$$.dirty[1] & /*opacity*/ 8388608 | $$self.$$.dirty[3] & /*activeMarkup*/ 32768) {
+			// $: shapeProps = activeMarkup || undefined;
 			// TODO: we use opacity to trigger a redraw of the active points, this should be changed to the image zoom factor in a future release
-			$$invalidate(103, shapeActivePoints = activeMarkup && opacity && !shapeIsPath(activeMarkupComputed) && getMarkupShapePoints(activeMarkupComputed) || []);
+			//  && !shapeIsPath(activeMarkupComputed)
+			$$invalidate(111, shapeActivePoints = activeMarkup && opacity && getMarkupShapePoints(activeMarkupComputed) || []);
 		}
 
-		if ($$self.$$.dirty[3] & /*activeMarkup*/ 32) {
-			$$invalidate(104, allowResizeControls = activeMarkup && shapeCanResize(activeMarkup) && !shapeIsTextEditing(activeMarkup));
+		if ($$self.$$.dirty[3] & /*activeMarkup*/ 32768) {
+			$$invalidate(112, allowResizeControls = activeMarkup && shapeCanResize(activeMarkup) && !shapeIsTextEditing(activeMarkup));
 		}
 
-		if ($$self.$$.dirty[3] & /*activeMarkup*/ 32) {
-			$$invalidate(6, allowRotateControls = activeMarkup && shapeCanRotate(activeMarkup) && !shapeIsTextEditing(activeMarkup));
+		if ($$self.$$.dirty[3] & /*activeMarkup*/ 32768) {
+			$$invalidate(9, allowRotateControls = activeMarkup && shapeCanRotate(activeMarkup) && !shapeIsTextEditing(activeMarkup));
 		}
 
-		if ($$self.$$.dirty[3] & /*allowResizeControls, activeMarkup*/ 2080) {
-			$$invalidate(13, allowedResizeControls = allowResizeControls && (hasProp(activeMarkup, "text") && !activeMarkup.height)
+		if ($$self.$$.dirty[3] & /*allowResizeControls, activeMarkup*/ 557056) {
+			$$invalidate(15, allowedResizeControls = allowResizeControls && hasProp(activeMarkup, "text") && !activeMarkup.height
 			? "horizontal"
 			: allowResizeControls);
 		}
 
-		if ($$self.$$.dirty[3] & /*activeMarkup, shapeActivePoints*/ 1056) {
-			$$invalidate(7, shouldRenderShapeManipulator = activeMarkup && shapeActivePoints.length > 1);
+		if ($$self.$$.dirty[3] & /*activeMarkup, shapeActivePoints*/ 294912) {
+			$$invalidate(10, shouldRenderShapeManipulator = activeMarkup && shapeActivePoints.length > 1);
 		}
 
-		if ($$self.$$.dirty[2] & /*mapImagePointToEditorPoint*/ 16 | $$self.$$.dirty[3] & /*shapeActivePoints*/ 1024) {
-			$$invalidate(105, shapeActiveScreenPoints = shapeActivePoints.map(mapImagePointToEditorPoint));
+		if ($$self.$$.dirty[2] & /*mapImagePointToEditorPoint*/ 2048 | $$self.$$.dirty[3] & /*shapeActivePoints*/ 262144) {
+			$$invalidate(113, shapeActiveScreenPoints = shapeActivePoints.map(mapImagePointToEditorPoint));
 		}
 
-		if ($$self.$$.dirty[0] & /*offset*/ 2 | $$self.$$.dirty[3] & /*shapeActiveScreenPoints*/ 4096) {
-			$$invalidate(8, shapeManipulatorPoints = shapeActiveScreenPoints.map(point => vectorCreate(point.x - offset.x, point.y - offset.y)));
+		if ($$self.$$.dirty[0] & /*offset*/ 2 | $$self.$$.dirty[3] & /*shapeActiveScreenPoints*/ 1048576) {
+			$$invalidate(11, shapeManipulatorPoints = shapeActiveScreenPoints.map(point => vectorCreate(point.x - offset.x, point.y - offset.y)));
 		}
 
-		if ($$self.$$.dirty[0] & /*shouldRenderShapeManipulator, allowRotateControls*/ 192 | $$self.$$.dirty[1] & /*opacity*/ 262144 | $$self.$$.dirty[3] & /*activeMarkupComputed*/ 128) {
-			// TODO: we use opacity to trigger a redraw of the active points, this should be changed to the image zoom factor in a future release
-			$$invalidate(106, shapeManipulatorRotationPoint = shouldRenderShapeManipulator && allowRotateControls && opacity && getShapeRotationPointOnScreen(activeMarkupComputed));
+		if ($$self.$$.dirty[3] & /*hoverShape*/ 16384) {
+			hoverShape && !shapeIsSelected(hoverShape) && shapeCanSelect(hoverShape)
+			? showHover(hoverShape)
+			: hideHover();
 		}
 
-		if ($$self.$$.dirty[0] & /*offset*/ 2 | $$self.$$.dirty[3] & /*shapeManipulatorRotationPoint*/ 8192) {
-			$$invalidate(14, shapeManipulatorRotationPointPosition = shapeManipulatorRotationPoint && vectorCreate(shapeManipulatorRotationPoint.position.x - offset.x, shapeManipulatorRotationPoint.position.y - offset.y));
+		if ($$self.$$.dirty[0] & /*shouldRenderShapeManipulator, allowRotateControls, shapeManipulatorPoints, activeMarkupComputed*/ 3840 | $$self.$$.dirty[1] & /*opacity*/ 8388608) {
+			// TODO: we use opacity to trigger a redraw of the active points,
+			// this should be changed to the image zoom factor in a future release
+			$$invalidate(114, shapeManipulatorRotationPoint = shouldRenderShapeManipulator && allowRotateControls && opacity && shapeManipulatorPoints && getShapeRotationPointOnScreen(activeMarkupComputed));
 		}
 
-		if ($$self.$$.dirty[0] & /*shapeManipulatorPoints*/ 256 | $$self.$$.dirty[1] & /*active, opacity*/ 393216 | $$self.$$.dirty[3] & /*activeMarkup*/ 32) {
+		if ($$self.$$.dirty[0] & /*offset*/ 2 | $$self.$$.dirty[3] & /*shapeManipulatorRotationPoint*/ 2097152) {
+			$$invalidate(16, shapeManipulatorRotationPointPosition = shapeManipulatorRotationPoint && vectorCreate(shapeManipulatorRotationPoint.position.x - offset.x, shapeManipulatorRotationPoint.position.y - offset.y));
+		}
+
+		if ($$self.$$.dirty[0] & /*shapeManipulatorPoints*/ 2048 | $$self.$$.dirty[1] & /*active, opacity*/ 12582912 | $$self.$$.dirty[3] & /*activeMarkup*/ 32768) {
 			if (active) {
 				// show when something selected
-				if (opacity > 0 && shapeManipulatorPoints.length > 2) {
+				if (opacity > 0) {
 					claimManipulatorLines();
-					redrawManipulatorLines(opacity);
+
+					// don't draw for line
+					const isPathDraft = activeMarkup && shapeIsDraft(activeMarkup) && shapeIsPath(activeMarkup);
+
+					if (shapeManipulatorPoints.length > 2 && !isPathDraft) {
+						redrawManipulatorLines(opacity);
+					} else {
+						removeMarkupManipulatorLines();
+					}
 				} else // hide when nothing selected
 				if (!activeMarkup) {
 					redrawManipulatorLines(opacity);
@@ -30594,103 +34321,143 @@ if (/arrow/i.test(key)) {
 			}
 		}
 
-		if ($$self.$$.dirty[3] & /*activeMarkup*/ 32) {
-			$$invalidate(107, isTextMarkupSelected = activeMarkup && shapeIsText(activeMarkup));
+		if ($$self.$$.dirty[1] & /*active*/ 4194304) {
+			togglePrerender(active);
 		}
 
-		if ($$self.$$.dirty[3] & /*isTextMarkupSelected, activeMarkup*/ 16416) {
-			$$invalidate(9, shouldRenderTextInput = isTextMarkupSelected && shapeCanInput(activeMarkup) !== false && activeMarkup.isEditing);
+		if ($$self.$$.dirty[0] & /*textInput, textInputMode*/ 72) {
+			// auto focus text input when created and in inline mode
+			if (textInput && textInputMode === "inline") textInput.focus();
 		}
 
-		if ($$self.$$.dirty[0] & /*shouldRenderTextInput*/ 512) {
-			$$invalidate(108, textShapeOrigin = shouldRenderTextInput
+		if ($$self.$$.dirty[3] & /*activeMarkup*/ 32768) {
+			$$invalidate(115, isTextMarkupSelected = activeMarkup && shapeIsText(activeMarkup));
+		}
+
+		if ($$self.$$.dirty[3] & /*isTextMarkupSelected, activeMarkup*/ 4227072) {
+			$$invalidate(12, shouldRenderTextInput = isTextMarkupSelected && shapeCanInput(activeMarkup) !== false && shapeIsTextEditing(activeMarkup));
+		}
+
+		if ($$self.$$.dirty[0] & /*shouldRenderTextInput*/ 4096) {
+			$$invalidate(116, textShapeOrigin = shouldRenderTextInput
 			? getTextShapeOriginSnapshot()
 			: undefined);
 		}
 
-		if ($$self.$$.dirty[1] & /*parentRect*/ 524288 | $$self.$$.dirty[3] & /*textShapeOrigin*/ 32768) {
-			$$invalidate(109, textShapeDisplayOrigin = textShapeOrigin && shapeComputeDisplay({ ...textShapeOrigin }, parentRect));
+		if ($$self.$$.dirty[1] & /*parentRect*/ 16777216 | $$self.$$.dirty[3] & /*textShapeOrigin*/ 8388608) {
+			$$invalidate(117, textShapeDisplayOrigin = textShapeOrigin && shapeComputeDisplay({ ...textShapeOrigin }, parentRect));
 		}
 
-		if ($$self.$$.dirty[3] & /*textShapeDisplayOrigin*/ 65536) {
-			$$invalidate(110, textSizeDisplayOrigin = textShapeDisplayOrigin && textSize(textShapeDisplayOrigin.text, textShapeDisplayOrigin));
+		if ($$self.$$.dirty[3] & /*textShapeDisplayOrigin*/ 16777216) {
+			$$invalidate(118, textSizeDisplayOrigin = textShapeDisplayOrigin && textToSize(textShapeDisplayOrigin.text, textShapeDisplayOrigin));
 		}
 
-		if ($$self.$$.dirty[3] & /*textShapeDisplayOrigin, textSizeDisplayOrigin*/ 196608) {
+		if ($$self.$$.dirty[3] & /*textShapeDisplayOrigin, textSizeDisplayOrigin*/ 50331648) {
 			textRectDisplayOrigin = textShapeDisplayOrigin && rectCreate(textShapeDisplayOrigin.x, textShapeDisplayOrigin.y, textSizeDisplayOrigin.width, textSizeDisplayOrigin.height);
 		}
 
-		if ($$self.$$.dirty[0] & /*shouldRenderTextInput*/ 512 | $$self.$$.dirty[3] & /*activeMarkup*/ 32) {
-			$$invalidate(15, textInputText = shouldRenderTextInput ? activeMarkup.text : "");
+		if ($$self.$$.dirty[0] & /*shouldRenderTextInput*/ 4096 | $$self.$$.dirty[3] & /*activeMarkup*/ 32768) {
+			$$invalidate(17, textInputText = shouldRenderTextInput ? activeMarkup.text : "");
 		}
 
-		if ($$self.$$.dirty[0] & /*shouldRenderTextInput*/ 512 | $$self.$$.dirty[3] & /*shapeProps*/ 512) {
-			$$invalidate(16, markupTextInputStyle = shouldRenderTextInput && `
-    text-align: ${shapeProps.textAlign || "left"};
-    font-family: ${shapeProps.fontFamily || "sans-serif"};
-`);
+		if ($$self.$$.dirty[0] & /*shouldRenderTextInput, activeMarkupComputed, textInputMode*/ 4360) {
+			$$invalidate(18, textInputTextStyles = shouldRenderTextInput && getTextInputTextStyles(activeMarkupComputed, textInputMode));
 		}
 
-		if ($$self.$$.dirty[3] & /*activeMarkup, activeMarkupItemIsDraft, controlledMarkupItem*/ 262432) {
-			$$invalidate(111, controlledMarkupItem = activeMarkup && !activeMarkupItemIsDraft
+		if ($$self.$$.dirty[0] & /*shouldRenderTextInput, activeMarkupComputed, offset*/ 4354 | $$self.$$.dirty[1] & /*contextScale, contextRotation*/ 2359296) {
+			$$invalidate(19, textInputPositionStyles = shouldRenderTextInput && getTextInputPositionStyles(activeMarkupComputed, offset, contextScale, contextRotation));
+		}
+
+		if ($$self.$$.dirty[0] & /*shouldRenderTextInput, textInput, textInputMode*/ 4168) {
+			if (shouldRenderTextInput && textInput && textInputMode === "inline") syncTextInput();
+		}
+
+		if ($$self.$$.dirty[3] & /*activeMarkup, activeMarkupItemIsDraft, controlledMarkupItem*/ 67272704) {
+			$$invalidate(119, controlledMarkupItem = activeMarkup && !activeMarkupItemIsDraft
 			? activeMarkup
 			: controlledMarkupItem);
 		}
 
-		if ($$self.$$.dirty[3] & /*controlledMarkupItem*/ 262144) {
-			$$invalidate(112, allowShapeFlip = controlledMarkupItem && shapeCanFlip(controlledMarkupItem));
+		if ($$self.$$.dirty[3] & /*controlledMarkupItem*/ 67108864) {
+			$$invalidate(120, allowShapeFlip = controlledMarkupItem && shapeCanFlip(controlledMarkupItem));
 		}
 
-		if ($$self.$$.dirty[3] & /*controlledMarkupItem*/ 262144) {
-			$$invalidate(113, allowShapeChangeTextLayout = controlledMarkupItem && shapeCanChangeTextLayout(controlledMarkupItem));
+		if ($$self.$$.dirty[3] & /*controlledMarkupItem*/ 67108864) {
+			$$invalidate(121, allowShapeChangeTextLayout = controlledMarkupItem && shapeCanChangeTextLayout(controlledMarkupItem));
 		}
 
-		if ($$self.$$.dirty[3] & /*controlledMarkupItem*/ 262144) {
-			$$invalidate(114, allowShapeDuplicate = controlledMarkupItem && shapeCanDuplicate(controlledMarkupItem));
+		if ($$self.$$.dirty[3] & /*controlledMarkupItem*/ 67108864) {
+			$$invalidate(122, allowShapeDuplicate = controlledMarkupItem && shapeCanDuplicate(controlledMarkupItem));
 		}
 
-		if ($$self.$$.dirty[3] & /*controlledMarkupItem*/ 262144) {
-			$$invalidate(115, allowShapeRemove = controlledMarkupItem && shapeCanRemove(controlledMarkupItem));
+		if ($$self.$$.dirty[3] & /*controlledMarkupItem*/ 67108864) {
+			$$invalidate(123, allowShapeRemove = controlledMarkupItem && shapeCanRemove(controlledMarkupItem));
 		}
 
-		if ($$self.$$.dirty[3] & /*controlledMarkupItem*/ 262144) {
-			$$invalidate(116, allowShapeReorder = controlledMarkupItem && shapeCanReorder(controlledMarkupItem));
+		if ($$self.$$.dirty[3] & /*controlledMarkupItem*/ 67108864) {
+			$$invalidate(124, allowShapeReorder = controlledMarkupItem && shapeCanReorder(controlledMarkupItem));
 		}
 
-		if ($$self.$$.dirty[3] & /*controlledMarkupItem*/ 262144) {
-			$$invalidate(117, allowShapeInput = controlledMarkupItem && shapeCanInput(controlledMarkupItem) !== false);
+		if ($$self.$$.dirty[3] & /*controlledMarkupItem*/ 67108864) {
+			$$invalidate(125, allowShapeInput = controlledMarkupItem && shapeCanInput(controlledMarkupItem) !== false);
 		}
 
-		if ($$self.$$.dirty[0] & /*shouldRenderTextInput*/ 512 | $$self.$$.dirty[3] & /*activeMarkup, activeMarkupItemIsDraft, isInteracting*/ 304) {
+		if ($$self.$$.dirty[3] & /*controlledMarkupItem*/ 67108864) {
+			$$invalidate(126, allowShapeAdjustOpacity = controlledMarkupItem && hasProp(controlledMarkupItem, "backgroundImage") && shapeCanStyle(controlledMarkupItem, "opacity"));
+		}
+
+		if ($$self.$$.dirty[0] & /*shouldRenderTextInput*/ 4096 | $$self.$$.dirty[3] & /*activeMarkup, activeMarkupItemIsDraft, isInteracting*/ 172032) {
 			markupControlsOpacity.set(activeMarkup && !activeMarkupItemIsDraft && !isInteracting && !shouldRenderTextInput
 			? 1
 			: 0);
 		}
 
-		if ($$self.$$.dirty[0] & /*shapeManipulatorPoints*/ 256 | $$self.$$.dirty[3] & /*activeMarkup, activeMarkupItemIsDraft, markupControlsAnchorPosition*/ 33554720) {
-			$$invalidate(118, markupControlsAnchorPosition = activeMarkup && !activeMarkupItemIsDraft
+		if ($$self.$$.dirty[0] & /*shapeManipulatorPoints*/ 2048 | $$self.$$.dirty[3] & /*activeMarkup, activeMarkupItemIsDraft*/ 163840 | $$self.$$.dirty[4] & /*markupControlsAnchorPosition*/ 8) {
+			$$invalidate(127, markupControlsAnchorPosition = activeMarkup && !activeMarkupItemIsDraft
 			? getMarkupControlsAnchorPosition(rectCreateFromPoints(shapeManipulatorPoints))
 			: markupControlsAnchorPosition);
 		}
 
-		if ($$self.$$.dirty[0] & /*shapeControlsSize*/ 32 | $$self.$$.dirty[1] & /*utilRect*/ 1048576 | $$self.$$.dirty[3] & /*markupControlsAnchorPosition*/ 33554432) {
-			$$invalidate(119, shapeControlsPosition = markupControlsAnchorPosition && shapeControlsSize && utilRect && getShapeControlPositionOnCanvas(markupControlsAnchorPosition));
+		if ($$self.$$.dirty[0] & /*shapeControlsSize*/ 128 | $$self.$$.dirty[1] & /*utilRect*/ 33554432 | $$self.$$.dirty[4] & /*markupControlsAnchorPosition*/ 8) {
+			$$invalidate(128, shapeControlsPosition = markupControlsAnchorPosition && shapeControlsSize && utilRect && getShapeControlPositionOnCanvas(markupControlsAnchorPosition));
 		}
 
-		if ($$self.$$.dirty[0] & /*$markupControlsOpacity*/ 1024 | $$self.$$.dirty[3] & /*shapeControlsPosition*/ 67108864) {
-			$$invalidate(17, markupControlsStyle = shapeControlsPosition && `transform: translate(${shapeControlsPosition.x}px, ${shapeControlsPosition.y}px);opacity:${$markupControlsOpacity}`);
+		if ($$self.$$.dirty[0] & /*$markupControlsOpacity*/ 8192 | $$self.$$.dirty[4] & /*shapeControlsPosition*/ 16) {
+			$$invalidate(20, markupControlsStyle = shapeControlsPosition && `transform: translate(${shapeControlsPosition.x}px, ${shapeControlsPosition.y}px);opacity:${$markupControlsOpacity}`);
 		}
 
-		if ($$self.$$.dirty[0] & /*locale*/ 8 | $$self.$$.dirty[2] & /*willRenderShapeControls, enableButtonFlipVertical*/ 132 | $$self.$$.dirty[3] & /*activeShapeId, allowShapeFlip, allowShapeReorder, allowShapeDuplicate, allowShapeRemove, allowShapeInput, allowShapeChangeTextLayout, activeMarkup*/ 33030240) {
-			$$invalidate(18, shapeControls = activeShapeId && willRenderShapeControls(
+		if ($$self.$$.dirty[0] & /*locale*/ 16 | $$self.$$.dirty[2] & /*willRenderShapeControls, enableButtonFlipVertical*/ 16896 | $$self.$$.dirty[3] & /*activeShapeId, activeMarkup, allowShapeFlip, allowShapeDuplicate, allowShapeRemove, allowShapeChangeTextLayout*/ 2013364224 | $$self.$$.dirty[4] & /*allowShapeAdjustOpacity, allowShapeReorder, allowShapeInput*/ 7) {
+			$$invalidate(21, shapeControls = activeShapeId && willRenderShapeControls(
 				[
-					[
+					allowShapeAdjustOpacity && [
 						"div",
 						"alpha",
 						{ class: "PinturaShapeControlsGroup" },
 						[
+							[
+								"Slider",
+								"adjust-opacity",
+								{
+									onchange: handleAdjustOpacity,
+									step: 0.01,
+									value: hasProp(activeMarkup, "opacity")
+									? activeMarkup.opacity
+									: 1,
+									label: (value, min, max) => `${Math.round(value / max * 100)}%`,
+									min: 0,
+									max: 1,
+									direction: "x"
+								}
+							]
+						]
+					],
+					[
+						"div",
+						"beta",
+						{ class: "PinturaShapeControlsGroup" },
+						[
 							allowShapeFlip && [
-								Button,
+								"Button",
 								"flip-horizontal",
 								{
 									onclick: handleFlipX,
@@ -30700,7 +34467,7 @@ if (/arrow/i.test(key)) {
 								}
 							],
 							allowShapeFlip && enableButtonFlipVertical && [
-								Button,
+								"Button",
 								"flip-vertical",
 								{
 									onclick: handleFlipY,
@@ -30710,7 +34477,7 @@ if (/arrow/i.test(key)) {
 								}
 							],
 							allowShapeReorder && [
-								Button,
+								"Button",
 								"to-front",
 								{
 									onclick: handleMoveToFrontActiveMarkup,
@@ -30720,7 +34487,7 @@ if (/arrow/i.test(key)) {
 								}
 							],
 							allowShapeDuplicate && [
-								Button,
+								"Button",
 								"duplicate",
 								{
 									onclick: handleDuplicateActiveMarkup,
@@ -30730,7 +34497,7 @@ if (/arrow/i.test(key)) {
 								}
 							],
 							allowShapeRemove && [
-								Button,
+								"Button",
 								"remove",
 								{
 									onclick: handleRemoveActiveMarkup,
@@ -30739,15 +34506,15 @@ if (/arrow/i.test(key)) {
 									hideLabel: true
 								}
 							]
-						]
+						].filter(Boolean)
 					],
 					allowShapeInput && allowShapeChangeTextLayout && [
 						"div",
-						"beta",
+						"gamma",
 						{ class: "PinturaShapeControlsGroup" },
 						[
 							[
-								Button,
+								"Button",
 								"text-layout",
 								{
 									onclick: handleTextSwitchLayout,
@@ -30760,11 +34527,11 @@ if (/arrow/i.test(key)) {
 					],
 					allowShapeInput && [
 						"div",
-						"gamma",
+						"delta",
 						{ class: "PinturaShapeControlsGroup" },
 						[
 							[
-								Button,
+								"Button",
 								"edit-text",
 								{
 									label: locale.shapeLabelInputText,
@@ -30773,13 +34540,13 @@ if (/arrow/i.test(key)) {
 							]
 						]
 					]
-				],
+				].filter(Boolean),
 				activeShapeId
 			));
 		}
 
-		if ($$self.$$.dirty[0] & /*markup, locale*/ 9) {
-			$$invalidate(19, shapeNavList = markup.filter(shapeCanSelect).filter(shape => !shapeIsDraft(shape)).map(shape => ({
+		if ($$self.$$.dirty[0] & /*markup, locale*/ 17) {
+			$$invalidate(22, shapeNavList = markup.filter(shapeCanSelect).filter(shape => !shapeIsDraft(shape)).map(shape => ({
 				id: shape.id,
 				color: shapeIsText(shape)
 				? shape.color
@@ -30795,20 +34562,23 @@ if (/arrow/i.test(key)) {
 		markup,
 		offset,
 		rootRect,
+		textInputMode,
 		locale,
 		selectShape,
+		textInput,
 		shapeControlsSize,
+		activeMarkupComputed,
 		allowRotateControls,
 		shouldRenderShapeManipulator,
 		shapeManipulatorPoints,
 		shouldRenderTextInput,
 		$markupControlsOpacity,
-		textInput,
 		showShapeList,
 		allowedResizeControls,
 		shapeManipulatorRotationPointPosition,
 		textInputText,
-		markupTextInputStyle,
+		textInputTextStyles,
+		textInputPositionStyles,
 		markupControlsStyle,
 		shapeControls,
 		shapeNavList,
@@ -30824,6 +34594,7 @@ if (/arrow/i.test(key)) {
 		handleManipulatorRotateDrag,
 		handleManipulatorRotateEnd,
 		handleKey,
+		formatContentEditable,
 		handleTextInput,
 		handleTextInputAttempt,
 		handleTextInputKeyDown,
@@ -30834,6 +34605,7 @@ if (/arrow/i.test(key)) {
 		handleNudge,
 		handleFocusIn,
 		handleFocusOut,
+		handlePointerMove,
 		ui,
 		uid,
 		contextRotation,
@@ -30844,6 +34616,7 @@ if (/arrow/i.test(key)) {
 		opacity,
 		parentRect,
 		utilRect,
+		hoverColor,
 		oninteractionstart,
 		oninteractionupdate,
 		oninteractionrelease,
@@ -30852,6 +34625,7 @@ if (/arrow/i.test(key)) {
 		onupdateshape,
 		onselectshape,
 		onremoveshape,
+		onhovershape,
 		beforeSelectShape,
 		beforeDeselectShape,
 		beforeRemoveShape,
@@ -30862,9 +34636,11 @@ if (/arrow/i.test(key)) {
 		eraseRadius,
 		selectRadius,
 		enableButtonFlipVertical,
+		enableTapToAddText,
 		createShape,
 		eraseShape,
 		getMarkupItemDraft,
+		getMarkupItemDraftIndex,
 		addMarkupItemDraft,
 		confirmMarkupItemDraft,
 		discardMarkupItemDraft,
@@ -30888,13 +34664,12 @@ if (/arrow/i.test(key)) {
 		getTextShapeRect,
 		getMarkupShapeRect,
 		getShapesNearPosition,
-		getMarkupBetweenPoints,
+		getShapesBetweenPoints,
 		isInteracting,
+		hoverShape,
 		activeMarkup,
 		activeShapeId,
-		activeMarkupComputed,
 		activeMarkupItemIsDraft,
-		shapeProps,
 		shapeActivePoints,
 		allowResizeControls,
 		shapeActiveScreenPoints,
@@ -30910,11 +34685,14 @@ if (/arrow/i.test(key)) {
 		allowShapeRemove,
 		allowShapeReorder,
 		allowShapeInput,
+		allowShapeAdjustOpacity,
 		markupControlsAnchorPosition,
 		shapeControlsPosition,
 		measure_handler,
 		click_handler,
 		textarea_binding,
+		textarea_input_handler,
+		contenteditable_binding,
 		measure_handler_1,
 		interactable_function
 	];
@@ -30927,185 +34705,194 @@ class ShapeLayoutEditor extends SvelteComponent {
 		init(
 			this,
 			options,
-			instance$b,
-			create_fragment$b,
+			instance$f,
+			create_fragment$f,
 			safe_not_equal,
 			{
-				uid: 43,
-				ui: 42,
+				uid: 48,
+				ui: 47,
 				markup: 0,
 				offset: 1,
-				contextRotation: 44,
-				contextFlipX: 45,
-				contextFlipY: 46,
-				contextScale: 47,
-				active: 48,
-				opacity: 49,
-				parentRect: 50,
+				contextRotation: 49,
+				contextFlipX: 50,
+				contextFlipY: 51,
+				contextScale: 52,
+				active: 53,
+				opacity: 54,
+				parentRect: 55,
 				rootRect: 2,
-				utilRect: 51,
-				oninteractionstart: 52,
-				oninteractionupdate: 53,
-				oninteractionrelease: 54,
-				oninteractionend: 55,
-				onaddshape: 56,
-				onupdateshape: 57,
-				onselectshape: 58,
-				onremoveshape: 59,
-				beforeSelectShape: 60,
-				beforeDeselectShape: 61,
-				beforeRemoveShape: 62,
-				beforeUpdateShape: 63,
-				willRenderShapeControls: 64,
-				mapEditorPointToImagePoint: 65,
-				mapImagePointToEditorPoint: 66,
-				eraseRadius: 67,
-				selectRadius: 68,
-				enableButtonFlipVertical: 69,
-				locale: 3,
-				createShape: 70,
-				eraseShape: 71,
-				getMarkupItemDraft: 72,
-				addMarkupItemDraft: 73,
-				confirmMarkupItemDraft: 74,
-				discardMarkupItemDraft: 75,
-				createMarkupItem: 76,
-				syncShapes: 77,
-				addShape: 78,
-				removeMarkupShapeProps: 79,
-				updateMarkupShape: 80,
-				updateMarkupShapeProperty: 81,
-				updateMarkupItemsShapeProperty: 82,
-				updateMarkupShapeItems: 83,
-				getActiveMarkupItem: 84,
-				hasActiveMarkupItem: 85,
-				removeShape: 86,
-				removeActiveMarkupItem: 87,
-				blurShapes: 88,
-				selectShape: 4,
-				deselectMarkupItem: 89,
-				editMarkupItem: 90,
-				finishEditMarkupItem: 91,
-				removeMarkupItems: 92,
-				getTextShapeRect: 93,
-				getMarkupShapeRect: 94,
-				getShapesNearPosition: 95,
-				getMarkupBetweenPoints: 96
+				utilRect: 56,
+				hoverColor: 57,
+				textInputMode: 3,
+				oninteractionstart: 58,
+				oninteractionupdate: 59,
+				oninteractionrelease: 60,
+				oninteractionend: 61,
+				onaddshape: 62,
+				onupdateshape: 63,
+				onselectshape: 64,
+				onremoveshape: 65,
+				onhovershape: 66,
+				beforeSelectShape: 67,
+				beforeDeselectShape: 68,
+				beforeRemoveShape: 69,
+				beforeUpdateShape: 70,
+				willRenderShapeControls: 71,
+				mapEditorPointToImagePoint: 72,
+				mapImagePointToEditorPoint: 73,
+				eraseRadius: 74,
+				selectRadius: 75,
+				enableButtonFlipVertical: 76,
+				enableTapToAddText: 77,
+				locale: 4,
+				createShape: 78,
+				eraseShape: 79,
+				getMarkupItemDraft: 80,
+				getMarkupItemDraftIndex: 81,
+				addMarkupItemDraft: 82,
+				confirmMarkupItemDraft: 83,
+				discardMarkupItemDraft: 84,
+				createMarkupItem: 85,
+				syncShapes: 86,
+				addShape: 87,
+				removeMarkupShapeProps: 88,
+				updateMarkupShape: 89,
+				updateMarkupShapeProperty: 90,
+				updateMarkupItemsShapeProperty: 91,
+				updateMarkupShapeItems: 92,
+				getActiveMarkupItem: 93,
+				hasActiveMarkupItem: 94,
+				removeShape: 95,
+				removeActiveMarkupItem: 96,
+				blurShapes: 97,
+				selectShape: 5,
+				deselectMarkupItem: 98,
+				editMarkupItem: 99,
+				finishEditMarkupItem: 100,
+				removeMarkupItems: 101,
+				getTextShapeRect: 102,
+				getMarkupShapeRect: 103,
+				getShapesNearPosition: 104,
+				getShapesBetweenPoints: 105
 			},
-			[-1, -1, -1, -1, -1, -1]
+			[-1, -1, -1, -1, -1, -1, -1]
 		);
 	}
 
 	get createShape() {
-		return this.$$.ctx[70];
-	}
-
-	get eraseShape() {
-		return this.$$.ctx[71];
-	}
-
-	get getMarkupItemDraft() {
-		return this.$$.ctx[72];
-	}
-
-	get addMarkupItemDraft() {
-		return this.$$.ctx[73];
-	}
-
-	get confirmMarkupItemDraft() {
-		return this.$$.ctx[74];
-	}
-
-	get discardMarkupItemDraft() {
-		return this.$$.ctx[75];
-	}
-
-	get createMarkupItem() {
-		return this.$$.ctx[76];
-	}
-
-	get syncShapes() {
-		return this.$$.ctx[77];
-	}
-
-	get addShape() {
 		return this.$$.ctx[78];
 	}
 
-	get removeMarkupShapeProps() {
+	get eraseShape() {
 		return this.$$.ctx[79];
 	}
 
-	get updateMarkupShape() {
+	get getMarkupItemDraft() {
 		return this.$$.ctx[80];
 	}
 
-	get updateMarkupShapeProperty() {
+	get getMarkupItemDraftIndex() {
 		return this.$$.ctx[81];
 	}
 
-	get updateMarkupItemsShapeProperty() {
+	get addMarkupItemDraft() {
 		return this.$$.ctx[82];
 	}
 
-	get updateMarkupShapeItems() {
+	get confirmMarkupItemDraft() {
 		return this.$$.ctx[83];
 	}
 
-	get getActiveMarkupItem() {
+	get discardMarkupItemDraft() {
 		return this.$$.ctx[84];
 	}
 
-	get hasActiveMarkupItem() {
+	get createMarkupItem() {
 		return this.$$.ctx[85];
 	}
 
-	get removeShape() {
+	get syncShapes() {
 		return this.$$.ctx[86];
 	}
 
-	get removeActiveMarkupItem() {
+	get addShape() {
 		return this.$$.ctx[87];
 	}
 
-	get blurShapes() {
+	get removeMarkupShapeProps() {
 		return this.$$.ctx[88];
 	}
 
-	get selectShape() {
-		return this.$$.ctx[4];
-	}
-
-	get deselectMarkupItem() {
+	get updateMarkupShape() {
 		return this.$$.ctx[89];
 	}
 
-	get editMarkupItem() {
+	get updateMarkupShapeProperty() {
 		return this.$$.ctx[90];
 	}
 
-	get finishEditMarkupItem() {
+	get updateMarkupItemsShapeProperty() {
 		return this.$$.ctx[91];
 	}
 
-	get removeMarkupItems() {
+	get updateMarkupShapeItems() {
 		return this.$$.ctx[92];
 	}
 
-	get getTextShapeRect() {
+	get getActiveMarkupItem() {
 		return this.$$.ctx[93];
 	}
 
-	get getMarkupShapeRect() {
+	get hasActiveMarkupItem() {
 		return this.$$.ctx[94];
 	}
 
-	get getShapesNearPosition() {
+	get removeShape() {
 		return this.$$.ctx[95];
 	}
 
-	get getMarkupBetweenPoints() {
+	get removeActiveMarkupItem() {
 		return this.$$.ctx[96];
+	}
+
+	get blurShapes() {
+		return this.$$.ctx[97];
+	}
+
+	get selectShape() {
+		return this.$$.ctx[5];
+	}
+
+	get deselectMarkupItem() {
+		return this.$$.ctx[98];
+	}
+
+	get editMarkupItem() {
+		return this.$$.ctx[99];
+	}
+
+	get finishEditMarkupItem() {
+		return this.$$.ctx[100];
+	}
+
+	get removeMarkupItems() {
+		return this.$$.ctx[101];
+	}
+
+	get getTextShapeRect() {
+		return this.$$.ctx[102];
+	}
+
+	get getMarkupShapeRect() {
+		return this.$$.ctx[103];
+	}
+
+	get getShapesNearPosition() {
+		return this.$$.ctx[104];
+	}
+
+	get getShapesBetweenPoints() {
+		return this.$$.ctx[105];
 	}
 }
 
@@ -31117,7 +34904,7 @@ function get_each_context$2(ctx, list, i) {
 	return child_ctx;
 }
 
-// (19:8) {#each controls as control (control.id) }
+// (21:12) {#each controls as control (control.id)}
 function create_each_block$2(key_1, ctx) {
 	let li;
 	let span;
@@ -31219,8 +35006,8 @@ function create_each_block$2(key_1, ctx) {
 	};
 }
 
-// (17:0) <Scrollable class="PinturaShapeStyles" elasticity={scrollElasticity}>
-function create_default_slot$3(ctx) {
+// (19:4) <Scrollable class="PinturaShapeStyles" elasticity={scrollElasticity}>
+function create_default_slot$5(ctx) {
 	let ul;
 	let each_blocks = [];
 	let each_1_lookup = new Map();
@@ -31287,7 +35074,7 @@ function create_default_slot$3(ctx) {
 	};
 }
 
-function create_fragment$a(ctx) {
+function create_fragment$e(ctx) {
 	let div;
 	let scrollable;
 	let current;
@@ -31296,7 +35083,7 @@ function create_fragment$a(ctx) {
 			props: {
 				class: "PinturaShapeStyles",
 				elasticity: /*scrollElasticity*/ ctx[2],
-				$$slots: { default: [create_default_slot$3] },
+				$$slots: { default: [create_default_slot$5] },
 				$$scope: { ctx }
 			}
 		});
@@ -31342,7 +35129,7 @@ function create_fragment$a(ctx) {
 	};
 }
 
-function instance$a($$self, $$props, $$invalidate) {
+function instance$e($$self, $$props, $$invalidate) {
 	let style;
 	let $opacity;
 	let { isActive = false } = $$props;
@@ -31365,7 +35152,7 @@ function instance$a($$self, $$props, $$invalidate) {
 		}
 
 		if ($$self.$$.dirty & /*$opacity, isActive*/ 96) {
-			$$invalidate(3, style = `opacity:${$opacity};${!isActive && "pointer-events:none;"}${$opacity <= 0 && "visibility:hidden"}`);
+			$$invalidate(3, style = `opacity:${$opacity};${!isActive ? "pointer-events:none;" : ""}${$opacity <= 0 ? "visibility:hidden" : ""}`);
 		}
 	};
 
@@ -31376,7 +35163,7 @@ class ShapeStyleControls extends SvelteComponent {
 	constructor(options) {
 		super();
 
-		init(this, options, instance$a, create_fragment$a, safe_not_equal, {
+		init(this, options, instance$e, create_fragment$e, safe_not_equal, {
 			isActive: 5,
 			controls: 0,
 			locale: 1,
@@ -31395,7 +35182,7 @@ function get_each_context$1(ctx, list, i) {
 	return child_ctx;
 }
 
-// (317:4) {#each currentStyleControlSets as { key, controls, isActive }
+// (134:4) {#each currentStyleControlSets as { key, controls, isActive }
 function create_each_block$1(key_1, ctx) {
 	let first;
 	let shapestylecontrols;
@@ -31448,7 +35235,7 @@ function create_each_block$1(key_1, ctx) {
 	};
 }
 
-function create_fragment$9(ctx) {
+function create_fragment$d(ctx) {
 	let div;
 	let each_blocks = [];
 	let each_1_lookup = new Map();
@@ -31515,7 +35302,7 @@ function create_fragment$9(ctx) {
 	};
 }
 
-function instance$9($$self, $$props, $$invalidate) {
+function instance$d($$self, $$props, $$invalidate) {
 	let controlKeys;
 	let activeControls;
 	let currentStyleControlSets;
@@ -31526,23 +35313,41 @@ function instance$9($$self, $$props, $$invalidate) {
 	let { scrollElasticity } = $$props;
 
 	const getShapeControls = shape => {
-		const shapeId = shape.id || "tool";
-
-		const activeControls = controlKeys.filter(styleKey => styleKey.split("_").every(styleKey => shape.hasOwnProperty(styleKey) && shapeCanStyle(shape, styleKey))).map(styleKey => {
+		// const shapeId = shape.id || 'tool';
+		const activeControls = controlKeys.filter(styleKey => styleKey.split("_").every(styleKey => // shape needs to have the property
+		hasProp(shape, styleKey) && // shape needs to be able to style the property
+		shapeCanStyle(shape, styleKey))).map(styleKey => {
 			const styleKeys = styleKey.split("_");
 
 			const currentValue = styleKeys.length > 1
 			? styleKeys.map(key => shape[key])
 			: shape[styleKey];
 
-			const [component, componentProps] = controls[styleKey];
+			let [component, componentProps] = controls[styleKey];
+
+			// is reference to other control
+			if (isString(component)) {
+				// exif if not a valid default control
+				if (!controls[component]) return;
+
+				// create component based on reference
+				const componentCustomProps = { ...componentProps };
+
+				[component, componentProps] = controls[component];
+
+				componentProps = {
+					...componentProps,
+					...componentCustomProps
+				};
+			}
 
 			const options = isFunction(componentProps.options)
 			? componentProps.options(shape)
 			: componentProps.options;
 
 			return {
-				id: `${shapeId}_${styleKey}`,
+				// id: `${shapeId}_${styleKey}`,
+				id: styleKey,
 				component,
 				componentProps: {
 					...componentProps,
@@ -31560,7 +35365,7 @@ function instance$9($$self, $$props, $$invalidate) {
 						// allow custom changes
 						if (componentProps.onchange) componentProps.onchange(value, shape);
 
-						// internal change                        
+						// internal change
 						const props = styleKeys.length > 1
 						? styleKeys.reduce(
 								(prev, key, index) => {
@@ -31577,7 +35382,7 @@ function instance$9($$self, $$props, $$invalidate) {
 					}
 				}
 			};
-		});
+		}).filter(Boolean);
 
 		return activeControls;
 	};
@@ -31628,7 +35433,7 @@ function instance$9($$self, $$props, $$invalidate) {
 		}
 
 		if ($$self.$$.dirty & /*shape, activeControls*/ 144) {
-			$$invalidate(3, currentStyleControlSets = getStyleControlSets(Object.keys(shape).join("_"), activeControls));
+			$$invalidate(3, currentStyleControlSets = getStyleControlSets(shape ? Object.keys(shape).join("_") : "none", activeControls || []));
 		}
 	};
 
@@ -31648,7 +35453,7 @@ class ShapeStyleEditor extends SvelteComponent {
 	constructor(options) {
 		super();
 
-		init(this, options, instance$9, create_fragment$9, safe_not_equal, {
+		init(this, options, instance$d, create_fragment$d, safe_not_equal, {
 			controls: 2,
 			shape: 4,
 			onchange: 5,
@@ -31660,7 +35465,7 @@ class ShapeStyleEditor extends SvelteComponent {
 
 /* src/core/ui/components/DragButton.svelte generated by Svelte v3.37.0 */
 
-function create_fragment$8(ctx) {
+function create_fragment$c(ctx) {
 	let button;
 	let mounted;
 	let dispose;
@@ -31703,7 +35508,7 @@ function create_fragment$8(ctx) {
 	};
 }
 
-function instance$8($$self, $$props, $$invalidate) {
+function instance$c($$self, $$props, $$invalidate) {
 	let { html } = $$props;
 	let { title } = $$props;
 	let { onclick } = $$props;
@@ -31730,7 +35535,7 @@ function instance$8($$self, $$props, $$invalidate) {
 		// must have moved enough distance to drop
 		if (vectorDistanceSquared(downPosition, upPosition) < 32) return onclick(e);
 
-		// cant drop in button
+		// cant drop in button /
 		if (isOverButton(e)) return;
 
 		// was dragging
@@ -31780,7 +35585,7 @@ class DragButton extends SvelteComponent {
 	constructor(options) {
 		super();
 
-		init(this, options, instance$8, create_fragment$8, safe_not_equal, {
+		init(this, options, instance$c, create_fragment$c, safe_not_equal, {
 			html: 0,
 			title: 1,
 			onclick: 5,
@@ -31800,7 +35605,7 @@ function get_each_context(ctx, list, i) {
 	return child_ctx;
 }
 
-// (63:4) {#each presets as preset (preset.id)}
+// (25:4) {#each presets as preset (preset.id)}
 function create_each_block(key_1, ctx) {
 	let li;
 	let dragbutton;
@@ -31896,7 +35701,7 @@ function create_each_block(key_1, ctx) {
 	};
 }
 
-function create_fragment$7(ctx) {
+function create_fragment$b(ctx) {
 	let ul;
 	let each_blocks = [];
 	let each_1_lookup = new Map();
@@ -31963,23 +35768,23 @@ function create_fragment$7(ctx) {
 	};
 }
 
-function instance$7($$self, $$props, $$invalidate) {
+function instance$b($$self, $$props, $$invalidate) {
 	let style;
 	let $anim;
 	let { presets } = $$props;
 	let { disabled = undefined } = $$props;
 	let { onclickpreset } = $$props;
-	let { ongrabpreset } = $$props;
-	let { ondragpreset } = $$props;
-	let { ondroppreset } = $$props;
+	let { ongrabpreset = undefined } = $$props;
+	let { ondragpreset = undefined } = $$props;
+	let { ondroppreset = undefined } = $$props;
 	const anim = tweened(0, { duration: 300 });
 	component_subscribe($$self, anim, value => $$invalidate(9, $anim = value));
 	const didMountPresetThumb = (element, item) => item.mount && item.mount(element.firstChild, item);
 	onMount(() => anim.set(1));
 	const func = preset => onclickpreset(preset.id);
-	const func_1 = (preset, e) => ongrabpreset(preset.id, e);
-	const func_2 = (preset, e) => ondragpreset(preset.id, e);
-	const func_3 = (preset, e) => ondroppreset(preset.id, e);
+	const func_1 = (preset, e) => ongrabpreset && ongrabpreset(preset.id, e);
+	const func_2 = (preset, e) => ondragpreset && ondragpreset(preset.id, e);
+	const func_3 = (preset, e) => ondroppreset && ondroppreset(preset.id, e);
 
 	$$self.$$set = $$props => {
 		if ("presets" in $$props) $$invalidate(0, presets = $$props.presets);
@@ -32018,7 +35823,7 @@ class ShapePresetsList extends SvelteComponent {
 	constructor(options) {
 		super();
 
-		init(this, options, instance$7, create_fragment$7, safe_not_equal, {
+		init(this, options, instance$b, create_fragment$b, safe_not_equal, {
 			presets: 0,
 			disabled: 1,
 			onclickpreset: 2,
@@ -32069,7 +35874,7 @@ function create_if_block_6(ctx) {
 	};
 }
 
-// (246:4) {#if shouldRenderPresets}
+// (163:4) {#if shouldRenderPresets}
 function create_if_block$1(ctx) {
 	let current_block_type_index;
 	let if_block;
@@ -32139,7 +35944,7 @@ function create_if_block$1(ctx) {
 	};
 }
 
-// (300:8) {:else}
+// (213:8) {:else}
 function create_else_block$1(ctx) {
 	let div;
 	let t;
@@ -32224,7 +36029,7 @@ function create_else_block$1(ctx) {
 	};
 }
 
-// (249:8) {#if shouldGroupPresets}
+// (165:8) {#if shouldGroupPresets}
 function create_if_block_1$1(ctx) {
 	let div1;
 	let div0;
@@ -32270,7 +36075,7 @@ function create_if_block_1$1(ctx) {
 	let tabpanels_props = {
 		$$slots: {
 			default: [
-				create_default_slot$2,
+				create_default_slot$4,
 				({ panel, panelIsActive }) => ({ 26: panel, 27: panelIsActive }),
 				({ panel, panelIsActive }) => (panel ? 67108864 : 0) | (panelIsActive ? 134217728 : 0)
 			]
@@ -32382,7 +36187,7 @@ function create_if_block_1$1(ctx) {
 	};
 }
 
-// (305:12) {#if presetToolbar}
+// (216:16) {#if presetToolbar}
 function create_if_block_5$1(ctx) {
 	let dynamiccomponenttree;
 	let current;
@@ -32419,7 +36224,7 @@ function create_if_block_5$1(ctx) {
 	};
 }
 
-// (309:12) <Scrollable scrollAutoCancel={shouldRenderPresets} elasticity={scrollElasticity}>
+// (220:16) <Scrollable scrollAutoCancel={shouldRenderPresets} elasticity={scrollElasticity}>
 function create_default_slot_4(ctx) {
 	let shapepresetslist;
 	let current;
@@ -32466,7 +36271,7 @@ function create_default_slot_4(ctx) {
 	};
 }
 
-// (254:20) {#if presetToolbar}
+// (168:20) {#if presetToolbar}
 function create_if_block_4$1(ctx) {
 	let dynamiccomponenttree;
 	let current;
@@ -32503,7 +36308,7 @@ function create_if_block_4$1(ctx) {
 	};
 }
 
-// (262:24) {#if tab.icon }
+// (180:24) {#if tab.icon}
 function create_if_block_3$1(ctx) {
 	let icon;
 	let current;
@@ -32547,7 +36352,7 @@ function create_if_block_3$1(ctx) {
 	};
 }
 
-// (263:24) <Icon>
+// (181:28) <Icon>
 function create_default_slot_3(ctx) {
 	let g;
 	let raw_value = /*tab*/ ctx[28].icon + "";
@@ -32568,7 +36373,7 @@ function create_default_slot_3(ctx) {
 	};
 }
 
-// (265:24) {#if !tab.hideLabel}
+// (183:24) {#if !tab.hideLabel}
 function create_if_block_2$1(ctx) {
 	let span;
 	let t_value = /*tab*/ ctx[28].label + "";
@@ -32592,7 +36397,7 @@ function create_if_block_2$1(ctx) {
 	};
 }
 
-// (258:20) <TabList class="PinturaControlList"                          {tabs} {...tabsConfig}                          layout="compact"                         on:select={({ detail }) => tabSelected = detail} let:tab={tab}>
+// (172:20) <TabList                         class="PinturaControlList"                         {tabs}                         {...tabsConfig}                         layout="compact"                         on:select={({ detail }) => (tabSelected = detail)}                         let:tab                     >
 function create_default_slot_2(ctx) {
 	let t;
 	let if_block1_anchor;
@@ -32669,8 +36474,8 @@ function create_default_slot_2(ctx) {
 	};
 }
 
-// (280:16) <Scrollable                      scroll={panelIsActive ? { scrollOffset: 0, animate: false } : undefined}                     scrollAutoCancel={shouldRenderPresets}                      elasticity={scrollElasticity}>
-function create_default_slot_1$2(ctx) {
+// (197:20) <Scrollable                         scroll={panelIsActive ? { scrollOffset: 0, animate: false } : undefined}                         scrollAutoCancel={shouldRenderPresets}                         elasticity={scrollElasticity}                     >
+function create_default_slot_1$1(ctx) {
 	let shapepresetslist;
 	let current;
 
@@ -32718,8 +36523,8 @@ function create_default_slot_1$2(ctx) {
 	};
 }
 
-// (272:12) <TabPanels                  class="PinturaControlPanels"                  panelClass="PinturaControlPanel"                  {panels}                  {...tabsConfig}                  let:panel                  let:panelIsActive>
-function create_default_slot$2(ctx) {
+// (189:16) <TabPanels                     class="PinturaControlPanels"                     panelClass="PinturaControlPanel"                     {panels}                     {...tabsConfig}                     let:panel                     let:panelIsActive                 >
+function create_default_slot$4(ctx) {
 	let scrollable;
 	let current;
 
@@ -32730,7 +36535,7 @@ function create_default_slot$2(ctx) {
 				: undefined,
 				scrollAutoCancel: /*shouldRenderPresets*/ ctx[6],
 				elasticity: /*scrollElasticity*/ ctx[0],
-				$$slots: { default: [create_default_slot_1$2] },
+				$$slots: { default: [create_default_slot_1$1] },
 				$$scope: { ctx }
 			}
 		});
@@ -32774,7 +36579,7 @@ function create_default_slot$2(ctx) {
 	};
 }
 
-function create_fragment$6(ctx) {
+function create_fragment$a(ctx) {
 	let div;
 	let current_block_type_index;
 	let if_block;
@@ -32862,7 +36667,7 @@ function create_fragment$6(ctx) {
 	};
 }
 
-function instance$6($$self, $$props, $$invalidate) {
+function instance$a($$self, $$props, $$invalidate) {
 	let presetsMapped;
 	let shouldRenderPresets;
 	let shouldGroupPresets;
@@ -32878,9 +36683,9 @@ function instance$6($$self, $$props, $$invalidate) {
 	let { enableSelectImage = true } = $$props;
 	let { willRenderPresetToolbar = passthrough } = $$props;
 	let { onaddpreset = noop$1 } = $$props;
-	let { ongrabpreset = noop$1 } = $$props;
-	let { ondragpreset = noop$1 } = $$props;
-	let { ondroppreset = noop$1 } = $$props;
+	let { ongrabpreset = undefined } = $$props;
+	let { ondragpreset = undefined } = $$props;
+	let { ondroppreset = undefined } = $$props;
 	const uid = `presets-${getUniqueId()}`;
 	const isPresetGroup = item => isArray(item) && isString(item[0]) && isArray(item[1]);
 
@@ -33037,19 +36842,10 @@ function instance$6($$self, $$props, $$invalidate) {
 						label: locale.shapeLabelButtonSelectSticker,
 						icon: locale.shapeIconButtonSelectSticker,
 						onclick: () => {
-							// create file input box
-							const fileInput = h("input", {
-								type: "file",
-								accept: "image/*",
-								onchange: () => {
-									const [file] = fileInput.files;
-									if (!file) return;
-									onaddpreset(file);
-								}
+							browse().then(file => {
+								if (!file) return;
+								onaddpreset(file);
 							});
-
-							// open browse window
-							fileInput.click();
 						}
 					}
 				]
@@ -33084,7 +36880,7 @@ class ShapePresetsPalette extends SvelteComponent {
 	constructor(options) {
 		super();
 
-		init(this, options, instance$6, create_fragment$6, safe_not_equal, {
+		init(this, options, instance$a, create_fragment$a, safe_not_equal, {
 			locale: 14,
 			presets: 15,
 			scrollElasticity: 0,
@@ -33099,14 +36895,7 @@ class ShapePresetsPalette extends SvelteComponent {
 }
 
 var createPingDispatcher = (node) => (type, data) => {
-    node.dispatchEvent(new CustomEvent('ping', {
-        detail: {
-            type,
-            data,
-        },
-        cancelable: true,
-        bubbles: true,
-    }));
+    node.dispatchEvent(createPing(type, data));
 };
 
 /* src/core/ui/components/ShapeUtil.svelte generated by Svelte v3.37.0 */
@@ -33119,59 +36908,69 @@ function create_if_block_5(ctx) {
 
 	const shapelayouteditor_spread_levels = [
 		{ locale: /*locale*/ ctx[4] },
-		{ uid: /*utilKey*/ ctx[11] },
-		{ parentRect: /*$parentRect*/ ctx[25] },
-		{ rootRect: /*$rootRect*/ ctx[28] },
-		{ utilRect: /*$utilRect*/ ctx[22] },
-		{ offset: /*markupOffset*/ ctx[30] },
+		{ uid: /*utilKey*/ ctx[14] },
+		{ parentRect: /*$parentRect*/ ctx[24] },
+		{ rootRect: /*$rootRect*/ ctx[32] },
+		{ utilRect: /*$utilRect*/ ctx[26] },
+		{ offset: /*markupOffset*/ ctx[34] },
 		{
-			contextScale: /*$presentationScalar*/ ctx[40]
+			contextScale: /*$presentationScalar*/ ctx[44]
 		},
 		{
-			contextRotation: /*imageRotation*/ ctx[14]
+			contextRotation: /*imageRotation*/ ctx[17]
 		},
-		{ contextFlipX: /*imageFlipX*/ ctx[15] },
-		{ contextFlipY: /*imageFlipY*/ ctx[16] },
-		{ active: /*$isActive*/ ctx[21] },
-		{ opacity: /*$isActiveFraction*/ ctx[24] },
-		{ eraseRadius: /*toolEraseRadius*/ ctx[32] },
+		{ contextFlipX: /*imageFlipX*/ ctx[18] },
+		{ contextFlipY: /*imageFlipY*/ ctx[19] },
+		{ active: /*$isActive*/ ctx[25] },
+		{ opacity: /*$isActiveFraction*/ ctx[29] },
+		{
+			hoverColor: /*$rootColorSecondary*/ ctx[45]
+		},
+		{ eraseRadius: /*toolEraseRadius*/ ctx[35] },
 		{
 			selectRadius: /*toolSelectRadius*/ ctx[6]
 		},
 		{
-			enableButtonFlipVertical: /*enableButtonFlipVertical*/ ctx[8]
+			enableButtonFlipVertical: /*enableButtonFlipVertical*/ ctx[9]
 		},
 		{
-			mapEditorPointToImagePoint: /*mapScreenPointToImagePoint*/ ctx[12]
+			mapEditorPointToImagePoint: /*mapScreenPointToImagePoint*/ ctx[15]
 		},
 		{
-			mapImagePointToEditorPoint: /*mapImagePointToScreenPoint*/ ctx[13]
+			mapImagePointToEditorPoint: /*mapImagePointToScreenPoint*/ ctx[16]
 		},
 		{
-			oninteractionstart: /*handleInteractionStart*/ ctx[51]
+			enableTapToAddText: /*enableTapToAddText*/ ctx[12]
+		},
+		{ textInputMode: /*textInputMode*/ ctx[7] },
+		{
+			oninteractionstart: /*handleInteractionStart*/ ctx[58]
 		},
 		{
-			oninteractionupdate: /*handleInteractionUpdate*/ ctx[52]
+			oninteractionupdate: /*handleInteractionUpdate*/ ctx[59]
 		},
 		{
-			oninteractionrelease: /*handleInteractionRelease*/ ctx[53]
+			oninteractionrelease: /*handleInteractionRelease*/ ctx[60]
 		},
 		{
-			oninteractionend: /*handleInteractionEnd*/ ctx[54]
+			oninteractionend: /*handleInteractionEnd*/ ctx[61]
 		},
-		{ onaddshape: /*func_1*/ ctx[83] },
-		{ onselectshape: /*func_2*/ ctx[84] },
-		{ onupdateshape: /*func_3*/ ctx[85] },
-		{ onremoveshape: /*func_4*/ ctx[86] },
-		/*layoutEditorHooks*/ ctx[37]
+		{
+			onhovershape: /*handleHoverShape*/ ctx[63]
+		},
+		{ onaddshape: /*func_1*/ ctx[95] },
+		{ onselectshape: /*func_2*/ ctx[96] },
+		{ onupdateshape: /*func_3*/ ctx[97] },
+		{ onremoveshape: /*func_4*/ ctx[98] },
+		/*layoutEditorHooks*/ ctx[41]
 	];
 
 	function shapelayouteditor_markup_binding(value) {
-		/*shapelayouteditor_markup_binding*/ ctx[88](value);
+		/*shapelayouteditor_markup_binding*/ ctx[100](value);
 	}
 
 	function shapelayouteditor_ui_binding(value) {
-		/*shapelayouteditor_ui_binding*/ ctx[89](value);
+		/*shapelayouteditor_ui_binding*/ ctx[101](value);
 	}
 
 	let shapelayouteditor_props = {};
@@ -33180,16 +36979,16 @@ function create_if_block_5(ctx) {
 		shapelayouteditor_props = assign(shapelayouteditor_props, shapelayouteditor_spread_levels[i]);
 	}
 
-	if (/*$shapes*/ ctx[23] !== void 0) {
-		shapelayouteditor_props.markup = /*$shapes*/ ctx[23];
+	if (/*$shapes*/ ctx[27] !== void 0) {
+		shapelayouteditor_props.markup = /*$shapes*/ ctx[27];
 	}
 
-	if (/*$imageOverlayMarkup*/ ctx[39] !== void 0) {
-		shapelayouteditor_props.ui = /*$imageOverlayMarkup*/ ctx[39];
+	if (/*$imageOverlayMarkup*/ ctx[43] !== void 0) {
+		shapelayouteditor_props.ui = /*$imageOverlayMarkup*/ ctx[43];
 	}
 
 	shapelayouteditor = new ShapeLayoutEditor({ props: shapelayouteditor_props });
-	/*shapelayouteditor_binding*/ ctx[87](shapelayouteditor);
+	/*shapelayouteditor_binding*/ ctx[99](shapelayouteditor);
 	binding_callbacks.push(() => bind(shapelayouteditor, "markup", shapelayouteditor_markup_binding));
 	binding_callbacks.push(() => bind(shapelayouteditor, "ui", shapelayouteditor_ui_binding));
 
@@ -33202,66 +37001,76 @@ function create_if_block_5(ctx) {
 			current = true;
 		},
 		p(ctx, dirty) {
-			const shapelayouteditor_changes = (dirty[0] & /*locale, utilKey, $parentRect, $rootRect, $utilRect, markupOffset, imageRotation, imageFlipX, imageFlipY, $isActive, $isActiveFraction, toolSelectRadius, enableButtonFlipVertical, mapScreenPointToImagePoint, mapImagePointToScreenPoint*/ 1398929744 | dirty[1] & /*$presentationScalar, toolEraseRadius, handleInteractionStart, handleInteractionUpdate, handleInteractionRelease, handleInteractionEnd, ping, handleMarkupUpdate, layoutEditorHooks*/ 1089471050)
+			const shapelayouteditor_changes = (dirty[0] & /*locale, utilKey, $parentRect, $utilRect, imageRotation, imageFlipX, imageFlipY, $isActive, $isActiveFraction, toolSelectRadius, enableButtonFlipVertical, mapScreenPointToImagePoint, mapImagePointToScreenPoint, enableTapToAddText, textInputMode*/ 655348432 | dirty[1] & /*$rootRect, markupOffset, $presentationScalar, $rootColorSecondary, toolEraseRadius, handleInteractionStart, handleInteractionUpdate, handleInteractionRelease, handleInteractionEnd, ping, layoutEditorHooks*/ 2013291674 | dirty[2] & /*handleHoverShape, handleMarkupUpdate*/ 130)
 			? get_spread_update(shapelayouteditor_spread_levels, [
 					dirty[0] & /*locale*/ 16 && { locale: /*locale*/ ctx[4] },
-					dirty[0] & /*utilKey*/ 2048 && { uid: /*utilKey*/ ctx[11] },
-					dirty[0] & /*$parentRect*/ 33554432 && { parentRect: /*$parentRect*/ ctx[25] },
-					dirty[0] & /*$rootRect*/ 268435456 && { rootRect: /*$rootRect*/ ctx[28] },
-					dirty[0] & /*$utilRect*/ 4194304 && { utilRect: /*$utilRect*/ ctx[22] },
-					dirty[0] & /*markupOffset*/ 1073741824 && { offset: /*markupOffset*/ ctx[30] },
-					dirty[1] & /*$presentationScalar*/ 512 && {
-						contextScale: /*$presentationScalar*/ ctx[40]
+					dirty[0] & /*utilKey*/ 16384 && { uid: /*utilKey*/ ctx[14] },
+					dirty[0] & /*$parentRect*/ 16777216 && { parentRect: /*$parentRect*/ ctx[24] },
+					dirty[1] & /*$rootRect*/ 2 && { rootRect: /*$rootRect*/ ctx[32] },
+					dirty[0] & /*$utilRect*/ 67108864 && { utilRect: /*$utilRect*/ ctx[26] },
+					dirty[1] & /*markupOffset*/ 8 && { offset: /*markupOffset*/ ctx[34] },
+					dirty[1] & /*$presentationScalar*/ 8192 && {
+						contextScale: /*$presentationScalar*/ ctx[44]
 					},
-					dirty[0] & /*imageRotation*/ 16384 && {
-						contextRotation: /*imageRotation*/ ctx[14]
+					dirty[0] & /*imageRotation*/ 131072 && {
+						contextRotation: /*imageRotation*/ ctx[17]
 					},
-					dirty[0] & /*imageFlipX*/ 32768 && { contextFlipX: /*imageFlipX*/ ctx[15] },
-					dirty[0] & /*imageFlipY*/ 65536 && { contextFlipY: /*imageFlipY*/ ctx[16] },
-					dirty[0] & /*$isActive*/ 2097152 && { active: /*$isActive*/ ctx[21] },
-					dirty[0] & /*$isActiveFraction*/ 16777216 && { opacity: /*$isActiveFraction*/ ctx[24] },
-					dirty[1] & /*toolEraseRadius*/ 2 && { eraseRadius: /*toolEraseRadius*/ ctx[32] },
+					dirty[0] & /*imageFlipX*/ 262144 && { contextFlipX: /*imageFlipX*/ ctx[18] },
+					dirty[0] & /*imageFlipY*/ 524288 && { contextFlipY: /*imageFlipY*/ ctx[19] },
+					dirty[0] & /*$isActive*/ 33554432 && { active: /*$isActive*/ ctx[25] },
+					dirty[0] & /*$isActiveFraction*/ 536870912 && { opacity: /*$isActiveFraction*/ ctx[29] },
+					dirty[1] & /*$rootColorSecondary*/ 16384 && {
+						hoverColor: /*$rootColorSecondary*/ ctx[45]
+					},
+					dirty[1] & /*toolEraseRadius*/ 16 && { eraseRadius: /*toolEraseRadius*/ ctx[35] },
 					dirty[0] & /*toolSelectRadius*/ 64 && {
 						selectRadius: /*toolSelectRadius*/ ctx[6]
 					},
-					dirty[0] & /*enableButtonFlipVertical*/ 256 && {
-						enableButtonFlipVertical: /*enableButtonFlipVertical*/ ctx[8]
+					dirty[0] & /*enableButtonFlipVertical*/ 512 && {
+						enableButtonFlipVertical: /*enableButtonFlipVertical*/ ctx[9]
 					},
-					dirty[0] & /*mapScreenPointToImagePoint*/ 4096 && {
-						mapEditorPointToImagePoint: /*mapScreenPointToImagePoint*/ ctx[12]
+					dirty[0] & /*mapScreenPointToImagePoint*/ 32768 && {
+						mapEditorPointToImagePoint: /*mapScreenPointToImagePoint*/ ctx[15]
 					},
-					dirty[0] & /*mapImagePointToScreenPoint*/ 8192 && {
-						mapImagePointToEditorPoint: /*mapImagePointToScreenPoint*/ ctx[13]
+					dirty[0] & /*mapImagePointToScreenPoint*/ 65536 && {
+						mapImagePointToEditorPoint: /*mapImagePointToScreenPoint*/ ctx[16]
 					},
-					dirty[1] & /*handleInteractionStart*/ 1048576 && {
-						oninteractionstart: /*handleInteractionStart*/ ctx[51]
+					dirty[0] & /*enableTapToAddText*/ 4096 && {
+						enableTapToAddText: /*enableTapToAddText*/ ctx[12]
 					},
-					dirty[1] & /*handleInteractionUpdate*/ 2097152 && {
-						oninteractionupdate: /*handleInteractionUpdate*/ ctx[52]
+					dirty[0] & /*textInputMode*/ 128 && { textInputMode: /*textInputMode*/ ctx[7] },
+					dirty[1] & /*handleInteractionStart*/ 134217728 && {
+						oninteractionstart: /*handleInteractionStart*/ ctx[58]
 					},
-					dirty[1] & /*handleInteractionRelease*/ 4194304 && {
-						oninteractionrelease: /*handleInteractionRelease*/ ctx[53]
+					dirty[1] & /*handleInteractionUpdate*/ 268435456 && {
+						oninteractionupdate: /*handleInteractionUpdate*/ ctx[59]
 					},
-					dirty[1] & /*handleInteractionEnd*/ 8388608 && {
-						oninteractionend: /*handleInteractionEnd*/ ctx[54]
+					dirty[1] & /*handleInteractionRelease*/ 536870912 && {
+						oninteractionrelease: /*handleInteractionRelease*/ ctx[60]
 					},
-					dirty[1] & /*ping, handleMarkupUpdate*/ 1073741832 && { onaddshape: /*func_1*/ ctx[83] },
-					dirty[1] & /*ping*/ 8 && { onselectshape: /*func_2*/ ctx[84] },
-					dirty[1] & /*ping, handleMarkupUpdate*/ 1073741832 && { onupdateshape: /*func_3*/ ctx[85] },
-					dirty[1] & /*ping, handleMarkupUpdate*/ 1073741832 && { onremoveshape: /*func_4*/ ctx[86] },
-					dirty[1] & /*layoutEditorHooks*/ 64 && get_spread_object(/*layoutEditorHooks*/ ctx[37])
+					dirty[1] & /*handleInteractionEnd*/ 1073741824 && {
+						oninteractionend: /*handleInteractionEnd*/ ctx[61]
+					},
+					dirty[2] & /*handleHoverShape*/ 2 && {
+						onhovershape: /*handleHoverShape*/ ctx[63]
+					},
+					dirty[1] & /*ping*/ 128 | dirty[2] & /*handleMarkupUpdate*/ 128 && { onaddshape: /*func_1*/ ctx[95] },
+					dirty[1] & /*ping*/ 128 && { onselectshape: /*func_2*/ ctx[96] },
+					dirty[1] & /*ping*/ 128 | dirty[2] & /*handleMarkupUpdate*/ 128 && { onupdateshape: /*func_3*/ ctx[97] },
+					dirty[1] & /*ping*/ 128 | dirty[2] & /*handleMarkupUpdate*/ 128 && { onremoveshape: /*func_4*/ ctx[98] },
+					dirty[1] & /*layoutEditorHooks*/ 1024 && get_spread_object(/*layoutEditorHooks*/ ctx[41])
 				])
 			: {};
 
-			if (!updating_markup && dirty[0] & /*$shapes*/ 8388608) {
+			if (!updating_markup && dirty[0] & /*$shapes*/ 134217728) {
 				updating_markup = true;
-				shapelayouteditor_changes.markup = /*$shapes*/ ctx[23];
+				shapelayouteditor_changes.markup = /*$shapes*/ ctx[27];
 				add_flush_callback(() => updating_markup = false);
 			}
 
-			if (!updating_ui && dirty[1] & /*$imageOverlayMarkup*/ 256) {
+			if (!updating_ui && dirty[1] & /*$imageOverlayMarkup*/ 4096) {
 				updating_ui = true;
-				shapelayouteditor_changes.ui = /*$imageOverlayMarkup*/ ctx[39];
+				shapelayouteditor_changes.ui = /*$imageOverlayMarkup*/ ctx[43];
 				add_flush_callback(() => updating_ui = false);
 			}
 
@@ -33277,50 +37086,59 @@ function create_if_block_5(ctx) {
 			current = false;
 		},
 		d(detaching) {
-			/*shapelayouteditor_binding*/ ctx[87](null);
+			/*shapelayouteditor_binding*/ ctx[99](null);
 			destroy_component(shapelayouteditor, detaching);
 		}
 	};
 }
 
-// (417:4) 
+// (602:4) 
 function create_main_slot(ctx) {
 	let div;
+	let div_style_value;
 	let current;
 	let mounted;
 	let dispose;
-	let if_block = /*shouldRenderShapeEditor*/ ctx[29] && create_if_block_5(ctx);
+	let if_block = /*shouldRenderShapeEditor*/ ctx[33] && create_if_block_5(ctx);
 
 	return {
 		c() {
 			div = element("div");
 			if (if_block) if_block.c();
 			attr(div, "slot", "main");
-			set_style(div, "cursor", "crosshair");
+			attr(div, "style", div_style_value = `cursor: ${/*cursor*/ ctx[36]}`);
 		},
 		m(target, anchor) {
 			insert(target, div, anchor);
 			if (if_block) if_block.m(div, null);
-			/*div_binding*/ ctx[90](div);
+			/*div_binding*/ ctx[102](div);
 			current = true;
 
 			if (!mounted) {
 				dispose = [
 					action_destroyer(dropable.call(null, div)),
-					listen(div, "dropfiles", /*handleDropFiles*/ ctx[60]),
+					listen(div, "dropfiles", function () {
+						if (is_function(/*enablePresetDropImage*/ ctx[11]
+						? /*handleDropFiles*/ ctx[68]
+						: noop$1)) (/*enablePresetDropImage*/ ctx[11]
+						? /*handleDropFiles*/ ctx[68]
+						: noop$1).apply(this, arguments);
+					}),
 					action_destroyer(measurable.call(null, div)),
-					listen(div, "measure", /*measure_handler_1*/ ctx[81])
+					listen(div, "measure", /*measure_handler_1*/ ctx[93])
 				];
 
 				mounted = true;
 			}
 		},
-		p(ctx, dirty) {
-			if (/*shouldRenderShapeEditor*/ ctx[29]) {
+		p(new_ctx, dirty) {
+			ctx = new_ctx;
+
+			if (/*shouldRenderShapeEditor*/ ctx[33]) {
 				if (if_block) {
 					if_block.p(ctx, dirty);
 
-					if (dirty[0] & /*shouldRenderShapeEditor*/ 536870912) {
+					if (dirty[1] & /*shouldRenderShapeEditor*/ 4) {
 						transition_in(if_block, 1);
 					}
 				} else {
@@ -33338,6 +37156,10 @@ function create_main_slot(ctx) {
 
 				check_outros();
 			}
+
+			if (!current || dirty[1] & /*cursor*/ 32 && div_style_value !== (div_style_value = `cursor: ${/*cursor*/ ctx[36]}`)) {
+				attr(div, "style", div_style_value);
+			}
 		},
 		i(local) {
 			if (current) return;
@@ -33351,14 +37173,14 @@ function create_main_slot(ctx) {
 		d(detaching) {
 			if (detaching) detach(div);
 			if (if_block) if_block.d();
-			/*div_binding*/ ctx[90](null);
+			/*div_binding*/ ctx[102](null);
 			mounted = false;
 			run_all(dispose);
 		}
 	};
 }
 
-// (510:38) 
+// (727:38) 
 function create_if_block_4(ctx) {
 	let shapepresetspalette;
 	let current;
@@ -33366,14 +37188,14 @@ function create_if_block_4(ctx) {
 	shapepresetspalette = new ShapePresetsPalette({
 			props: {
 				locale: /*locale*/ ctx[4],
-				presets: /*shapePresets*/ ctx[10],
-				enableSelectImage: /*enablePresetSelectImage*/ ctx[9],
-				willRenderPresetToolbar: /*runWillRenderPresetToolbarHook*/ ctx[36],
-				onaddpreset: /*handleAddPreset*/ ctx[59],
-				ongrabpreset: /*handleGrabPreset*/ ctx[56],
-				ondragpreset: /*handleDragPreset*/ ctx[57],
-				ondroppreset: /*handleDropPreset*/ ctx[58],
-				scrollElasticity: /*computedScrollElasticity*/ ctx[35]
+				presets: /*shapePresets*/ ctx[13],
+				enableSelectImage: /*enablePresetSelectImage*/ ctx[10],
+				willRenderPresetToolbar: /*runWillRenderPresetToolbarHook*/ ctx[40],
+				onaddpreset: /*handleAddPreset*/ ctx[67],
+				ongrabpreset: /*handleGrabPreset*/ ctx[64],
+				ondragpreset: /*handleDragPreset*/ ctx[65],
+				ondroppreset: /*handleDropPreset*/ ctx[66],
+				scrollElasticity: /*computedScrollElasticity*/ ctx[39]
 			}
 		});
 
@@ -33388,10 +37210,10 @@ function create_if_block_4(ctx) {
 		p(ctx, dirty) {
 			const shapepresetspalette_changes = {};
 			if (dirty[0] & /*locale*/ 16) shapepresetspalette_changes.locale = /*locale*/ ctx[4];
-			if (dirty[0] & /*shapePresets*/ 1024) shapepresetspalette_changes.presets = /*shapePresets*/ ctx[10];
-			if (dirty[0] & /*enablePresetSelectImage*/ 512) shapepresetspalette_changes.enableSelectImage = /*enablePresetSelectImage*/ ctx[9];
-			if (dirty[1] & /*runWillRenderPresetToolbarHook*/ 32) shapepresetspalette_changes.willRenderPresetToolbar = /*runWillRenderPresetToolbarHook*/ ctx[36];
-			if (dirty[1] & /*computedScrollElasticity*/ 16) shapepresetspalette_changes.scrollElasticity = /*computedScrollElasticity*/ ctx[35];
+			if (dirty[0] & /*shapePresets*/ 8192) shapepresetspalette_changes.presets = /*shapePresets*/ ctx[13];
+			if (dirty[0] & /*enablePresetSelectImage*/ 1024) shapepresetspalette_changes.enableSelectImage = /*enablePresetSelectImage*/ ctx[10];
+			if (dirty[1] & /*runWillRenderPresetToolbarHook*/ 512) shapepresetspalette_changes.willRenderPresetToolbar = /*runWillRenderPresetToolbarHook*/ ctx[40];
+			if (dirty[1] & /*computedScrollElasticity*/ 256) shapepresetspalette_changes.scrollElasticity = /*computedScrollElasticity*/ ctx[39];
 			shapepresetspalette.$set(shapepresetspalette_changes);
 		},
 		i(local) {
@@ -33409,7 +37231,7 @@ function create_if_block_4(ctx) {
 	};
 }
 
-// (463:8) {#if shouldRenderControls}
+// (662:8) {#if shouldRenderControls}
 function create_if_block(ctx) {
 	let div;
 	let current_block_type_index;
@@ -33421,13 +37243,13 @@ function create_if_block(ctx) {
 	const if_blocks = [];
 
 	function select_block_type_1(ctx, dirty) {
-		if (/*shouldRenderPresets*/ ctx[33]) return 0;
+		if (/*shouldRenderPresets*/ ctx[37]) return 0;
 		return 1;
 	}
 
 	current_block_type_index = select_block_type_1(ctx);
 	if_block0 = if_blocks[current_block_type_index] = if_block_creators[current_block_type_index](ctx);
-	let if_block1 = /*showToolbar*/ ctx[20] && create_if_block_1(ctx);
+	let if_block1 = /*showToolbar*/ ctx[23] && create_if_block_1(ctx);
 
 	return {
 		c() {
@@ -33473,11 +37295,11 @@ function create_if_block(ctx) {
 				if_block0.m(div, null);
 			}
 
-			if (/*showToolbar*/ ctx[20]) {
+			if (/*showToolbar*/ ctx[23]) {
 				if (if_block1) {
 					if_block1.p(ctx, dirty);
 
-					if (dirty[0] & /*showToolbar*/ 1048576) {
+					if (dirty[0] & /*showToolbar*/ 8388608) {
 						transition_in(if_block1, 1);
 					}
 				} else {
@@ -33517,7 +37339,7 @@ function create_if_block(ctx) {
 	};
 }
 
-// (478:16) {:else}
+// (678:16) {:else}
 function create_else_block(ctx) {
 	let div;
 	let shapestyleeditor;
@@ -33526,10 +37348,10 @@ function create_else_block(ctx) {
 	shapestyleeditor = new ShapeStyleEditor({
 			props: {
 				locale: /*locale*/ ctx[4],
-				shape: /*markupShapeSelected*/ ctx[31],
-				onchange: /*handleUpdateSelectedMarkupShape*/ ctx[55],
-				controls: /*shapeControls*/ ctx[7],
-				scrollElasticity: /*computedScrollElasticity*/ ctx[35]
+				shape: /*markupShapeSelected*/ ctx[28],
+				onchange: /*handleUpdateSelectedMarkupShape*/ ctx[62],
+				controls: /*shapeControls*/ ctx[8],
+				scrollElasticity: /*computedScrollElasticity*/ ctx[39]
 			}
 		});
 
@@ -33547,9 +37369,9 @@ function create_else_block(ctx) {
 		p(ctx, dirty) {
 			const shapestyleeditor_changes = {};
 			if (dirty[0] & /*locale*/ 16) shapestyleeditor_changes.locale = /*locale*/ ctx[4];
-			if (dirty[1] & /*markupShapeSelected*/ 1) shapestyleeditor_changes.shape = /*markupShapeSelected*/ ctx[31];
-			if (dirty[0] & /*shapeControls*/ 128) shapestyleeditor_changes.controls = /*shapeControls*/ ctx[7];
-			if (dirty[1] & /*computedScrollElasticity*/ 16) shapestyleeditor_changes.scrollElasticity = /*computedScrollElasticity*/ ctx[35];
+			if (dirty[0] & /*markupShapeSelected*/ 268435456) shapestyleeditor_changes.shape = /*markupShapeSelected*/ ctx[28];
+			if (dirty[0] & /*shapeControls*/ 256) shapestyleeditor_changes.controls = /*shapeControls*/ ctx[8];
+			if (dirty[1] & /*computedScrollElasticity*/ 256) shapestyleeditor_changes.scrollElasticity = /*computedScrollElasticity*/ ctx[39];
 			shapestyleeditor.$set(shapestyleeditor_changes);
 		},
 		i(local) {
@@ -33568,7 +37390,7 @@ function create_else_block(ctx) {
 	};
 }
 
-// (466:16) {#if shouldRenderPresets}
+// (664:16) {#if shouldRenderPresets}
 function create_if_block_3(ctx) {
 	let div;
 	let shapepresetspalette;
@@ -33577,14 +37399,14 @@ function create_if_block_3(ctx) {
 	shapepresetspalette = new ShapePresetsPalette({
 			props: {
 				locale: /*locale*/ ctx[4],
-				presets: /*shapePresets*/ ctx[10],
-				enableSelectImage: /*enablePresetSelectImage*/ ctx[9],
-				willRenderPresetToolbar: /*runWillRenderPresetToolbarHook*/ ctx[36],
-				onaddpreset: /*handleAddPreset*/ ctx[59],
-				ongrabpreset: /*handleGrabPreset*/ ctx[56],
-				ondragpreset: /*handleDragPreset*/ ctx[57],
-				ondroppreset: /*handleDropPreset*/ ctx[58],
-				scrollElasticity: /*computedScrollElasticity*/ ctx[35]
+				presets: /*shapePresets*/ ctx[13],
+				enableSelectImage: /*enablePresetSelectImage*/ ctx[10],
+				willRenderPresetToolbar: /*runWillRenderPresetToolbarHook*/ ctx[40],
+				onaddpreset: /*handleAddPreset*/ ctx[67],
+				ongrabpreset: /*handleGrabPreset*/ ctx[64],
+				ondragpreset: /*handleDragPreset*/ ctx[65],
+				ondroppreset: /*handleDropPreset*/ ctx[66],
+				scrollElasticity: /*computedScrollElasticity*/ ctx[39]
 			}
 		});
 
@@ -33602,10 +37424,10 @@ function create_if_block_3(ctx) {
 		p(ctx, dirty) {
 			const shapepresetspalette_changes = {};
 			if (dirty[0] & /*locale*/ 16) shapepresetspalette_changes.locale = /*locale*/ ctx[4];
-			if (dirty[0] & /*shapePresets*/ 1024) shapepresetspalette_changes.presets = /*shapePresets*/ ctx[10];
-			if (dirty[0] & /*enablePresetSelectImage*/ 512) shapepresetspalette_changes.enableSelectImage = /*enablePresetSelectImage*/ ctx[9];
-			if (dirty[1] & /*runWillRenderPresetToolbarHook*/ 32) shapepresetspalette_changes.willRenderPresetToolbar = /*runWillRenderPresetToolbarHook*/ ctx[36];
-			if (dirty[1] & /*computedScrollElasticity*/ 16) shapepresetspalette_changes.scrollElasticity = /*computedScrollElasticity*/ ctx[35];
+			if (dirty[0] & /*shapePresets*/ 8192) shapepresetspalette_changes.presets = /*shapePresets*/ ctx[13];
+			if (dirty[0] & /*enablePresetSelectImage*/ 1024) shapepresetspalette_changes.enableSelectImage = /*enablePresetSelectImage*/ ctx[10];
+			if (dirty[1] & /*runWillRenderPresetToolbarHook*/ 512) shapepresetspalette_changes.willRenderPresetToolbar = /*runWillRenderPresetToolbarHook*/ ctx[40];
+			if (dirty[1] & /*computedScrollElasticity*/ 256) shapepresetspalette_changes.scrollElasticity = /*computedScrollElasticity*/ ctx[39];
 			shapepresetspalette.$set(shapepresetspalette_changes);
 		},
 		i(local) {
@@ -33624,7 +37446,7 @@ function create_if_block_3(ctx) {
 	};
 }
 
-// (489:12) {#if showToolbar }
+// (691:12) {#if showToolbar}
 function create_if_block_1(ctx) {
 	let scrollable;
 	let current;
@@ -33632,8 +37454,8 @@ function create_if_block_1(ctx) {
 	scrollable = new Scrollable({
 			props: {
 				class: "PinturaControlListScroller",
-				elasticity: /*computedScrollElasticity*/ ctx[35],
-				$$slots: { default: [create_default_slot$1] },
+				elasticity: /*computedScrollElasticity*/ ctx[39],
+				$$slots: { default: [create_default_slot$3] },
 				$$scope: { ctx }
 			}
 		});
@@ -33648,9 +37470,9 @@ function create_if_block_1(ctx) {
 		},
 		p(ctx, dirty) {
 			const scrollable_changes = {};
-			if (dirty[1] & /*computedScrollElasticity*/ 16) scrollable_changes.elasticity = /*computedScrollElasticity*/ ctx[35];
+			if (dirty[1] & /*computedScrollElasticity*/ 256) scrollable_changes.elasticity = /*computedScrollElasticity*/ ctx[39];
 
-			if (dirty[0] & /*locale, toolsFiltered, toolActive*/ 524305 | dirty[3] & /*$$scope*/ 4096) {
+			if (dirty[0] & /*locale, toolsFiltered, toolActive*/ 4194321 | dirty[3] & /*$$scope*/ 268435456) {
 				scrollable_changes.$$scope = { dirty, ctx };
 			}
 
@@ -33671,14 +37493,14 @@ function create_if_block_1(ctx) {
 	};
 }
 
-// (501:24) {#if option.icon}
+// (709:28) {#if option.icon}
 function create_if_block_2(ctx) {
 	let icon;
 	let current;
 
 	icon = new Icon({
 			props: {
-				$$slots: { default: [create_default_slot_1$1] },
+				$$slots: { default: [create_default_slot_1] },
 				$$scope: { ctx }
 			}
 		});
@@ -33694,7 +37516,7 @@ function create_if_block_2(ctx) {
 		p(ctx, dirty) {
 			const icon_changes = {};
 
-			if (dirty[0] & /*locale*/ 16 | dirty[3] & /*$$scope, option*/ 6144) {
+			if (dirty[0] & /*locale*/ 16 | dirty[3] & /*$$scope, option*/ 402653184) {
 				icon_changes.$$scope = { dirty, ctx };
 			}
 
@@ -33715,13 +37537,13 @@ function create_if_block_2(ctx) {
 	};
 }
 
-// (502:24) <Icon>
-function create_default_slot_1$1(ctx) {
+// (710:32) <Icon                                     >
+function create_default_slot_1(ctx) {
 	let g;
 
-	let raw_value = (isFunction(/*option*/ ctx[104].icon)
-	? /*option*/ ctx[104].icon(/*locale*/ ctx[4])
-	: /*option*/ ctx[104].icon) + "";
+	let raw_value = (isFunction(/*option*/ ctx[120].icon)
+	? /*option*/ ctx[120].icon(/*locale*/ ctx[4])
+	: /*option*/ ctx[120].icon) + "";
 
 	return {
 		c() {
@@ -33732,28 +37554,28 @@ function create_default_slot_1$1(ctx) {
 			g.innerHTML = raw_value;
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*locale*/ 16 | dirty[3] & /*option*/ 2048 && raw_value !== (raw_value = (isFunction(/*option*/ ctx[104].icon)
-			? /*option*/ ctx[104].icon(/*locale*/ ctx[4])
-			: /*option*/ ctx[104].icon) + "")) g.innerHTML = raw_value;		},
+			if (dirty[0] & /*locale*/ 16 | dirty[3] & /*option*/ 134217728 && raw_value !== (raw_value = (isFunction(/*option*/ ctx[120].icon)
+			? /*option*/ ctx[120].icon(/*locale*/ ctx[4])
+			: /*option*/ ctx[120].icon) + "")) g.innerHTML = raw_value;		},
 		d(detaching) {
 			if (detaching) detach(g);
 		}
 	};
 }
 
-// (500:20) 
-function create_option_slot(ctx) {
+// (708:24) 
+function create_option_slot$1(ctx) {
 	let div;
 	let t0;
 	let span;
 
-	let t1_value = (isFunction(/*option*/ ctx[104].label)
-	? /*option*/ ctx[104].label(/*locale*/ ctx[4])
-	: /*option*/ ctx[104].label) + "";
+	let t1_value = (isFunction(/*option*/ ctx[120].label)
+	? /*option*/ ctx[120].label(/*locale*/ ctx[4])
+	: /*option*/ ctx[120].label) + "";
 
 	let t1;
 	let current;
-	let if_block = /*option*/ ctx[104].icon && create_if_block_2(ctx);
+	let if_block = /*option*/ ctx[120].icon && create_if_block_2(ctx);
 
 	return {
 		c() {
@@ -33773,11 +37595,11 @@ function create_option_slot(ctx) {
 			current = true;
 		},
 		p(ctx, dirty) {
-			if (/*option*/ ctx[104].icon) {
+			if (/*option*/ ctx[120].icon) {
 				if (if_block) {
 					if_block.p(ctx, dirty);
 
-					if (dirty[3] & /*option*/ 2048) {
+					if (dirty[3] & /*option*/ 134217728) {
 						transition_in(if_block, 1);
 					}
 				} else {
@@ -33796,9 +37618,9 @@ function create_option_slot(ctx) {
 				check_outros();
 			}
 
-			if ((!current || dirty[0] & /*locale*/ 16 | dirty[3] & /*option*/ 2048) && t1_value !== (t1_value = (isFunction(/*option*/ ctx[104].label)
-			? /*option*/ ctx[104].label(/*locale*/ ctx[4])
-			: /*option*/ ctx[104].label) + "")) set_data(t1, t1_value);
+			if ((!current || dirty[0] & /*locale*/ 16 | dirty[3] & /*option*/ 134217728) && t1_value !== (t1_value = (isFunction(/*option*/ ctx[120].label)
+			? /*option*/ ctx[120].label(/*locale*/ ctx[4])
+			: /*option*/ ctx[120].label) + "")) set_data(t1, t1_value);
 		},
 		i(local) {
 			if (current) return;
@@ -33816,8 +37638,8 @@ function create_option_slot(ctx) {
 	};
 }
 
-// (490:12) <Scrollable class="PinturaControlListScroller" elasticity={computedScrollElasticity}>
-function create_default_slot$1(ctx) {
+// (692:16) <Scrollable                     class="PinturaControlListScroller"                     elasticity={computedScrollElasticity}                 >
+function create_default_slot$3(ctx) {
 	let radiogroup;
 	let current;
 
@@ -33827,14 +37649,14 @@ function create_default_slot$1(ctx) {
 				class: "PinturaControlList",
 				optionClass: "PinturaControlListOption",
 				layout: "row",
-				options: /*toolsFiltered*/ ctx[19],
-				selectedIndex: /*toolsFiltered*/ ctx[19].findIndex(/*func*/ ctx[82]),
-				onchange: /*updateActiveTool*/ ctx[50],
+				options: /*toolsFiltered*/ ctx[22],
+				selectedIndex: /*toolsFiltered*/ ctx[22].findIndex(/*func*/ ctx[94]),
+				onchange: /*updateActiveTool*/ ctx[57],
 				$$slots: {
 					option: [
-						create_option_slot,
-						({ option }) => ({ 104: option }),
-						({ option }) => [0, 0, 0, option ? 2048 : 0]
+						create_option_slot$1,
+						({ option }) => ({ 120: option }),
+						({ option }) => [0, 0, 0, option ? 134217728 : 0]
 					]
 				},
 				$$scope: { ctx }
@@ -33852,10 +37674,10 @@ function create_default_slot$1(ctx) {
 		p(ctx, dirty) {
 			const radiogroup_changes = {};
 			if (dirty[0] & /*locale*/ 16) radiogroup_changes.locale = /*locale*/ ctx[4];
-			if (dirty[0] & /*toolsFiltered*/ 524288) radiogroup_changes.options = /*toolsFiltered*/ ctx[19];
-			if (dirty[0] & /*toolsFiltered, toolActive*/ 524289) radiogroup_changes.selectedIndex = /*toolsFiltered*/ ctx[19].findIndex(/*func*/ ctx[82]);
+			if (dirty[0] & /*toolsFiltered*/ 4194304) radiogroup_changes.options = /*toolsFiltered*/ ctx[22];
+			if (dirty[0] & /*toolsFiltered, toolActive*/ 4194305) radiogroup_changes.selectedIndex = /*toolsFiltered*/ ctx[22].findIndex(/*func*/ ctx[94]);
 
-			if (dirty[0] & /*locale*/ 16 | dirty[3] & /*$$scope, option*/ 6144) {
+			if (dirty[0] & /*locale*/ 16 | dirty[3] & /*$$scope, option*/ 402653184) {
 				radiogroup_changes.$$scope = { dirty, ctx };
 			}
 
@@ -33876,8 +37698,8 @@ function create_default_slot$1(ctx) {
 	};
 }
 
-// (462:4) 
-function create_footer_slot$1(ctx) {
+// (661:4) 
+function create_footer_slot$2(ctx) {
 	let div;
 	let current_block_type_index;
 	let if_block;
@@ -33886,8 +37708,8 @@ function create_footer_slot$1(ctx) {
 	const if_blocks = [];
 
 	function select_block_type(ctx, dirty) {
-		if (/*shouldRenderControls*/ ctx[27]) return 0;
-		if (/*shouldRenderPresets*/ ctx[33]) return 1;
+		if (/*shouldRenderControls*/ ctx[31]) return 0;
+		if (/*shouldRenderPresets*/ ctx[37]) return 1;
 		return -1;
 	}
 
@@ -33900,7 +37722,7 @@ function create_footer_slot$1(ctx) {
 			div = element("div");
 			if (if_block) if_block.c();
 			attr(div, "slot", "footer");
-			attr(div, "style", /*footerStyle*/ ctx[38]);
+			attr(div, "style", /*footerStyle*/ ctx[42]);
 		},
 		m(target, anchor) {
 			insert(target, div, anchor);
@@ -33947,8 +37769,8 @@ function create_footer_slot$1(ctx) {
 				}
 			}
 
-			if (!current || dirty[1] & /*footerStyle*/ 128) {
-				attr(div, "style", /*footerStyle*/ ctx[38]);
+			if (!current || dirty[1] & /*footerStyle*/ 2048) {
+				attr(div, "style", /*footerStyle*/ ctx[42]);
 			}
 		},
 		i(local) {
@@ -33970,21 +37792,21 @@ function create_footer_slot$1(ctx) {
 	};
 }
 
-function create_fragment$5(ctx) {
+function create_fragment$9(ctx) {
 	let util;
 	let current;
 
 	util = new Util({
 			props: {
 				$$slots: {
-					footer: [create_footer_slot$1],
+					footer: [create_footer_slot$2],
 					main: [create_main_slot]
 				},
 				$$scope: { ctx }
 			}
 		});
 
-	util.$on("measure", /*measure_handler*/ ctx[91]);
+	util.$on("measure", /*measure_handler*/ ctx[103]);
 
 	return {
 		c() {
@@ -33997,7 +37819,7 @@ function create_fragment$5(ctx) {
 		p(ctx, dirty) {
 			const util_changes = {};
 
-			if (dirty[0] & /*locale, toolsFiltered, toolActive, showToolbar, shapePresets, enablePresetSelectImage, shapeControls, shouldRenderControls, pingHub, utilKey, $parentRect, $rootRect, $utilRect, markupOffset, imageRotation, imageFlipX, imageFlipY, $isActive, $isActiveFraction, toolSelectRadius, enableButtonFlipVertical, mapScreenPointToImagePoint, mapImagePointToScreenPoint, markupEditor, $shapes, shouldRenderShapeEditor*/ 2147352529 | dirty[1] & /*footerStyle, computedScrollElasticity, runWillRenderPresetToolbarHook, shouldRenderPresets, markupShapeSelected, $presentationScalar, toolEraseRadius, ping, layoutEditorHooks, $imageOverlayMarkup*/ 1023 | dirty[3] & /*$$scope*/ 4096) {
+			if (dirty[0] & /*locale, toolsFiltered, toolActive, showToolbar, shapePresets, enablePresetSelectImage, markupShapeSelected, shapeControls, pingHub, enablePresetDropImage, utilKey, $parentRect, $utilRect, imageRotation, imageFlipX, imageFlipY, $isActive, $isActiveFraction, toolSelectRadius, enableButtonFlipVertical, mapScreenPointToImagePoint, mapImagePointToScreenPoint, enableTapToAddText, textInputMode, markupEditor, $shapes*/ 2146435025 | dirty[1] & /*footerStyle, computedScrollElasticity, runWillRenderPresetToolbarHook, shouldRenderPresets, shouldRenderControls, cursor, $rootRect, markupOffset, $presentationScalar, $rootColorSecondary, toolEraseRadius, ping, layoutEditorHooks, $imageOverlayMarkup, shouldRenderShapeEditor*/ 32767 | dirty[3] & /*$$scope*/ 268435456) {
 				util_changes.$$scope = { dirty, ctx };
 			}
 
@@ -34018,8 +37840,9 @@ function create_fragment$5(ctx) {
 	};
 }
 
-function instance$5($$self, $$props, $$invalidate) {
+function instance$9($$self, $$props, $$invalidate) {
 	let toolsFiltered;
+	let hasShapeControls;
 	let showToolbar;
 	let hasTools;
 	let hasActiveTool;
@@ -34032,6 +37855,7 @@ function instance$5($$self, $$props, $$invalidate) {
 	let markupToolStylesComputed;
 	let markupShapeSelected;
 	let toolEraseRadius;
+	let cursor;
 	let shouldRenderPresets;
 	let shouldStickToImage;
 	let ping;
@@ -34039,32 +37863,35 @@ function instance$5($$self, $$props, $$invalidate) {
 	let runWillRenderPresetToolbarHook;
 	let layoutEditorHooks;
 	let footerStyle;
+
+	let $parentRect,
+		$$unsubscribe_parentRect = noop,
+		$$subscribe_parentRect = () => ($$unsubscribe_parentRect(), $$unsubscribe_parentRect = subscribe(parentRect, $$value => $$invalidate(24, $parentRect = $$value)), parentRect);
+
 	let $rootRect;
 
 	let $isActive,
 		$$unsubscribe_isActive = noop,
-		$$subscribe_isActive = () => ($$unsubscribe_isActive(), $$unsubscribe_isActive = subscribe(isActive, $$value => $$invalidate(21, $isActive = $$value)), isActive);
+		$$subscribe_isActive = () => ($$unsubscribe_isActive(), $$unsubscribe_isActive = subscribe(isActive, $$value => $$invalidate(25, $isActive = $$value)), isActive);
 
 	let $imagePreviewModifiers;
 
 	let $isVisible,
 		$$unsubscribe_isVisible = noop,
-		$$subscribe_isVisible = () => ($$unsubscribe_isVisible(), $$unsubscribe_isVisible = subscribe(isVisible, $$value => $$invalidate(73, $isVisible = $$value)), isVisible);
+		$$subscribe_isVisible = () => ($$unsubscribe_isVisible(), $$unsubscribe_isVisible = subscribe(isVisible, $$value => $$invalidate(84, $isVisible = $$value)), isVisible);
 
 	let $utilRect;
 	let $stageRect;
 
 	let $shapes,
 		$$unsubscribe_shapes = noop,
-		$$subscribe_shapes = () => ($$unsubscribe_shapes(), $$unsubscribe_shapes = subscribe(shapes, $$value => $$invalidate(23, $shapes = $$value)), shapes);
+		$$subscribe_shapes = () => ($$unsubscribe_shapes(), $$unsubscribe_shapes = subscribe(shapes, $$value => $$invalidate(27, $shapes = $$value)), shapes);
+
+	let $shapePreprocessor;
 
 	let $isActiveFraction,
 		$$unsubscribe_isActiveFraction = noop,
-		$$subscribe_isActiveFraction = () => ($$unsubscribe_isActiveFraction(), $$unsubscribe_isActiveFraction = subscribe(isActiveFraction, $$value => $$invalidate(24, $isActiveFraction = $$value)), isActiveFraction);
-
-	let $parentRect,
-		$$unsubscribe_parentRect = noop,
-		$$subscribe_parentRect = () => ($$unsubscribe_parentRect(), $$unsubscribe_parentRect = subscribe(parentRect, $$value => $$invalidate(25, $parentRect = $$value)), parentRect);
+		$$subscribe_isActiveFraction = () => ($$unsubscribe_isActiveFraction(), $$unsubscribe_isActiveFraction = subscribe(isActiveFraction, $$value => $$invalidate(29, $isActiveFraction = $$value)), isActiveFraction);
 
 	let $imageCropRect;
 	let $env;
@@ -34072,11 +37899,12 @@ function instance$5($$self, $$props, $$invalidate) {
 	let $footerOffset;
 	let $imageOverlayMarkup;
 	let $presentationScalar;
+	let $rootColorSecondary;
+	$$self.$$.on_destroy.push(() => $$unsubscribe_parentRect());
 	$$self.$$.on_destroy.push(() => $$unsubscribe_isActive());
 	$$self.$$.on_destroy.push(() => $$unsubscribe_isVisible());
 	$$self.$$.on_destroy.push(() => $$unsubscribe_shapes());
 	$$self.$$.on_destroy.push(() => $$unsubscribe_isActiveFraction());
-	$$self.$$.on_destroy.push(() => $$unsubscribe_parentRect());
 	let { isActive } = $$props;
 	$$subscribe_isActive();
 	let { isActiveFraction } = $$props;
@@ -34091,9 +37919,13 @@ function instance$5($$self, $$props, $$invalidate) {
 	let { toolShapes = [] } = $$props;
 	let { toolActive = undefined } = $$props;
 	let { toolSelectRadius = undefined } = $$props;
-	let { shapeControls = [] } = $$props;
+	let { textInputMode = undefined } = $$props;
+	let { shapeControls = {} } = $$props;
 	let { enableButtonFlipVertical = false } = $$props;
 	let { enablePresetSelectImage = true } = $$props;
+	let { enablePresetDropImage = true } = $$props;
+	let { enableSelectToolToAddShape = false } = $$props;
+	let { enableTapToAddText = false } = $$props;
 	let { willRenderPresetToolbar = undefined } = $$props;
 	let { shapePresets = [] } = $$props;
 	let { utilKey } = $$props;
@@ -34105,17 +37937,68 @@ function instance$5($$self, $$props, $$invalidate) {
 	let { parentRect } = $$props;
 	$$subscribe_parentRect();
 	let { hooks = {} } = $$props;
-	const { env, animation, history, rootRect, stageRect, utilRect, elasticityMultiplier, scrollElasticity, imageOverlayMarkup, imagePreviewModifiers, imageCropRect, presentationScalar } = stores;
-	component_subscribe($$self, env, value => $$invalidate(78, $env = value));
-	component_subscribe($$self, animation, value => $$invalidate(79, $animation = value));
-	component_subscribe($$self, rootRect, value => $$invalidate(28, $rootRect = value));
-	component_subscribe($$self, stageRect, value => $$invalidate(74, $stageRect = value));
-	component_subscribe($$self, utilRect, value => $$invalidate(22, $utilRect = value));
-	component_subscribe($$self, imageOverlayMarkup, value => $$invalidate(39, $imageOverlayMarkup = value));
-	component_subscribe($$self, imagePreviewModifiers, value => $$invalidate(71, $imagePreviewModifiers = value));
-	component_subscribe($$self, imageCropRect, value => $$invalidate(95, $imageCropRect = value));
-	component_subscribe($$self, presentationScalar, value => $$invalidate(40, $presentationScalar = value));
-	const updateActiveTool = ({ value }) => $$invalidate(0, toolActive = value);
+
+	const { env, animation, history, rootRect, rootColorSecondary, stageRect, utilRect, elasticityMultiplier, scrollElasticity, imageOverlayMarkup, imagePreviewModifiers, imageCropRect, presentationScalar, shapePreprocessor } = // imagePresentationScale,
+	// imagePresentationPan,
+	stores; // for panning / scaling the image
+
+	component_subscribe($$self, env, value => $$invalidate(90, $env = value));
+	component_subscribe($$self, animation, value => $$invalidate(91, $animation = value));
+	component_subscribe($$self, rootRect, value => $$invalidate(32, $rootRect = value));
+	component_subscribe($$self, rootColorSecondary, value => $$invalidate(45, $rootColorSecondary = value));
+	component_subscribe($$self, stageRect, value => $$invalidate(85, $stageRect = value));
+	component_subscribe($$self, utilRect, value => $$invalidate(26, $utilRect = value));
+	component_subscribe($$self, imageOverlayMarkup, value => $$invalidate(43, $imageOverlayMarkup = value));
+	component_subscribe($$self, imagePreviewModifiers, value => $$invalidate(82, $imagePreviewModifiers = value));
+	component_subscribe($$self, imageCropRect, value => $$invalidate(108, $imageCropRect = value));
+	component_subscribe($$self, presentationScalar, value => $$invalidate(44, $presentationScalar = value));
+	component_subscribe($$self, shapePreprocessor, value => $$invalidate(89, $shapePreprocessor = value));
+
+	const updateActiveTool = ({ value }, event) => {
+		$$invalidate(0, toolActive = value);
+
+		// if is keyboard navigating or should add shape
+		if (enableSelectToolToAddShape || isConfirmKey(event.key)) {
+			AddToolDefaultShape(value);
+		}
+	};
+
+	const AddToolDefaultShape = tool => {
+		const [shape, options] = toolShapes[tool];
+		let isRelative = options.position === "relative";
+		let shapeToAdd;
+		let size;
+		const x = isRelative ? "0%" : 0;
+		const y = isRelative ? "0%" : 0;
+
+		if (shapeIsRect(shape) || shapeIsText(shape)) {
+			size = isRelative ? "20%" : $parentRect.width * 0.2;
+			shapeToAdd = shapeDeepCopy(shape);
+			shapeToAdd.x = x;
+			shapeToAdd.y = y;
+			shapeUpdateProps(shapeToAdd, { width: size, height: size }, $parentRect);
+		} else if (shapeIsEllipse(shape)) {
+			size = isRelative ? "10%" : $parentRect.width * 0.1;
+			shapeToAdd = shapeDeepCopy(shape);
+			shapeToAdd.x = x;
+			shapeToAdd.y = y;
+			shapeUpdateProps(shapeToAdd, { rx: size, ry: size }, $parentRect);
+		} else if (shapeIsLine(shape)) {
+			size = isRelative ? "10%" : $parentRect.width * 0.1;
+			shapeToAdd = shapeDeepCopy(shape);
+			shapeToAdd.x1 = x;
+			shapeToAdd.y1 = y;
+			shapeToAdd.x2 = x;
+			shapeToAdd.y2 = y;
+		}
+
+		if (!shapeToAdd) return;
+
+		Promise.resolve().then(() => {
+			addShape(createShapeAtPosition(shapeToAdd, undefined, size));
+		});
+	};
+
 	const mapScreenEventToImagePoint = e => mapScreenPointToImagePoint(getEventPositionInEditor(e, $rootRect));
 
 	// A reference to the markup editor, we need this so we can call exported functions
@@ -34163,9 +38046,16 @@ function instance$5($$self, $$props, $$invalidate) {
 		return true;
 	};
 
+	const blurOnToolSwitch = () => {
+		if (!markupEditor) return;
+		markupEditor.blurShapes();
+	};
+
+	let updateWriteHistoryTimeoutId;
+
 	function handleUpdateSelectedMarkupShape(props) {
 		// remember style for when creating or styling other element
-		Object.keys(props).forEach(key => $$invalidate(68, markupToolStyles[key] = props[key], markupToolStyles));
+		Object.keys(props).forEach(key => $$invalidate(77, markupToolStyles[key] = props[key], markupToolStyles));
 
 		// it's possible we're only updating default styles
 		if (!markupSelected) return;
@@ -34173,11 +38063,47 @@ function instance$5($$self, $$props, $$invalidate) {
 		// update element
 		markupEditor.updateMarkupShape(markupSelected, props);
 
-		// update markup style
-		handleMarkupUpdate();
+		// update markup style with delay so we don't write every state change to history (mainly relevant for color changes when dragging color)
+		clearTimeout(updateWriteHistoryTimeoutId);
+
+		updateWriteHistoryTimeoutId = setTimeout(
+			() => {
+				handleMarkupUpdate();
+			},
+			200
+		);
 	}
 
-	const createPreset = (preset, position) => {
+	//
+	// cursor
+	//
+	let hoverShape;
+
+	const handleHoverShape = shape => $$invalidate(78, hoverShape = shape);
+
+	const getCusor = (shapeUnderPointer, shapeSelected) => {
+		if (!shapeUnderPointer) return "crosshair";
+
+		// treat both as the same shape
+		let shape = shapeUnderPointer || shapeSelected;
+
+		// can select (else won't hover)
+		if (!shapeIsSelected(shape)) return "crosshair";
+
+		// show text input cursor
+		if (shapeIsEditing(shape)) {
+			if (textInputMode === "modal") return "default";
+			return "text";
+		}
+
+		// show move cursor
+		if (shapeCanMove(shape)) return "move";
+
+		// can't move
+		return "default";
+	};
+
+	const createShapeAtPosition = (shape, position, size) => {
 		// position defaults to crop center
 		let positionIsCenter = false;
 
@@ -34196,27 +38122,11 @@ function instance$5($$self, $$props, $$invalidate) {
 
 		position.y -= $parentRect.y || 0;
 
-		// create shape
-		const shape = shapeCreateFromPreset(preset, $imageCropRect, (error, shape) => {
-			// has shape not been added?
-			if (!$shapes.find(s => s.id === shape.id)) return;
-
-			// something went wrong, exit!
-			if (error) {
-				markupEditor.removeShape(shape);
-				return console.error(error);
-			}
-
-			// select if is last shape
-			if ($shapes[$shapes.length - 1] === shape) {
-				markupEditor.selectShape(shape);
-			}
-		});
-
 		// de-flip shape
-		shape.flipX = imageFlipX;
-
-		shape.flipY = imageFlipY;
+		if (imageFlipX || imageFlipY) {
+			shape.flipX = imageFlipX;
+			shape.flipY = imageFlipY;
+		}
 
 		// reposition if there's already shapes at position and shape isn't full screen
 		const shapesAlreadyAtPosition = markupEditor.getShapesNearPosition(position);
@@ -34232,15 +38142,44 @@ function instance$5($$self, $$props, $$invalidate) {
 			if (imageFlipX && imageFlipY) shape.rotation = -imageRotation; else if (imageFlipX) shape.rotation = imageRotation; else if (imageFlipY) shape.rotation = imageRotation; else shape.rotation = -imageRotation;
 		}
 
-		// update shape position
-		shapeContain(shape, $imageCropRect);
+		if (hasProp(shape, "width") && hasProp(shape, "height")) {
+			const { width, height } = shapeGetPropsPixelValues(shape, ["width", "height"], $parentRect);
 
-		shapeCenter(shape, position);
+			shapeUpdateProps(
+				shape,
+				{
+					x: position.x - width * 0.5,
+					y: position.y - height * 0.5
+				},
+				$parentRect
+			);
+		} else if (shapeIsEllipse(shape)) {
+			shapeUpdateProps(shape, { x: position.x, y: position.y }, $parentRect);
+		} else if (shapeIsLine(shape)) {
+			const { x1, y1, x2, y2 } = shapeGetPropsPixelValues(shape, ["x1", "y1", "x2", "y2"], $parentRect);
+			const dist = vectorDistance(vectorCreate(x1, y1), vectorCreate(x2, y2));
+
+			const l = dist || isString(size)
+			? toPixelValue(size, $parentRect.width)
+			: size;
+
+			shapeUpdateProps(
+				shape,
+				{
+					x1: position.x - l,
+					y1: position.y + l,
+					x2: position.x + l,
+					y2: position.y - l
+				},
+				$parentRect
+			);
+		}
+
 		return shape;
 	};
 
 	const addPreset = (preset, position) => {
-		const shape = createPreset(preset, position);
+		const shape = createShapeAtPosition(shapeCreateFromPreset(preset, $imageCropRect), position);
 		return addShape(shape);
 	};
 
@@ -34255,7 +38194,7 @@ function instance$5($$self, $$props, $$invalidate) {
 
 	let dragCancelled = false;
 
-	const handleGrabPreset = (preset, e) => {
+	const handleGrabPreset = () => {
 		dragCancelled = false;
 	};
 
@@ -34281,7 +38220,7 @@ function instance$5($$self, $$props, $$invalidate) {
 
 		// create draft shape
 		if (!draft) {
-			const shape = createPreset(preset, position);
+			const shape = createShapeAtPosition(shapeCreateFromPreset(preset, $imageCropRect), position);
 
 			if (!beforeAddShape(shape)) {
 				dragCancelled = true;
@@ -34304,7 +38243,7 @@ function instance$5($$self, $$props, $$invalidate) {
 		markupEditor.updateMarkupShape(draft, position);
 	};
 
-	const handleDropPreset = (preset, e) => {
+	const handleDropPreset = (_, e) => {
 		if (dragCancelled) return;
 		const position = mapScreenEventToImagePoint(e);
 
@@ -34313,19 +38252,36 @@ function instance$5($$self, $$props, $$invalidate) {
 			y: position.y + ($parentRect.y || 0)
 		})) {
 			markupEditor.discardMarkupItemDraft();
-		} else {
-			const shape = markupEditor.confirmMarkupItemDraft();
-			markupEditor.selectShape(shape);
-
-			// update history
-			history.write();
+			return;
 		}
+
+		// confirm shape
+		const shape = markupEditor.confirmMarkupItemDraft();
+
+		markupEditor.selectShape(shape);
+
+		// update history
+		history.write();
 	};
 
 	const handleAddPreset = preset => addPreset(preset);
 	const handleAddFiles = (files, position) => files.forEach(file => addPreset(file, position));
 	const handleDropFiles = e => handleAddFiles(e.detail.resources, mapScreenEventToImagePoint(e.detail.event));
 
+	//
+	// Zoom
+	//
+	// const handleWheel = (e) => {
+	//     // don't run default actions, prevent other actions from running
+	//     e.preventDefault();
+	//     e.stopPropagation();
+	//     // convert wheel delta to scalar
+	//     const delta = getWheelDelta(e);
+	//     const scalar = 1 + (delta / 100);
+	//     // update image zoom
+	//     imagePresentationScale.update(v => v * scalar)
+	// }
+	// on:wheel|nonpassive={handleWheel}
 	//
 	// History
 	//
@@ -34339,7 +38295,7 @@ function instance$5($$self, $$props, $$invalidate) {
 	//
 	const footerOffset = spring($animation ? 20 : 0);
 
-	component_subscribe($$self, footerOffset, value => $$invalidate(80, $footerOffset = value));
+	component_subscribe($$self, footerOffset, value => $$invalidate(92, $footerOffset = value));
 
 	function measure_handler_1(event) {
 		bubble($$self, event);
@@ -34369,7 +38325,7 @@ function instance$5($$self, $$props, $$invalidate) {
 	function shapelayouteditor_binding($$value) {
 		binding_callbacks[$$value ? "unshift" : "push"](() => {
 			markupEditor = $$value;
-			$$invalidate(26, markupEditor);
+			$$invalidate(30, markupEditor);
 		});
 	}
 
@@ -34386,7 +38342,7 @@ function instance$5($$self, $$props, $$invalidate) {
 	function div_binding($$value) {
 		binding_callbacks[$$value ? "unshift" : "push"](() => {
 			pingHub = $$value;
-			$$invalidate(18, pingHub);
+			$$invalidate(21, pingHub);
 		});
 	}
 
@@ -34398,61 +38354,69 @@ function instance$5($$self, $$props, $$invalidate) {
 		if ("isActive" in $$props) $$subscribe_isActive($$invalidate(1, isActive = $$props.isActive));
 		if ("isActiveFraction" in $$props) $$subscribe_isActiveFraction($$invalidate(2, isActiveFraction = $$props.isActiveFraction));
 		if ("isVisible" in $$props) $$subscribe_isVisible($$invalidate(3, isVisible = $$props.isVisible));
-		if ("stores" in $$props) $$invalidate(63, stores = $$props.stores);
+		if ("stores" in $$props) $$invalidate(71, stores = $$props.stores);
 		if ("locale" in $$props) $$invalidate(4, locale = $$props.locale);
 		if ("shapes" in $$props) $$subscribe_shapes($$invalidate(5, shapes = $$props.shapes));
-		if ("tools" in $$props) $$invalidate(64, tools = $$props.tools);
-		if ("toolShapes" in $$props) $$invalidate(65, toolShapes = $$props.toolShapes);
+		if ("tools" in $$props) $$invalidate(72, tools = $$props.tools);
+		if ("toolShapes" in $$props) $$invalidate(73, toolShapes = $$props.toolShapes);
 		if ("toolActive" in $$props) $$invalidate(0, toolActive = $$props.toolActive);
 		if ("toolSelectRadius" in $$props) $$invalidate(6, toolSelectRadius = $$props.toolSelectRadius);
-		if ("shapeControls" in $$props) $$invalidate(7, shapeControls = $$props.shapeControls);
-		if ("enableButtonFlipVertical" in $$props) $$invalidate(8, enableButtonFlipVertical = $$props.enableButtonFlipVertical);
-		if ("enablePresetSelectImage" in $$props) $$invalidate(9, enablePresetSelectImage = $$props.enablePresetSelectImage);
-		if ("willRenderPresetToolbar" in $$props) $$invalidate(66, willRenderPresetToolbar = $$props.willRenderPresetToolbar);
-		if ("shapePresets" in $$props) $$invalidate(10, shapePresets = $$props.shapePresets);
-		if ("utilKey" in $$props) $$invalidate(11, utilKey = $$props.utilKey);
-		if ("mapScreenPointToImagePoint" in $$props) $$invalidate(12, mapScreenPointToImagePoint = $$props.mapScreenPointToImagePoint);
-		if ("mapImagePointToScreenPoint" in $$props) $$invalidate(13, mapImagePointToScreenPoint = $$props.mapImagePointToScreenPoint);
-		if ("imageRotation" in $$props) $$invalidate(14, imageRotation = $$props.imageRotation);
-		if ("imageFlipX" in $$props) $$invalidate(15, imageFlipX = $$props.imageFlipX);
-		if ("imageFlipY" in $$props) $$invalidate(16, imageFlipY = $$props.imageFlipY);
-		if ("parentRect" in $$props) $$subscribe_parentRect($$invalidate(17, parentRect = $$props.parentRect));
-		if ("hooks" in $$props) $$invalidate(67, hooks = $$props.hooks);
+		if ("textInputMode" in $$props) $$invalidate(7, textInputMode = $$props.textInputMode);
+		if ("shapeControls" in $$props) $$invalidate(8, shapeControls = $$props.shapeControls);
+		if ("enableButtonFlipVertical" in $$props) $$invalidate(9, enableButtonFlipVertical = $$props.enableButtonFlipVertical);
+		if ("enablePresetSelectImage" in $$props) $$invalidate(10, enablePresetSelectImage = $$props.enablePresetSelectImage);
+		if ("enablePresetDropImage" in $$props) $$invalidate(11, enablePresetDropImage = $$props.enablePresetDropImage);
+		if ("enableSelectToolToAddShape" in $$props) $$invalidate(74, enableSelectToolToAddShape = $$props.enableSelectToolToAddShape);
+		if ("enableTapToAddText" in $$props) $$invalidate(12, enableTapToAddText = $$props.enableTapToAddText);
+		if ("willRenderPresetToolbar" in $$props) $$invalidate(75, willRenderPresetToolbar = $$props.willRenderPresetToolbar);
+		if ("shapePresets" in $$props) $$invalidate(13, shapePresets = $$props.shapePresets);
+		if ("utilKey" in $$props) $$invalidate(14, utilKey = $$props.utilKey);
+		if ("mapScreenPointToImagePoint" in $$props) $$invalidate(15, mapScreenPointToImagePoint = $$props.mapScreenPointToImagePoint);
+		if ("mapImagePointToScreenPoint" in $$props) $$invalidate(16, mapImagePointToScreenPoint = $$props.mapImagePointToScreenPoint);
+		if ("imageRotation" in $$props) $$invalidate(17, imageRotation = $$props.imageRotation);
+		if ("imageFlipX" in $$props) $$invalidate(18, imageFlipX = $$props.imageFlipX);
+		if ("imageFlipY" in $$props) $$invalidate(19, imageFlipY = $$props.imageFlipY);
+		if ("parentRect" in $$props) $$subscribe_parentRect($$invalidate(20, parentRect = $$props.parentRect));
+		if ("hooks" in $$props) $$invalidate(76, hooks = $$props.hooks);
 	};
 
 	$$self.$$.update = () => {
-		if ($$self.$$.dirty[0] & /*shapePresets*/ 1024 | $$self.$$.dirty[2] & /*tools*/ 4) {
+		if ($$self.$$.dirty[0] & /*shapePresets*/ 8192 | $$self.$$.dirty[2] & /*tools*/ 1024) {
 			// remove presets tool if no shape presets defined
-			$$invalidate(19, toolsFiltered = shapePresets.length === 0
+			$$invalidate(22, toolsFiltered = shapePresets.length === 0
 			? tools.filter(tool => tool[0] !== "preset")
 			: tools);
 		}
 
-		if ($$self.$$.dirty[0] & /*toolsFiltered*/ 524288) {
-			$$invalidate(20, showToolbar = toolsFiltered.length > 1);
+		if ($$self.$$.dirty[0] & /*shapeControls*/ 256) {
+			$$invalidate(79, hasShapeControls = Object.keys(shapeControls).length);
 		}
 
-		if ($$self.$$.dirty[0] & /*toolsFiltered*/ 524288) {
-			$$invalidate(69, hasTools = !!toolsFiltered.length);
+		if ($$self.$$.dirty[0] & /*toolsFiltered*/ 4194304) {
+			$$invalidate(23, showToolbar = toolsFiltered.length > 1);
 		}
 
-		if ($$self.$$.dirty[0] & /*showToolbar, toolActive, toolsFiltered*/ 1572865) {
+		if ($$self.$$.dirty[0] & /*toolsFiltered*/ 4194304) {
+			$$invalidate(80, hasTools = !!toolsFiltered.length);
+		}
+
+		if ($$self.$$.dirty[0] & /*showToolbar, toolActive, toolsFiltered*/ 12582913) {
 			// set to first tool in tools list if not defined
 			if (showToolbar && toolActive === undefined) $$invalidate(0, toolActive = toolsFiltered[0][0]);
 		}
 
 		if ($$self.$$.dirty[0] & /*toolActive*/ 1) {
-			$$invalidate(70, hasActiveTool = toolActive !== undefined);
+			$$invalidate(81, hasActiveTool = toolActive !== undefined);
 		}
 
-		if ($$self.$$.dirty[2] & /*hasActiveTool, hasTools*/ 384) {
-			$$invalidate(27, shouldRenderControls = !hasActiveTool || hasTools);
+		if ($$self.$$.dirty[2] & /*hasActiveTool, hasTools, hasShapeControls*/ 917504) {
+			$$invalidate(31, shouldRenderControls = (!hasActiveTool || hasTools) && hasShapeControls);
 		}
 
-		if ($$self.$$.dirty[0] & /*$isActive, utilKey*/ 2099200 | $$self.$$.dirty[2] & /*$imagePreviewModifiers*/ 512) {
+		if ($$self.$$.dirty[0] & /*$isActive, utilKey*/ 33570816 | $$self.$$.dirty[2] & /*$imagePreviewModifiers*/ 1048576) {
 			//
 			// enable seeing the markup outlines outside of the crop area
-			// 
+			//
 			if ($isActive) {
 				set_store_value(imagePreviewModifiers, $imagePreviewModifiers[utilKey] = { maskMarkupOpacity: 0.85 }, $imagePreviewModifiers);
 			} else {
@@ -34460,30 +38424,34 @@ function instance$5($$self, $$props, $$invalidate) {
 			}
 		}
 
-		if ($$self.$$.dirty[2] & /*$isVisible*/ 2048) {
-			$$invalidate(29, shouldRenderShapeEditor = $isVisible);
+		if ($$self.$$.dirty[0] & /*toolActive*/ 1) {
+			if (toolActive) blurOnToolSwitch();
 		}
 
-		if ($$self.$$.dirty[0] & /*$utilRect*/ 4194304 | $$self.$$.dirty[2] & /*$stageRect*/ 4096) {
-			$$invalidate(30, markupOffset = $utilRect && vectorCreate($stageRect.x - $utilRect.x, $stageRect.y - $utilRect.y));
+		if ($$self.$$.dirty[2] & /*$isVisible*/ 4194304) {
+			$$invalidate(33, shouldRenderShapeEditor = $isVisible);
 		}
 
-		if ($$self.$$.dirty[0] & /*shapeControls*/ 128) {
-			$$invalidate(75, markupShapeKeys = Object.keys(shapeControls));
+		if ($$self.$$.dirty[0] & /*$utilRect*/ 67108864 | $$self.$$.dirty[2] & /*$stageRect*/ 8388608) {
+			$$invalidate(34, markupOffset = $utilRect && vectorCreate($stageRect.x - $utilRect.x, $stageRect.y - $utilRect.y));
 		}
 
-		if ($$self.$$.dirty[0] & /*$shapes*/ 8388608) {
-			$$invalidate(76, markupSelected = ($shapes.filter(shapeIsSelected) || [])[0]);
+		if ($$self.$$.dirty[0] & /*shapeControls*/ 256) {
+			$$invalidate(86, markupShapeKeys = Object.keys(shapeControls));
 		}
 
-		if ($$self.$$.dirty[0] & /*$isActive, toolActive*/ 2097153 | $$self.$$.dirty[2] & /*toolShapes*/ 8) {
-			$$invalidate(77, markupToolShape = $isActive && (toolShapes[toolActive]
+		if ($$self.$$.dirty[0] & /*$shapes*/ 134217728) {
+			$$invalidate(87, markupSelected = $shapes.filter(shapeIsSelected)[0]);
+		}
+
+		if ($$self.$$.dirty[0] & /*$isActive, toolActive*/ 33554433 | $$self.$$.dirty[2] & /*toolShapes*/ 2048) {
+			$$invalidate(88, markupToolShape = $isActive && (toolShapes[toolActive]
 			? shapeFormat(shapeDeepCopy(toolShapes[toolActive][0]))
 			: {}));
 		}
 
-		if ($$self.$$.dirty[2] & /*markupToolShape, markupShapeKeys, markupToolStyles*/ 41024) {
-			$$invalidate(72, markupToolStylesComputed = markupToolShape && Object.keys(markupToolShape).reduce(
+		if ($$self.$$.dirty[2] & /*markupToolShape, markupShapeKeys, markupToolStyles*/ 83918848) {
+			$$invalidate(83, markupToolStylesComputed = markupToolShape && Object.keys(markupToolShape).reduce(
 				(prev, key) => {
 					const isDisableStyleProp = key === "disableStyle";
 					const isStylableProp = markupShapeKeys.find(shapeKey => shapeKey.split("_").includes(key));
@@ -34495,7 +38463,9 @@ function instance$5($$self, $$props, $$invalidate) {
 					if (markupToolShape[key] === undefined) return prev;
 
 					// apply this style
-					prev[key] = markupToolStyles[key] || markupToolShape[key];
+					prev[key] = hasProp(markupToolStyles, key)
+					? markupToolStyles[key]
+					: markupToolShape[key];
 
 					return prev;
 				},
@@ -34503,46 +38473,57 @@ function instance$5($$self, $$props, $$invalidate) {
 			));
 		}
 
-		if ($$self.$$.dirty[2] & /*markupSelected, markupToolStylesComputed*/ 17408) {
-			$$invalidate(31, markupShapeSelected = markupSelected || markupToolStylesComputed);
+		if ($$self.$$.dirty[2] & /*markupSelected, markupToolStylesComputed*/ 35651584) {
+			$$invalidate(28, markupShapeSelected = markupSelected || markupToolStylesComputed);
 		}
 
-		if ($$self.$$.dirty[2] & /*markupToolShape*/ 32768) {
-			$$invalidate(32, toolEraseRadius = markupToolShape && isNumber(markupToolShape.eraseRadius)
+		if ($$self.$$.dirty[0] & /*markupShapeSelected*/ 268435456 | $$self.$$.dirty[2] & /*$shapePreprocessor*/ 134217728) {
+			// TODO: remove temporary warning while everyone switches to 8.7.0+
+			if (markupShapeSelected && markupShapeSelected.lineEnd && !$shapePreprocessor) {
+				console.warn(`Set shapePreprocessor property to draw lineStart and lineEnd styles.\nhttps://pqina.nl/pintura/docs/v8/api/exports/#createshapepreprocessor`);
+			}
+		}
+
+		if ($$self.$$.dirty[2] & /*markupToolShape*/ 67108864) {
+			$$invalidate(35, toolEraseRadius = markupToolShape && isNumber(markupToolShape.eraseRadius)
 			? markupToolShape.eraseRadius
 			: undefined);
 		}
 
-		if ($$self.$$.dirty[0] & /*$isActiveFraction, toolActive, shapePresets, enablePresetSelectImage*/ 16778753) {
+		if ($$self.$$.dirty[2] & /*hoverShape, markupSelected*/ 33619968) {
+			$$invalidate(36, cursor = getCusor(hoverShape, markupSelected));
+		}
+
+		if ($$self.$$.dirty[0] & /*$isActiveFraction, toolActive, shapePresets, enablePresetSelectImage*/ 536880129) {
 			//
 			// presets
 			//
-			$$invalidate(33, shouldRenderPresets = $isActiveFraction > 0 && toolActive === "preset" && (shapePresets.length > 0 || enablePresetSelectImage));
+			$$invalidate(37, shouldRenderPresets = $isActiveFraction > 0 && toolActive === "preset" && (shapePresets.length > 0 || enablePresetSelectImage));
 		}
 
-		if ($$self.$$.dirty[0] & /*$parentRect*/ 33554432) {
+		if ($$self.$$.dirty[0] & /*$parentRect*/ 16777216) {
 			// if parent rect is a `Size` we're sticking presets to the image context
 			shouldStickToImage = !hasProp($parentRect, "x") && !hasProp($parentRect, "y");
 		}
 
-		if ($$self.$$.dirty[0] & /*pingHub*/ 262144) {
-			$$invalidate(34, ping = pingHub && createPingDispatcher(pingHub));
+		if ($$self.$$.dirty[0] & /*pingHub*/ 2097152) {
+			$$invalidate(38, ping = pingHub && createPingDispatcher(pingHub));
 		}
 
-		if ($$self.$$.dirty[2] & /*willRenderPresetToolbar, $env*/ 65552) {
+		if ($$self.$$.dirty[2] & /*willRenderPresetToolbar, $env*/ 268443648) {
 			//
 			//
 			//
-			$$invalidate(36, runWillRenderPresetToolbarHook = willRenderPresetToolbar
+			$$invalidate(40, runWillRenderPresetToolbarHook = willRenderPresetToolbar
 			? toolbar => willRenderPresetToolbar(toolbar, addPreset, { ...$env })
 			: passthrough);
 		}
 
-		if ($$self.$$.dirty[2] & /*hooks*/ 32) {
+		if ($$self.$$.dirty[2] & /*hooks*/ 16384) {
 			//
 			// filter out beforeAdd hook
 			//
-			$$invalidate(37, layoutEditorHooks = Object.keys(hooks).reduce(
+			$$invalidate(41, layoutEditorHooks = Object.keys(hooks).reduce(
 				(prev, curr) => {
 					if (curr === "beforeAddShape") return prev;
 					prev[curr] = hooks[curr];
@@ -34552,18 +38533,18 @@ function instance$5($$self, $$props, $$invalidate) {
 			));
 		}
 
-		if ($$self.$$.dirty[0] & /*$isActive*/ 2097152 | $$self.$$.dirty[2] & /*$animation*/ 131072) {
+		if ($$self.$$.dirty[0] & /*$isActive*/ 33554432 | $$self.$$.dirty[2] & /*$animation*/ 536870912) {
 			$animation && footerOffset.set($isActive ? 0 : 20);
 		}
 
-		if ($$self.$$.dirty[2] & /*$footerOffset*/ 262144) {
-			$$invalidate(38, footerStyle = $footerOffset
+		if ($$self.$$.dirty[2] & /*$footerOffset*/ 1073741824) {
+			$$invalidate(42, footerStyle = $footerOffset
 			? `transform: translateY(${$footerOffset}px)`
 			: undefined);
 		}
 	};
 
-	$$invalidate(35, computedScrollElasticity = elasticityMultiplier * scrollElasticity);
+	$$invalidate(39, computedScrollElasticity = elasticityMultiplier * scrollElasticity);
 
 	return [
 		toolActive,
@@ -34573,9 +38554,12 @@ function instance$5($$self, $$props, $$invalidate) {
 		locale,
 		shapes,
 		toolSelectRadius,
+		textInputMode,
 		shapeControls,
 		enableButtonFlipVertical,
 		enablePresetSelectImage,
+		enablePresetDropImage,
+		enableTapToAddText,
 		shapePresets,
 		utilKey,
 		mapScreenPointToImagePoint,
@@ -34587,18 +38571,19 @@ function instance$5($$self, $$props, $$invalidate) {
 		pingHub,
 		toolsFiltered,
 		showToolbar,
+		$parentRect,
 		$isActive,
 		$utilRect,
 		$shapes,
+		markupShapeSelected,
 		$isActiveFraction,
-		$parentRect,
 		markupEditor,
 		shouldRenderControls,
 		$rootRect,
 		shouldRenderShapeEditor,
 		markupOffset,
-		markupShapeSelected,
 		toolEraseRadius,
+		cursor,
 		shouldRenderPresets,
 		ping,
 		computedScrollElasticity,
@@ -34607,21 +38592,25 @@ function instance$5($$self, $$props, $$invalidate) {
 		footerStyle,
 		$imageOverlayMarkup,
 		$presentationScalar,
+		$rootColorSecondary,
 		env,
 		animation,
 		rootRect,
+		rootColorSecondary,
 		stageRect,
 		utilRect,
 		imageOverlayMarkup,
 		imagePreviewModifiers,
 		imageCropRect,
 		presentationScalar,
+		shapePreprocessor,
 		updateActiveTool,
 		handleInteractionStart,
 		handleInteractionUpdate,
 		handleInteractionRelease,
 		handleInteractionEnd,
 		handleUpdateSelectedMarkupShape,
+		handleHoverShape,
 		handleGrabPreset,
 		handleDragPreset,
 		handleDropPreset,
@@ -34632,9 +38621,12 @@ function instance$5($$self, $$props, $$invalidate) {
 		stores,
 		tools,
 		toolShapes,
+		enableSelectToolToAddShape,
 		willRenderPresetToolbar,
 		hooks,
 		markupToolStyles,
+		hoverShape,
+		hasShapeControls,
 		hasTools,
 		hasActiveTool,
 		$imagePreviewModifiers,
@@ -34644,6 +38636,7 @@ function instance$5($$self, $$props, $$invalidate) {
 		markupShapeKeys,
 		markupSelected,
 		markupToolShape,
+		$shapePreprocessor,
 		$env,
 		$animation,
 		$footerOffset,
@@ -34668,33 +38661,37 @@ class ShapeUtil extends SvelteComponent {
 		init(
 			this,
 			options,
-			instance$5,
-			create_fragment$5,
+			instance$9,
+			create_fragment$9,
 			safe_not_equal,
 			{
 				isActive: 1,
 				isActiveFraction: 2,
 				isVisible: 3,
-				stores: 63,
+				stores: 71,
 				locale: 4,
 				shapes: 5,
-				tools: 64,
-				toolShapes: 65,
+				tools: 72,
+				toolShapes: 73,
 				toolActive: 0,
 				toolSelectRadius: 6,
-				shapeControls: 7,
-				enableButtonFlipVertical: 8,
-				enablePresetSelectImage: 9,
-				willRenderPresetToolbar: 66,
-				shapePresets: 10,
-				utilKey: 11,
-				mapScreenPointToImagePoint: 12,
-				mapImagePointToScreenPoint: 13,
-				imageRotation: 14,
-				imageFlipX: 15,
-				imageFlipY: 16,
-				parentRect: 17,
-				hooks: 67
+				textInputMode: 7,
+				shapeControls: 8,
+				enableButtonFlipVertical: 9,
+				enablePresetSelectImage: 10,
+				enablePresetDropImage: 11,
+				enableSelectToolToAddShape: 74,
+				enableTapToAddText: 12,
+				willRenderPresetToolbar: 75,
+				shapePresets: 13,
+				utilKey: 14,
+				mapScreenPointToImagePoint: 15,
+				mapImagePointToScreenPoint: 16,
+				imageRotation: 17,
+				imageFlipX: 18,
+				imageFlipY: 19,
+				parentRect: 20,
+				hooks: 76
 			},
 			[-1, -1, -1, -1]
 		);
@@ -34728,7 +38725,7 @@ class ShapeUtil extends SvelteComponent {
 	}
 
 	get stores() {
-		return this.$$.ctx[63];
+		return this.$$.ctx[71];
 	}
 
 	set stores(stores) {
@@ -34755,7 +38752,7 @@ class ShapeUtil extends SvelteComponent {
 	}
 
 	get tools() {
-		return this.$$.ctx[64];
+		return this.$$.ctx[72];
 	}
 
 	set tools(tools) {
@@ -34764,7 +38761,7 @@ class ShapeUtil extends SvelteComponent {
 	}
 
 	get toolShapes() {
-		return this.$$.ctx[65];
+		return this.$$.ctx[73];
 	}
 
 	set toolShapes(toolShapes) {
@@ -34790,8 +38787,17 @@ class ShapeUtil extends SvelteComponent {
 		flush();
 	}
 
-	get shapeControls() {
+	get textInputMode() {
 		return this.$$.ctx[7];
+	}
+
+	set textInputMode(textInputMode) {
+		this.$set({ textInputMode });
+		flush();
+	}
+
+	get shapeControls() {
+		return this.$$.ctx[8];
 	}
 
 	set shapeControls(shapeControls) {
@@ -34800,7 +38806,7 @@ class ShapeUtil extends SvelteComponent {
 	}
 
 	get enableButtonFlipVertical() {
-		return this.$$.ctx[8];
+		return this.$$.ctx[9];
 	}
 
 	set enableButtonFlipVertical(enableButtonFlipVertical) {
@@ -34809,7 +38815,7 @@ class ShapeUtil extends SvelteComponent {
 	}
 
 	get enablePresetSelectImage() {
-		return this.$$.ctx[9];
+		return this.$$.ctx[10];
 	}
 
 	set enablePresetSelectImage(enablePresetSelectImage) {
@@ -34817,8 +38823,35 @@ class ShapeUtil extends SvelteComponent {
 		flush();
 	}
 
+	get enablePresetDropImage() {
+		return this.$$.ctx[11];
+	}
+
+	set enablePresetDropImage(enablePresetDropImage) {
+		this.$set({ enablePresetDropImage });
+		flush();
+	}
+
+	get enableSelectToolToAddShape() {
+		return this.$$.ctx[74];
+	}
+
+	set enableSelectToolToAddShape(enableSelectToolToAddShape) {
+		this.$set({ enableSelectToolToAddShape });
+		flush();
+	}
+
+	get enableTapToAddText() {
+		return this.$$.ctx[12];
+	}
+
+	set enableTapToAddText(enableTapToAddText) {
+		this.$set({ enableTapToAddText });
+		flush();
+	}
+
 	get willRenderPresetToolbar() {
-		return this.$$.ctx[66];
+		return this.$$.ctx[75];
 	}
 
 	set willRenderPresetToolbar(willRenderPresetToolbar) {
@@ -34827,7 +38860,7 @@ class ShapeUtil extends SvelteComponent {
 	}
 
 	get shapePresets() {
-		return this.$$.ctx[10];
+		return this.$$.ctx[13];
 	}
 
 	set shapePresets(shapePresets) {
@@ -34836,7 +38869,7 @@ class ShapeUtil extends SvelteComponent {
 	}
 
 	get utilKey() {
-		return this.$$.ctx[11];
+		return this.$$.ctx[14];
 	}
 
 	set utilKey(utilKey) {
@@ -34845,7 +38878,7 @@ class ShapeUtil extends SvelteComponent {
 	}
 
 	get mapScreenPointToImagePoint() {
-		return this.$$.ctx[12];
+		return this.$$.ctx[15];
 	}
 
 	set mapScreenPointToImagePoint(mapScreenPointToImagePoint) {
@@ -34854,7 +38887,7 @@ class ShapeUtil extends SvelteComponent {
 	}
 
 	get mapImagePointToScreenPoint() {
-		return this.$$.ctx[13];
+		return this.$$.ctx[16];
 	}
 
 	set mapImagePointToScreenPoint(mapImagePointToScreenPoint) {
@@ -34863,7 +38896,7 @@ class ShapeUtil extends SvelteComponent {
 	}
 
 	get imageRotation() {
-		return this.$$.ctx[14];
+		return this.$$.ctx[17];
 	}
 
 	set imageRotation(imageRotation) {
@@ -34872,7 +38905,7 @@ class ShapeUtil extends SvelteComponent {
 	}
 
 	get imageFlipX() {
-		return this.$$.ctx[15];
+		return this.$$.ctx[18];
 	}
 
 	set imageFlipX(imageFlipX) {
@@ -34881,7 +38914,7 @@ class ShapeUtil extends SvelteComponent {
 	}
 
 	get imageFlipY() {
-		return this.$$.ctx[16];
+		return this.$$.ctx[19];
 	}
 
 	set imageFlipY(imageFlipY) {
@@ -34890,7 +38923,7 @@ class ShapeUtil extends SvelteComponent {
 	}
 
 	get parentRect() {
-		return this.$$.ctx[17];
+		return this.$$.ctx[20];
 	}
 
 	set parentRect(parentRect) {
@@ -34899,7 +38932,7 @@ class ShapeUtil extends SvelteComponent {
 	}
 
 	get hooks() {
-		return this.$$.ctx[67];
+		return this.$$.ctx[76];
 	}
 
 	set hooks(hooks) {
@@ -34981,13 +39014,13 @@ var _mapScreenPointToImagePoint = (screenPoint, canvasSize, imageSize, imageOrig
 
 /* src/core/ui/plugins/annotate/index.svelte generated by Svelte v3.37.0 */
 
-function create_fragment$4(ctx) {
+function create_fragment$8(ctx) {
 	let shapeutil;
 	let updating_toolActive;
 	let current;
 
 	function shapeutil_toolActive_binding(value) {
-		/*shapeutil_toolActive_binding*/ ctx[37](value);
+		/*shapeutil_toolActive_binding*/ ctx[43](value);
 	}
 
 	let shapeutil_props = {
@@ -34996,29 +39029,32 @@ function create_fragment$4(ctx) {
 		isActive: /*isActive*/ ctx[1],
 		isActiveFraction: /*isActiveFraction*/ ctx[2],
 		isVisible: /*isVisible*/ ctx[3],
-		mapScreenPointToImagePoint: /*mapScreenPointToImagePoint*/ ctx[34],
-		mapImagePointToScreenPoint: /*mapImagePointToScreenPoint*/ ctx[35],
+		mapScreenPointToImagePoint: /*mapScreenPointToImagePoint*/ ctx[29],
+		mapImagePointToScreenPoint: /*mapImagePointToScreenPoint*/ ctx[30],
 		utilKey: "annotate",
-		imageRotation: /*$imageRotation*/ ctx[26],
-		imageFlipX: /*$imageFlipX*/ ctx[24],
-		imageFlipY: /*$imageFlipY*/ ctx[25],
-		shapes: /*imageAnnotation*/ ctx[28],
-		tools: /*annotateTools*/ ctx[11] || /*markupEditorToolbar*/ ctx[6],
-		toolShapes: /*annotateToolShapes*/ ctx[12] || /*markupEditorToolStyles*/ ctx[7],
-		shapeControls: /*annotateShapeControls*/ ctx[13] || /*markupEditorShapeStyleControls*/ ctx[8],
-		shapePresets: /*annotatePresets*/ ctx[16],
-		enableButtonFlipVertical: /*annotateEnableButtonFlipVertical*/ ctx[14],
-		parentRect: /*imageSize*/ ctx[29],
-		enablePresetSelectImage: /*annotateEnableSelectImagePreset*/ ctx[15],
+		imageRotation: /*$imageRotation*/ ctx[31],
+		imageFlipX: /*$imageFlipX*/ ctx[27],
+		imageFlipY: /*$imageFlipY*/ ctx[28],
+		shapes: /*imageAnnotation*/ ctx[33],
+		tools: /*annotateTools*/ ctx[12] || /*markupEditorToolbar*/ ctx[6],
+		toolShapes: /*annotateToolShapes*/ ctx[13] || /*markupEditorToolStyles*/ ctx[7],
+		enableSelectToolToAddShape: /*enableSelectToolToAddShape*/ ctx[19],
+		enableTapToAddText: /*enableTapToAddText*/ ctx[20],
+		shapeControls: /*annotateShapeControls*/ ctx[14] || /*markupEditorShapeStyleControls*/ ctx[8],
+		shapePresets: /*annotatePresets*/ ctx[17],
+		enableButtonFlipVertical: /*annotateEnableButtonFlipVertical*/ ctx[15],
+		parentRect: /*imageSize*/ ctx[34],
+		enablePresetSelectImage: /*annotateEnableSelectImagePreset*/ ctx[16],
 		toolSelectRadius: /*markupEditorToolSelectRadius*/ ctx[9],
-		willRenderPresetToolbar: /*annotateWillRenderShapePresetToolbar*/ ctx[17] || /*willRenderShapePresetToolbar*/ ctx[10],
+		textInputMode: /*markupEditorTextInputMode*/ ctx[10],
+		willRenderPresetToolbar: /*annotateWillRenderShapePresetToolbar*/ ctx[18] || /*willRenderShapePresetToolbar*/ ctx[11],
 		hooks: {
-			willRenderShapeControls: /*willRenderShapeControls*/ ctx[18],
-			beforeAddShape: /*beforeAddShape*/ ctx[19],
-			beforeRemoveShape: /*beforeRemoveShape*/ ctx[20],
-			beforeDeselectShape: /*beforeDeselectShape*/ ctx[21],
-			beforeSelectShape: /*beforeSelectShape*/ ctx[22],
-			beforeUpdateShape: /*beforeUpdateShape*/ ctx[23]
+			willRenderShapeControls: /*willRenderShapeControls*/ ctx[21],
+			beforeAddShape: /*beforeAddShape*/ ctx[22],
+			beforeRemoveShape: /*beforeRemoveShape*/ ctx[23],
+			beforeDeselectShape: /*beforeDeselectShape*/ ctx[24],
+			beforeSelectShape: /*beforeSelectShape*/ ctx[25],
+			beforeUpdateShape: /*beforeUpdateShape*/ ctx[26]
 		}
 	};
 
@@ -35028,7 +39064,7 @@ function create_fragment$4(ctx) {
 
 	shapeutil = new ShapeUtil({ props: shapeutil_props });
 	binding_callbacks.push(() => bind(shapeutil, "toolActive", shapeutil_toolActive_binding));
-	shapeutil.$on("measure", /*measure_handler*/ ctx[38]);
+	shapeutil.$on("measure", /*measure_handler*/ ctx[44]);
 
 	return {
 		c() {
@@ -35045,25 +39081,30 @@ function create_fragment$4(ctx) {
 			if (dirty[0] & /*isActive*/ 2) shapeutil_changes.isActive = /*isActive*/ ctx[1];
 			if (dirty[0] & /*isActiveFraction*/ 4) shapeutil_changes.isActiveFraction = /*isActiveFraction*/ ctx[2];
 			if (dirty[0] & /*isVisible*/ 8) shapeutil_changes.isVisible = /*isVisible*/ ctx[3];
-			if (dirty[0] & /*$imageRotation*/ 67108864) shapeutil_changes.imageRotation = /*$imageRotation*/ ctx[26];
-			if (dirty[0] & /*$imageFlipX*/ 16777216) shapeutil_changes.imageFlipX = /*$imageFlipX*/ ctx[24];
-			if (dirty[0] & /*$imageFlipY*/ 33554432) shapeutil_changes.imageFlipY = /*$imageFlipY*/ ctx[25];
-			if (dirty[0] & /*annotateTools, markupEditorToolbar*/ 2112) shapeutil_changes.tools = /*annotateTools*/ ctx[11] || /*markupEditorToolbar*/ ctx[6];
-			if (dirty[0] & /*annotateToolShapes, markupEditorToolStyles*/ 4224) shapeutil_changes.toolShapes = /*annotateToolShapes*/ ctx[12] || /*markupEditorToolStyles*/ ctx[7];
-			if (dirty[0] & /*annotateShapeControls, markupEditorShapeStyleControls*/ 8448) shapeutil_changes.shapeControls = /*annotateShapeControls*/ ctx[13] || /*markupEditorShapeStyleControls*/ ctx[8];
-			if (dirty[0] & /*annotatePresets*/ 65536) shapeutil_changes.shapePresets = /*annotatePresets*/ ctx[16];
-			if (dirty[0] & /*annotateEnableButtonFlipVertical*/ 16384) shapeutil_changes.enableButtonFlipVertical = /*annotateEnableButtonFlipVertical*/ ctx[14];
-			if (dirty[0] & /*annotateEnableSelectImagePreset*/ 32768) shapeutil_changes.enablePresetSelectImage = /*annotateEnableSelectImagePreset*/ ctx[15];
+			if (dirty[0] & /*mapScreenPointToImagePoint*/ 536870912) shapeutil_changes.mapScreenPointToImagePoint = /*mapScreenPointToImagePoint*/ ctx[29];
+			if (dirty[0] & /*mapImagePointToScreenPoint*/ 1073741824) shapeutil_changes.mapImagePointToScreenPoint = /*mapImagePointToScreenPoint*/ ctx[30];
+			if (dirty[1] & /*$imageRotation*/ 1) shapeutil_changes.imageRotation = /*$imageRotation*/ ctx[31];
+			if (dirty[0] & /*$imageFlipX*/ 134217728) shapeutil_changes.imageFlipX = /*$imageFlipX*/ ctx[27];
+			if (dirty[0] & /*$imageFlipY*/ 268435456) shapeutil_changes.imageFlipY = /*$imageFlipY*/ ctx[28];
+			if (dirty[0] & /*annotateTools, markupEditorToolbar*/ 4160) shapeutil_changes.tools = /*annotateTools*/ ctx[12] || /*markupEditorToolbar*/ ctx[6];
+			if (dirty[0] & /*annotateToolShapes, markupEditorToolStyles*/ 8320) shapeutil_changes.toolShapes = /*annotateToolShapes*/ ctx[13] || /*markupEditorToolStyles*/ ctx[7];
+			if (dirty[0] & /*enableSelectToolToAddShape*/ 524288) shapeutil_changes.enableSelectToolToAddShape = /*enableSelectToolToAddShape*/ ctx[19];
+			if (dirty[0] & /*enableTapToAddText*/ 1048576) shapeutil_changes.enableTapToAddText = /*enableTapToAddText*/ ctx[20];
+			if (dirty[0] & /*annotateShapeControls, markupEditorShapeStyleControls*/ 16640) shapeutil_changes.shapeControls = /*annotateShapeControls*/ ctx[14] || /*markupEditorShapeStyleControls*/ ctx[8];
+			if (dirty[0] & /*annotatePresets*/ 131072) shapeutil_changes.shapePresets = /*annotatePresets*/ ctx[17];
+			if (dirty[0] & /*annotateEnableButtonFlipVertical*/ 32768) shapeutil_changes.enableButtonFlipVertical = /*annotateEnableButtonFlipVertical*/ ctx[15];
+			if (dirty[0] & /*annotateEnableSelectImagePreset*/ 65536) shapeutil_changes.enablePresetSelectImage = /*annotateEnableSelectImagePreset*/ ctx[16];
 			if (dirty[0] & /*markupEditorToolSelectRadius*/ 512) shapeutil_changes.toolSelectRadius = /*markupEditorToolSelectRadius*/ ctx[9];
-			if (dirty[0] & /*annotateWillRenderShapePresetToolbar, willRenderShapePresetToolbar*/ 132096) shapeutil_changes.willRenderPresetToolbar = /*annotateWillRenderShapePresetToolbar*/ ctx[17] || /*willRenderShapePresetToolbar*/ ctx[10];
+			if (dirty[0] & /*markupEditorTextInputMode*/ 1024) shapeutil_changes.textInputMode = /*markupEditorTextInputMode*/ ctx[10];
+			if (dirty[0] & /*annotateWillRenderShapePresetToolbar, willRenderShapePresetToolbar*/ 264192) shapeutil_changes.willRenderPresetToolbar = /*annotateWillRenderShapePresetToolbar*/ ctx[18] || /*willRenderShapePresetToolbar*/ ctx[11];
 
-			if (dirty[0] & /*willRenderShapeControls, beforeAddShape, beforeRemoveShape, beforeDeselectShape, beforeSelectShape, beforeUpdateShape*/ 16515072) shapeutil_changes.hooks = {
-				willRenderShapeControls: /*willRenderShapeControls*/ ctx[18],
-				beforeAddShape: /*beforeAddShape*/ ctx[19],
-				beforeRemoveShape: /*beforeRemoveShape*/ ctx[20],
-				beforeDeselectShape: /*beforeDeselectShape*/ ctx[21],
-				beforeSelectShape: /*beforeSelectShape*/ ctx[22],
-				beforeUpdateShape: /*beforeUpdateShape*/ ctx[23]
+			if (dirty[0] & /*willRenderShapeControls, beforeAddShape, beforeRemoveShape, beforeDeselectShape, beforeSelectShape, beforeUpdateShape*/ 132120576) shapeutil_changes.hooks = {
+				willRenderShapeControls: /*willRenderShapeControls*/ ctx[21],
+				beforeAddShape: /*beforeAddShape*/ ctx[22],
+				beforeRemoveShape: /*beforeRemoveShape*/ ctx[23],
+				beforeDeselectShape: /*beforeDeselectShape*/ ctx[24],
+				beforeSelectShape: /*beforeSelectShape*/ ctx[25],
+				beforeUpdateShape: /*beforeUpdateShape*/ ctx[26]
 			};
 
 			if (!updating_toolActive && dirty[0] & /*annotateActiveTool*/ 1) {
@@ -35089,7 +39130,9 @@ function create_fragment$4(ctx) {
 	};
 }
 
-function instance$4($$self, $$props, $$invalidate) {
+function instance$8($$self, $$props, $$invalidate) {
+	let mapScreenPointToImagePoint;
+	let mapImagePointToScreenPoint;
 	let $rootRect;
 	let $imageSize;
 	let $imageTransforms;
@@ -35106,6 +39149,7 @@ function instance$4($$self, $$props, $$invalidate) {
 	let { markupEditorToolStyles = undefined } = $$props;
 	let { markupEditorShapeStyleControls = undefined } = $$props;
 	let { markupEditorToolSelectRadius = undefined } = $$props;
+	let { markupEditorTextInputMode = undefined } = $$props;
 	let { willRenderShapePresetToolbar = undefined } = $$props;
 	let { annotateTools = undefined } = $$props;
 	let { annotateToolShapes = undefined } = $$props;
@@ -35115,6 +39159,8 @@ function instance$4($$self, $$props, $$invalidate) {
 	let { annotateEnableSelectImagePreset = false } = $$props;
 	let { annotatePresets = [] } = $$props;
 	let { annotateWillRenderShapePresetToolbar = undefined } = $$props;
+	let { enableSelectToolToAddShape = undefined } = $$props;
+	let { enableTapToAddText = undefined } = $$props;
 	let { willRenderShapeControls = undefined } = $$props;
 	let { beforeAddShape = undefined } = $$props;
 	let { beforeRemoveShape = undefined } = $$props;
@@ -35125,19 +39171,12 @@ function instance$4($$self, $$props, $$invalidate) {
 	// connect filter choice to stores
 	const { rootRect, imageAnnotation, imageSize, imageTransforms, imageRotation, imageFlipX, imageFlipY } = stores;
 
-	component_subscribe($$self, rootRect, value => $$invalidate(39, $rootRect = value));
-	component_subscribe($$self, imageSize, value => $$invalidate(40, $imageSize = value));
-	component_subscribe($$self, imageTransforms, value => $$invalidate(41, $imageTransforms = value));
-	component_subscribe($$self, imageRotation, value => $$invalidate(26, $imageRotation = value));
-	component_subscribe($$self, imageFlipX, value => $$invalidate(24, $imageFlipX = value));
-	component_subscribe($$self, imageFlipY, value => $$invalidate(25, $imageFlipY = value));
-
-	//
-	// Mapping coordinates
-	//
-	const mapScreenPointToImagePoint = point => _mapScreenPointToImagePoint(point, $rootRect, $imageSize, $imageTransforms.origin, $imageTransforms.translation, $imageTransforms.rotation.z, $imageTransforms.scale, $imageFlipX, $imageFlipY);
-
-	const mapImagePointToScreenPoint = point => _mapImagePointToScreenPoint(point, $rootRect, $imageSize, $imageTransforms.origin, $imageTransforms.translation, $imageTransforms.rotation.z, $imageTransforms.scale, $imageFlipX, $imageFlipY);
+	component_subscribe($$self, rootRect, value => $$invalidate(40, $rootRect = value));
+	component_subscribe($$self, imageSize, value => $$invalidate(41, $imageSize = value));
+	component_subscribe($$self, imageTransforms, value => $$invalidate(42, $imageTransforms = value));
+	component_subscribe($$self, imageRotation, value => $$invalidate(31, $imageRotation = value));
+	component_subscribe($$self, imageFlipX, value => $$invalidate(27, $imageFlipX = value));
+	component_subscribe($$self, imageFlipY, value => $$invalidate(28, $imageFlipY = value));
 
 	function shapeutil_toolActive_binding(value) {
 		annotateActiveTool = value;
@@ -35158,21 +39197,37 @@ function instance$4($$self, $$props, $$invalidate) {
 		if ("markupEditorToolStyles" in $$props) $$invalidate(7, markupEditorToolStyles = $$props.markupEditorToolStyles);
 		if ("markupEditorShapeStyleControls" in $$props) $$invalidate(8, markupEditorShapeStyleControls = $$props.markupEditorShapeStyleControls);
 		if ("markupEditorToolSelectRadius" in $$props) $$invalidate(9, markupEditorToolSelectRadius = $$props.markupEditorToolSelectRadius);
-		if ("willRenderShapePresetToolbar" in $$props) $$invalidate(10, willRenderShapePresetToolbar = $$props.willRenderShapePresetToolbar);
-		if ("annotateTools" in $$props) $$invalidate(11, annotateTools = $$props.annotateTools);
-		if ("annotateToolShapes" in $$props) $$invalidate(12, annotateToolShapes = $$props.annotateToolShapes);
-		if ("annotateShapeControls" in $$props) $$invalidate(13, annotateShapeControls = $$props.annotateShapeControls);
+		if ("markupEditorTextInputMode" in $$props) $$invalidate(10, markupEditorTextInputMode = $$props.markupEditorTextInputMode);
+		if ("willRenderShapePresetToolbar" in $$props) $$invalidate(11, willRenderShapePresetToolbar = $$props.willRenderShapePresetToolbar);
+		if ("annotateTools" in $$props) $$invalidate(12, annotateTools = $$props.annotateTools);
+		if ("annotateToolShapes" in $$props) $$invalidate(13, annotateToolShapes = $$props.annotateToolShapes);
+		if ("annotateShapeControls" in $$props) $$invalidate(14, annotateShapeControls = $$props.annotateShapeControls);
 		if ("annotateActiveTool" in $$props) $$invalidate(0, annotateActiveTool = $$props.annotateActiveTool);
-		if ("annotateEnableButtonFlipVertical" in $$props) $$invalidate(14, annotateEnableButtonFlipVertical = $$props.annotateEnableButtonFlipVertical);
-		if ("annotateEnableSelectImagePreset" in $$props) $$invalidate(15, annotateEnableSelectImagePreset = $$props.annotateEnableSelectImagePreset);
-		if ("annotatePresets" in $$props) $$invalidate(16, annotatePresets = $$props.annotatePresets);
-		if ("annotateWillRenderShapePresetToolbar" in $$props) $$invalidate(17, annotateWillRenderShapePresetToolbar = $$props.annotateWillRenderShapePresetToolbar);
-		if ("willRenderShapeControls" in $$props) $$invalidate(18, willRenderShapeControls = $$props.willRenderShapeControls);
-		if ("beforeAddShape" in $$props) $$invalidate(19, beforeAddShape = $$props.beforeAddShape);
-		if ("beforeRemoveShape" in $$props) $$invalidate(20, beforeRemoveShape = $$props.beforeRemoveShape);
-		if ("beforeDeselectShape" in $$props) $$invalidate(21, beforeDeselectShape = $$props.beforeDeselectShape);
-		if ("beforeSelectShape" in $$props) $$invalidate(22, beforeSelectShape = $$props.beforeSelectShape);
-		if ("beforeUpdateShape" in $$props) $$invalidate(23, beforeUpdateShape = $$props.beforeUpdateShape);
+		if ("annotateEnableButtonFlipVertical" in $$props) $$invalidate(15, annotateEnableButtonFlipVertical = $$props.annotateEnableButtonFlipVertical);
+		if ("annotateEnableSelectImagePreset" in $$props) $$invalidate(16, annotateEnableSelectImagePreset = $$props.annotateEnableSelectImagePreset);
+		if ("annotatePresets" in $$props) $$invalidate(17, annotatePresets = $$props.annotatePresets);
+		if ("annotateWillRenderShapePresetToolbar" in $$props) $$invalidate(18, annotateWillRenderShapePresetToolbar = $$props.annotateWillRenderShapePresetToolbar);
+		if ("enableSelectToolToAddShape" in $$props) $$invalidate(19, enableSelectToolToAddShape = $$props.enableSelectToolToAddShape);
+		if ("enableTapToAddText" in $$props) $$invalidate(20, enableTapToAddText = $$props.enableTapToAddText);
+		if ("willRenderShapeControls" in $$props) $$invalidate(21, willRenderShapeControls = $$props.willRenderShapeControls);
+		if ("beforeAddShape" in $$props) $$invalidate(22, beforeAddShape = $$props.beforeAddShape);
+		if ("beforeRemoveShape" in $$props) $$invalidate(23, beforeRemoveShape = $$props.beforeRemoveShape);
+		if ("beforeDeselectShape" in $$props) $$invalidate(24, beforeDeselectShape = $$props.beforeDeselectShape);
+		if ("beforeSelectShape" in $$props) $$invalidate(25, beforeSelectShape = $$props.beforeSelectShape);
+		if ("beforeUpdateShape" in $$props) $$invalidate(26, beforeUpdateShape = $$props.beforeUpdateShape);
+	};
+
+	$$self.$$.update = () => {
+		if ($$self.$$.dirty[0] & /*$imageFlipX, $imageFlipY*/ 402653184 | $$self.$$.dirty[1] & /*$rootRect, $imageSize, $imageTransforms*/ 3584) {
+			//
+			// Mapping coordinates
+			//
+			$$invalidate(29, mapScreenPointToImagePoint = point => _mapScreenPointToImagePoint(point, $rootRect, $imageSize, $imageTransforms.origin, $imageTransforms.translation, $imageTransforms.rotation.z, $imageTransforms.scale, $imageFlipX, $imageFlipY));
+		}
+
+		if ($$self.$$.dirty[0] & /*$imageFlipX, $imageFlipY*/ 402653184 | $$self.$$.dirty[1] & /*$rootRect, $imageSize, $imageTransforms*/ 3584) {
+			$$invalidate(30, mapImagePointToScreenPoint = point => _mapImagePointToScreenPoint(point, $rootRect, $imageSize, $imageTransforms.origin, $imageTransforms.translation, $imageTransforms.rotation.z, $imageTransforms.scale, $imageFlipX, $imageFlipY));
+		}
 	};
 
 	return [
@@ -35186,6 +39241,7 @@ function instance$4($$self, $$props, $$invalidate) {
 		markupEditorToolStyles,
 		markupEditorShapeStyleControls,
 		markupEditorToolSelectRadius,
+		markupEditorTextInputMode,
 		willRenderShapePresetToolbar,
 		annotateTools,
 		annotateToolShapes,
@@ -35194,6 +39250,8 @@ function instance$4($$self, $$props, $$invalidate) {
 		annotateEnableSelectImagePreset,
 		annotatePresets,
 		annotateWillRenderShapePresetToolbar,
+		enableSelectToolToAddShape,
+		enableTapToAddText,
 		willRenderShapeControls,
 		beforeAddShape,
 		beforeRemoveShape,
@@ -35202,6 +39260,8 @@ function instance$4($$self, $$props, $$invalidate) {
 		beforeUpdateShape,
 		$imageFlipX,
 		$imageFlipY,
+		mapScreenPointToImagePoint,
+		mapImagePointToScreenPoint,
 		$imageRotation,
 		rootRect,
 		imageAnnotation,
@@ -35210,9 +39270,10 @@ function instance$4($$self, $$props, $$invalidate) {
 		imageRotation,
 		imageFlipX,
 		imageFlipY,
-		mapScreenPointToImagePoint,
-		mapImagePointToScreenPoint,
 		name,
+		$rootRect,
+		$imageSize,
+		$imageTransforms,
 		shapeutil_toolActive_binding,
 		measure_handler
 	];
@@ -35225,11 +39286,11 @@ class Annotate extends SvelteComponent {
 		init(
 			this,
 			options,
-			instance$4,
-			create_fragment$4,
+			instance$8,
+			create_fragment$8,
 			safe_not_equal,
 			{
-				name: 36,
+				name: 39,
 				isActive: 1,
 				isActiveFraction: 2,
 				isVisible: 3,
@@ -35239,28 +39300,31 @@ class Annotate extends SvelteComponent {
 				markupEditorToolStyles: 7,
 				markupEditorShapeStyleControls: 8,
 				markupEditorToolSelectRadius: 9,
-				willRenderShapePresetToolbar: 10,
-				annotateTools: 11,
-				annotateToolShapes: 12,
-				annotateShapeControls: 13,
+				markupEditorTextInputMode: 10,
+				willRenderShapePresetToolbar: 11,
+				annotateTools: 12,
+				annotateToolShapes: 13,
+				annotateShapeControls: 14,
 				annotateActiveTool: 0,
-				annotateEnableButtonFlipVertical: 14,
-				annotateEnableSelectImagePreset: 15,
-				annotatePresets: 16,
-				annotateWillRenderShapePresetToolbar: 17,
-				willRenderShapeControls: 18,
-				beforeAddShape: 19,
-				beforeRemoveShape: 20,
-				beforeDeselectShape: 21,
-				beforeSelectShape: 22,
-				beforeUpdateShape: 23
+				annotateEnableButtonFlipVertical: 15,
+				annotateEnableSelectImagePreset: 16,
+				annotatePresets: 17,
+				annotateWillRenderShapePresetToolbar: 18,
+				enableSelectToolToAddShape: 19,
+				enableTapToAddText: 20,
+				willRenderShapeControls: 21,
+				beforeAddShape: 22,
+				beforeRemoveShape: 23,
+				beforeDeselectShape: 24,
+				beforeSelectShape: 25,
+				beforeUpdateShape: 26
 			},
 			[-1, -1]
 		);
 	}
 
 	get name() {
-		return this.$$.ctx[36];
+		return this.$$.ctx[39];
 	}
 
 	get isActive() {
@@ -35344,8 +39408,17 @@ class Annotate extends SvelteComponent {
 		flush();
 	}
 
-	get willRenderShapePresetToolbar() {
+	get markupEditorTextInputMode() {
 		return this.$$.ctx[10];
+	}
+
+	set markupEditorTextInputMode(markupEditorTextInputMode) {
+		this.$set({ markupEditorTextInputMode });
+		flush();
+	}
+
+	get willRenderShapePresetToolbar() {
+		return this.$$.ctx[11];
 	}
 
 	set willRenderShapePresetToolbar(willRenderShapePresetToolbar) {
@@ -35354,7 +39427,7 @@ class Annotate extends SvelteComponent {
 	}
 
 	get annotateTools() {
-		return this.$$.ctx[11];
+		return this.$$.ctx[12];
 	}
 
 	set annotateTools(annotateTools) {
@@ -35363,7 +39436,7 @@ class Annotate extends SvelteComponent {
 	}
 
 	get annotateToolShapes() {
-		return this.$$.ctx[12];
+		return this.$$.ctx[13];
 	}
 
 	set annotateToolShapes(annotateToolShapes) {
@@ -35372,7 +39445,7 @@ class Annotate extends SvelteComponent {
 	}
 
 	get annotateShapeControls() {
-		return this.$$.ctx[13];
+		return this.$$.ctx[14];
 	}
 
 	set annotateShapeControls(annotateShapeControls) {
@@ -35390,7 +39463,7 @@ class Annotate extends SvelteComponent {
 	}
 
 	get annotateEnableButtonFlipVertical() {
-		return this.$$.ctx[14];
+		return this.$$.ctx[15];
 	}
 
 	set annotateEnableButtonFlipVertical(annotateEnableButtonFlipVertical) {
@@ -35399,7 +39472,7 @@ class Annotate extends SvelteComponent {
 	}
 
 	get annotateEnableSelectImagePreset() {
-		return this.$$.ctx[15];
+		return this.$$.ctx[16];
 	}
 
 	set annotateEnableSelectImagePreset(annotateEnableSelectImagePreset) {
@@ -35408,7 +39481,7 @@ class Annotate extends SvelteComponent {
 	}
 
 	get annotatePresets() {
-		return this.$$.ctx[16];
+		return this.$$.ctx[17];
 	}
 
 	set annotatePresets(annotatePresets) {
@@ -35417,7 +39490,7 @@ class Annotate extends SvelteComponent {
 	}
 
 	get annotateWillRenderShapePresetToolbar() {
-		return this.$$.ctx[17];
+		return this.$$.ctx[18];
 	}
 
 	set annotateWillRenderShapePresetToolbar(annotateWillRenderShapePresetToolbar) {
@@ -35425,8 +39498,26 @@ class Annotate extends SvelteComponent {
 		flush();
 	}
 
+	get enableSelectToolToAddShape() {
+		return this.$$.ctx[19];
+	}
+
+	set enableSelectToolToAddShape(enableSelectToolToAddShape) {
+		this.$set({ enableSelectToolToAddShape });
+		flush();
+	}
+
+	get enableTapToAddText() {
+		return this.$$.ctx[20];
+	}
+
+	set enableTapToAddText(enableTapToAddText) {
+		this.$set({ enableTapToAddText });
+		flush();
+	}
+
 	get willRenderShapeControls() {
-		return this.$$.ctx[18];
+		return this.$$.ctx[21];
 	}
 
 	set willRenderShapeControls(willRenderShapeControls) {
@@ -35435,7 +39526,7 @@ class Annotate extends SvelteComponent {
 	}
 
 	get beforeAddShape() {
-		return this.$$.ctx[19];
+		return this.$$.ctx[22];
 	}
 
 	set beforeAddShape(beforeAddShape) {
@@ -35444,7 +39535,7 @@ class Annotate extends SvelteComponent {
 	}
 
 	get beforeRemoveShape() {
-		return this.$$.ctx[20];
+		return this.$$.ctx[23];
 	}
 
 	set beforeRemoveShape(beforeRemoveShape) {
@@ -35453,7 +39544,7 @@ class Annotate extends SvelteComponent {
 	}
 
 	get beforeDeselectShape() {
-		return this.$$.ctx[21];
+		return this.$$.ctx[24];
 	}
 
 	set beforeDeselectShape(beforeDeselectShape) {
@@ -35462,7 +39553,7 @@ class Annotate extends SvelteComponent {
 	}
 
 	get beforeSelectShape() {
-		return this.$$.ctx[22];
+		return this.$$.ctx[25];
 	}
 
 	set beforeSelectShape(beforeSelectShape) {
@@ -35471,7 +39562,7 @@ class Annotate extends SvelteComponent {
 	}
 
 	get beforeUpdateShape() {
-		return this.$$.ctx[23];
+		return this.$$.ctx[26];
 	}
 
 	set beforeUpdateShape(beforeUpdateShape) {
@@ -35485,13 +39576,13 @@ var _plugin_annotate = { util: ['annotate', Annotate] };
 
 /* src/core/ui/plugins/decorate/index.svelte generated by Svelte v3.37.0 */
 
-function create_fragment$3(ctx) {
+function create_fragment$7(ctx) {
 	let shapeutil;
 	let updating_toolActive;
 	let current;
 
 	function shapeutil_toolActive_binding(value) {
-		/*shapeutil_toolActive_binding*/ ctx[31](value);
+		/*shapeutil_toolActive_binding*/ ctx[36](value);
 	}
 
 	let shapeutil_props = {
@@ -35500,26 +39591,29 @@ function create_fragment$3(ctx) {
 		isActive: /*isActive*/ ctx[1],
 		isActiveFraction: /*isActiveFraction*/ ctx[2],
 		isVisible: /*isVisible*/ ctx[3],
-		mapScreenPointToImagePoint: /*mapScreenPointToImagePoint*/ ctx[28],
-		mapImagePointToScreenPoint: /*mapImagePointToScreenPoint*/ ctx[29],
+		mapScreenPointToImagePoint: /*mapScreenPointToImagePoint*/ ctx[27],
+		mapImagePointToScreenPoint: /*mapImagePointToScreenPoint*/ ctx[28],
 		utilKey: "decorate",
-		shapes: /*imageDecoration*/ ctx[25],
-		tools: /*decorateTools*/ ctx[11] || /*markupEditorToolbar*/ ctx[6],
-		toolShapes: /*decorateToolShapes*/ ctx[12] || /*markupEditorToolStyles*/ ctx[7],
-		shapeControls: /*decorateShapeControls*/ ctx[13] || /*markupEditorShapeStyleControls*/ ctx[8],
-		shapePresets: /*decoratePresets*/ ctx[16],
-		enablePresetSelectImage: /*decorateEnableSelectImagePreset*/ ctx[15],
-		enableButtonFlipVertical: /*decorateEnableButtonFlipVertical*/ ctx[14],
-		parentRect: /*imageCropRect*/ ctx[24],
+		shapes: /*imageDecoration*/ ctx[30],
+		tools: /*decorateTools*/ ctx[12] || /*markupEditorToolbar*/ ctx[6],
+		toolShapes: /*decorateToolShapes*/ ctx[13] || /*markupEditorToolStyles*/ ctx[7],
+		shapeControls: /*decorateShapeControls*/ ctx[14] || /*markupEditorShapeStyleControls*/ ctx[8],
+		shapePresets: /*decoratePresets*/ ctx[17],
+		enableSelectToolToAddShape: /*enableSelectToolToAddShape*/ ctx[19],
+		enableTapToAddText: /*enableTapToAddText*/ ctx[20],
+		enablePresetSelectImage: /*decorateEnableSelectImagePreset*/ ctx[16],
+		enableButtonFlipVertical: /*decorateEnableButtonFlipVertical*/ ctx[15],
+		parentRect: /*imageCropRect*/ ctx[29],
 		toolSelectRadius: /*markupEditorToolSelectRadius*/ ctx[9],
-		willRenderPresetToolbar: /*decorateWillRenderShapePresetToolbar*/ ctx[17] || /*willRenderShapePresetToolbar*/ ctx[10],
+		textInputMode: /*markupEditorTextInputMode*/ ctx[10],
+		willRenderPresetToolbar: /*decorateWillRenderShapePresetToolbar*/ ctx[18] || /*willRenderShapePresetToolbar*/ ctx[11],
 		hooks: {
-			willRenderShapeControls: /*willRenderShapeControls*/ ctx[18],
-			beforeAddShape: /*beforeAddShape*/ ctx[19],
-			beforeRemoveShape: /*beforeRemoveShape*/ ctx[20],
-			beforeDeselectShape: /*beforeDeselectShape*/ ctx[21],
-			beforeSelectShape: /*beforeSelectShape*/ ctx[22],
-			beforeUpdateShape: /*beforeUpdateShape*/ ctx[23]
+			willRenderShapeControls: /*willRenderShapeControls*/ ctx[21],
+			beforeAddShape: /*beforeAddShape*/ ctx[22],
+			beforeRemoveShape: /*beforeRemoveShape*/ ctx[23],
+			beforeDeselectShape: /*beforeDeselectShape*/ ctx[24],
+			beforeSelectShape: /*beforeSelectShape*/ ctx[25],
+			beforeUpdateShape: /*beforeUpdateShape*/ ctx[26]
 		}
 	};
 
@@ -35529,7 +39623,7 @@ function create_fragment$3(ctx) {
 
 	shapeutil = new ShapeUtil({ props: shapeutil_props });
 	binding_callbacks.push(() => bind(shapeutil, "toolActive", shapeutil_toolActive_binding));
-	shapeutil.$on("measure", /*measure_handler*/ ctx[32]);
+	shapeutil.$on("measure", /*measure_handler*/ ctx[37]);
 
 	return {
 		c() {
@@ -35546,22 +39640,27 @@ function create_fragment$3(ctx) {
 			if (dirty[0] & /*isActive*/ 2) shapeutil_changes.isActive = /*isActive*/ ctx[1];
 			if (dirty[0] & /*isActiveFraction*/ 4) shapeutil_changes.isActiveFraction = /*isActiveFraction*/ ctx[2];
 			if (dirty[0] & /*isVisible*/ 8) shapeutil_changes.isVisible = /*isVisible*/ ctx[3];
-			if (dirty[0] & /*decorateTools, markupEditorToolbar*/ 2112) shapeutil_changes.tools = /*decorateTools*/ ctx[11] || /*markupEditorToolbar*/ ctx[6];
-			if (dirty[0] & /*decorateToolShapes, markupEditorToolStyles*/ 4224) shapeutil_changes.toolShapes = /*decorateToolShapes*/ ctx[12] || /*markupEditorToolStyles*/ ctx[7];
-			if (dirty[0] & /*decorateShapeControls, markupEditorShapeStyleControls*/ 8448) shapeutil_changes.shapeControls = /*decorateShapeControls*/ ctx[13] || /*markupEditorShapeStyleControls*/ ctx[8];
-			if (dirty[0] & /*decoratePresets*/ 65536) shapeutil_changes.shapePresets = /*decoratePresets*/ ctx[16];
-			if (dirty[0] & /*decorateEnableSelectImagePreset*/ 32768) shapeutil_changes.enablePresetSelectImage = /*decorateEnableSelectImagePreset*/ ctx[15];
-			if (dirty[0] & /*decorateEnableButtonFlipVertical*/ 16384) shapeutil_changes.enableButtonFlipVertical = /*decorateEnableButtonFlipVertical*/ ctx[14];
+			if (dirty[0] & /*mapScreenPointToImagePoint*/ 134217728) shapeutil_changes.mapScreenPointToImagePoint = /*mapScreenPointToImagePoint*/ ctx[27];
+			if (dirty[0] & /*mapImagePointToScreenPoint*/ 268435456) shapeutil_changes.mapImagePointToScreenPoint = /*mapImagePointToScreenPoint*/ ctx[28];
+			if (dirty[0] & /*decorateTools, markupEditorToolbar*/ 4160) shapeutil_changes.tools = /*decorateTools*/ ctx[12] || /*markupEditorToolbar*/ ctx[6];
+			if (dirty[0] & /*decorateToolShapes, markupEditorToolStyles*/ 8320) shapeutil_changes.toolShapes = /*decorateToolShapes*/ ctx[13] || /*markupEditorToolStyles*/ ctx[7];
+			if (dirty[0] & /*decorateShapeControls, markupEditorShapeStyleControls*/ 16640) shapeutil_changes.shapeControls = /*decorateShapeControls*/ ctx[14] || /*markupEditorShapeStyleControls*/ ctx[8];
+			if (dirty[0] & /*decoratePresets*/ 131072) shapeutil_changes.shapePresets = /*decoratePresets*/ ctx[17];
+			if (dirty[0] & /*enableSelectToolToAddShape*/ 524288) shapeutil_changes.enableSelectToolToAddShape = /*enableSelectToolToAddShape*/ ctx[19];
+			if (dirty[0] & /*enableTapToAddText*/ 1048576) shapeutil_changes.enableTapToAddText = /*enableTapToAddText*/ ctx[20];
+			if (dirty[0] & /*decorateEnableSelectImagePreset*/ 65536) shapeutil_changes.enablePresetSelectImage = /*decorateEnableSelectImagePreset*/ ctx[16];
+			if (dirty[0] & /*decorateEnableButtonFlipVertical*/ 32768) shapeutil_changes.enableButtonFlipVertical = /*decorateEnableButtonFlipVertical*/ ctx[15];
 			if (dirty[0] & /*markupEditorToolSelectRadius*/ 512) shapeutil_changes.toolSelectRadius = /*markupEditorToolSelectRadius*/ ctx[9];
-			if (dirty[0] & /*decorateWillRenderShapePresetToolbar, willRenderShapePresetToolbar*/ 132096) shapeutil_changes.willRenderPresetToolbar = /*decorateWillRenderShapePresetToolbar*/ ctx[17] || /*willRenderShapePresetToolbar*/ ctx[10];
+			if (dirty[0] & /*markupEditorTextInputMode*/ 1024) shapeutil_changes.textInputMode = /*markupEditorTextInputMode*/ ctx[10];
+			if (dirty[0] & /*decorateWillRenderShapePresetToolbar, willRenderShapePresetToolbar*/ 264192) shapeutil_changes.willRenderPresetToolbar = /*decorateWillRenderShapePresetToolbar*/ ctx[18] || /*willRenderShapePresetToolbar*/ ctx[11];
 
-			if (dirty[0] & /*willRenderShapeControls, beforeAddShape, beforeRemoveShape, beforeDeselectShape, beforeSelectShape, beforeUpdateShape*/ 16515072) shapeutil_changes.hooks = {
-				willRenderShapeControls: /*willRenderShapeControls*/ ctx[18],
-				beforeAddShape: /*beforeAddShape*/ ctx[19],
-				beforeRemoveShape: /*beforeRemoveShape*/ ctx[20],
-				beforeDeselectShape: /*beforeDeselectShape*/ ctx[21],
-				beforeSelectShape: /*beforeSelectShape*/ ctx[22],
-				beforeUpdateShape: /*beforeUpdateShape*/ ctx[23]
+			if (dirty[0] & /*willRenderShapeControls, beforeAddShape, beforeRemoveShape, beforeDeselectShape, beforeSelectShape, beforeUpdateShape*/ 132120576) shapeutil_changes.hooks = {
+				willRenderShapeControls: /*willRenderShapeControls*/ ctx[21],
+				beforeAddShape: /*beforeAddShape*/ ctx[22],
+				beforeRemoveShape: /*beforeRemoveShape*/ ctx[23],
+				beforeDeselectShape: /*beforeDeselectShape*/ ctx[24],
+				beforeSelectShape: /*beforeSelectShape*/ ctx[25],
+				beforeUpdateShape: /*beforeUpdateShape*/ ctx[26]
 			};
 
 			if (!updating_toolActive && dirty[0] & /*decorateActiveTool*/ 1) {
@@ -35587,7 +39686,9 @@ function create_fragment$3(ctx) {
 	};
 }
 
-function instance$3($$self, $$props, $$invalidate) {
+function instance$7($$self, $$props, $$invalidate) {
+	let mapScreenPointToImagePoint;
+	let mapImagePointToScreenPoint;
 	let $imageSelectionRectPresentation;
 	let $presentationScalar;
 	const name = "decorate";
@@ -35600,6 +39701,7 @@ function instance$3($$self, $$props, $$invalidate) {
 	let { markupEditorToolStyles = undefined } = $$props;
 	let { markupEditorShapeStyleControls = undefined } = $$props;
 	let { markupEditorToolSelectRadius = undefined } = $$props;
+	let { markupEditorTextInputMode = undefined } = $$props;
 	let { willRenderShapePresetToolbar = undefined } = $$props;
 	let { decorateTools = undefined } = $$props;
 	let { decorateToolShapes = undefined } = $$props;
@@ -35609,6 +39711,8 @@ function instance$3($$self, $$props, $$invalidate) {
 	let { decorateEnableSelectImagePreset = false } = $$props;
 	let { decoratePresets = [] } = $$props;
 	let { decorateWillRenderShapePresetToolbar = undefined } = $$props;
+	let { enableSelectToolToAddShape = undefined } = $$props;
+	let { enableTapToAddText = undefined } = $$props;
 	let { willRenderShapeControls = undefined } = $$props;
 	let { beforeAddShape = undefined } = $$props;
 	let { beforeRemoveShape = undefined } = $$props;
@@ -35616,26 +39720,8 @@ function instance$3($$self, $$props, $$invalidate) {
 	let { beforeSelectShape = undefined } = $$props;
 	let { beforeUpdateShape = undefined } = $$props;
 	const { imageCropRect, imageDecoration, imageSelectionRectPresentation, presentationScalar } = stores;
-	component_subscribe($$self, imageSelectionRectPresentation, value => $$invalidate(33, $imageSelectionRectPresentation = value));
-	component_subscribe($$self, presentationScalar, value => $$invalidate(34, $presentationScalar = value));
-
-	const mapScreenPointToImagePoint = screenPoint => {
-		const mappedPoint = vectorClone(screenPoint);
-		mappedPoint.x -= $imageSelectionRectPresentation.x;
-		mappedPoint.y -= $imageSelectionRectPresentation.y;
-		mappedPoint.x /= $presentationScalar;
-		mappedPoint.y /= $presentationScalar;
-		return mappedPoint;
-	};
-
-	const mapImagePointToScreenPoint = imagePoint => {
-		const mappedPoint = vectorClone(imagePoint);
-		mappedPoint.x *= $presentationScalar;
-		mappedPoint.y *= $presentationScalar;
-		mappedPoint.x += $imageSelectionRectPresentation.x;
-		mappedPoint.y += $imageSelectionRectPresentation.y;
-		return mappedPoint;
-	};
+	component_subscribe($$self, imageSelectionRectPresentation, value => $$invalidate(34, $imageSelectionRectPresentation = value));
+	component_subscribe($$self, presentationScalar, value => $$invalidate(35, $presentationScalar = value));
 
 	function shapeutil_toolActive_binding(value) {
 		decorateActiveTool = value;
@@ -35656,21 +39742,48 @@ function instance$3($$self, $$props, $$invalidate) {
 		if ("markupEditorToolStyles" in $$props) $$invalidate(7, markupEditorToolStyles = $$props.markupEditorToolStyles);
 		if ("markupEditorShapeStyleControls" in $$props) $$invalidate(8, markupEditorShapeStyleControls = $$props.markupEditorShapeStyleControls);
 		if ("markupEditorToolSelectRadius" in $$props) $$invalidate(9, markupEditorToolSelectRadius = $$props.markupEditorToolSelectRadius);
-		if ("willRenderShapePresetToolbar" in $$props) $$invalidate(10, willRenderShapePresetToolbar = $$props.willRenderShapePresetToolbar);
-		if ("decorateTools" in $$props) $$invalidate(11, decorateTools = $$props.decorateTools);
-		if ("decorateToolShapes" in $$props) $$invalidate(12, decorateToolShapes = $$props.decorateToolShapes);
-		if ("decorateShapeControls" in $$props) $$invalidate(13, decorateShapeControls = $$props.decorateShapeControls);
+		if ("markupEditorTextInputMode" in $$props) $$invalidate(10, markupEditorTextInputMode = $$props.markupEditorTextInputMode);
+		if ("willRenderShapePresetToolbar" in $$props) $$invalidate(11, willRenderShapePresetToolbar = $$props.willRenderShapePresetToolbar);
+		if ("decorateTools" in $$props) $$invalidate(12, decorateTools = $$props.decorateTools);
+		if ("decorateToolShapes" in $$props) $$invalidate(13, decorateToolShapes = $$props.decorateToolShapes);
+		if ("decorateShapeControls" in $$props) $$invalidate(14, decorateShapeControls = $$props.decorateShapeControls);
 		if ("decorateActiveTool" in $$props) $$invalidate(0, decorateActiveTool = $$props.decorateActiveTool);
-		if ("decorateEnableButtonFlipVertical" in $$props) $$invalidate(14, decorateEnableButtonFlipVertical = $$props.decorateEnableButtonFlipVertical);
-		if ("decorateEnableSelectImagePreset" in $$props) $$invalidate(15, decorateEnableSelectImagePreset = $$props.decorateEnableSelectImagePreset);
-		if ("decoratePresets" in $$props) $$invalidate(16, decoratePresets = $$props.decoratePresets);
-		if ("decorateWillRenderShapePresetToolbar" in $$props) $$invalidate(17, decorateWillRenderShapePresetToolbar = $$props.decorateWillRenderShapePresetToolbar);
-		if ("willRenderShapeControls" in $$props) $$invalidate(18, willRenderShapeControls = $$props.willRenderShapeControls);
-		if ("beforeAddShape" in $$props) $$invalidate(19, beforeAddShape = $$props.beforeAddShape);
-		if ("beforeRemoveShape" in $$props) $$invalidate(20, beforeRemoveShape = $$props.beforeRemoveShape);
-		if ("beforeDeselectShape" in $$props) $$invalidate(21, beforeDeselectShape = $$props.beforeDeselectShape);
-		if ("beforeSelectShape" in $$props) $$invalidate(22, beforeSelectShape = $$props.beforeSelectShape);
-		if ("beforeUpdateShape" in $$props) $$invalidate(23, beforeUpdateShape = $$props.beforeUpdateShape);
+		if ("decorateEnableButtonFlipVertical" in $$props) $$invalidate(15, decorateEnableButtonFlipVertical = $$props.decorateEnableButtonFlipVertical);
+		if ("decorateEnableSelectImagePreset" in $$props) $$invalidate(16, decorateEnableSelectImagePreset = $$props.decorateEnableSelectImagePreset);
+		if ("decoratePresets" in $$props) $$invalidate(17, decoratePresets = $$props.decoratePresets);
+		if ("decorateWillRenderShapePresetToolbar" in $$props) $$invalidate(18, decorateWillRenderShapePresetToolbar = $$props.decorateWillRenderShapePresetToolbar);
+		if ("enableSelectToolToAddShape" in $$props) $$invalidate(19, enableSelectToolToAddShape = $$props.enableSelectToolToAddShape);
+		if ("enableTapToAddText" in $$props) $$invalidate(20, enableTapToAddText = $$props.enableTapToAddText);
+		if ("willRenderShapeControls" in $$props) $$invalidate(21, willRenderShapeControls = $$props.willRenderShapeControls);
+		if ("beforeAddShape" in $$props) $$invalidate(22, beforeAddShape = $$props.beforeAddShape);
+		if ("beforeRemoveShape" in $$props) $$invalidate(23, beforeRemoveShape = $$props.beforeRemoveShape);
+		if ("beforeDeselectShape" in $$props) $$invalidate(24, beforeDeselectShape = $$props.beforeDeselectShape);
+		if ("beforeSelectShape" in $$props) $$invalidate(25, beforeSelectShape = $$props.beforeSelectShape);
+		if ("beforeUpdateShape" in $$props) $$invalidate(26, beforeUpdateShape = $$props.beforeUpdateShape);
+	};
+
+	$$self.$$.update = () => {
+		if ($$self.$$.dirty[1] & /*$imageSelectionRectPresentation, $presentationScalar*/ 24) {
+			$$invalidate(27, mapScreenPointToImagePoint = screenPoint => {
+				const mappedPoint = vectorClone(screenPoint);
+				mappedPoint.x -= $imageSelectionRectPresentation.x;
+				mappedPoint.y -= $imageSelectionRectPresentation.y;
+				mappedPoint.x /= $presentationScalar;
+				mappedPoint.y /= $presentationScalar;
+				return mappedPoint;
+			});
+		}
+
+		if ($$self.$$.dirty[1] & /*$presentationScalar, $imageSelectionRectPresentation*/ 24) {
+			$$invalidate(28, mapImagePointToScreenPoint = imagePoint => {
+				const mappedPoint = vectorClone(imagePoint);
+				mappedPoint.x *= $presentationScalar;
+				mappedPoint.y *= $presentationScalar;
+				mappedPoint.x += $imageSelectionRectPresentation.x;
+				mappedPoint.y += $imageSelectionRectPresentation.y;
+				return mappedPoint;
+			});
+		}
 	};
 
 	return [
@@ -35684,6 +39797,7 @@ function instance$3($$self, $$props, $$invalidate) {
 		markupEditorToolStyles,
 		markupEditorShapeStyleControls,
 		markupEditorToolSelectRadius,
+		markupEditorTextInputMode,
 		willRenderShapePresetToolbar,
 		decorateTools,
 		decorateToolShapes,
@@ -35692,19 +39806,23 @@ function instance$3($$self, $$props, $$invalidate) {
 		decorateEnableSelectImagePreset,
 		decoratePresets,
 		decorateWillRenderShapePresetToolbar,
+		enableSelectToolToAddShape,
+		enableTapToAddText,
 		willRenderShapeControls,
 		beforeAddShape,
 		beforeRemoveShape,
 		beforeDeselectShape,
 		beforeSelectShape,
 		beforeUpdateShape,
+		mapScreenPointToImagePoint,
+		mapImagePointToScreenPoint,
 		imageCropRect,
 		imageDecoration,
 		imageSelectionRectPresentation,
 		presentationScalar,
-		mapScreenPointToImagePoint,
-		mapImagePointToScreenPoint,
 		name,
+		$imageSelectionRectPresentation,
+		$presentationScalar,
 		shapeutil_toolActive_binding,
 		measure_handler
 	];
@@ -35717,11 +39835,11 @@ class Decorate extends SvelteComponent {
 		init(
 			this,
 			options,
-			instance$3,
-			create_fragment$3,
+			instance$7,
+			create_fragment$7,
 			safe_not_equal,
 			{
-				name: 30,
+				name: 33,
 				isActive: 1,
 				isActiveFraction: 2,
 				isVisible: 3,
@@ -35731,28 +39849,31 @@ class Decorate extends SvelteComponent {
 				markupEditorToolStyles: 7,
 				markupEditorShapeStyleControls: 8,
 				markupEditorToolSelectRadius: 9,
-				willRenderShapePresetToolbar: 10,
-				decorateTools: 11,
-				decorateToolShapes: 12,
-				decorateShapeControls: 13,
+				markupEditorTextInputMode: 10,
+				willRenderShapePresetToolbar: 11,
+				decorateTools: 12,
+				decorateToolShapes: 13,
+				decorateShapeControls: 14,
 				decorateActiveTool: 0,
-				decorateEnableButtonFlipVertical: 14,
-				decorateEnableSelectImagePreset: 15,
-				decoratePresets: 16,
-				decorateWillRenderShapePresetToolbar: 17,
-				willRenderShapeControls: 18,
-				beforeAddShape: 19,
-				beforeRemoveShape: 20,
-				beforeDeselectShape: 21,
-				beforeSelectShape: 22,
-				beforeUpdateShape: 23
+				decorateEnableButtonFlipVertical: 15,
+				decorateEnableSelectImagePreset: 16,
+				decoratePresets: 17,
+				decorateWillRenderShapePresetToolbar: 18,
+				enableSelectToolToAddShape: 19,
+				enableTapToAddText: 20,
+				willRenderShapeControls: 21,
+				beforeAddShape: 22,
+				beforeRemoveShape: 23,
+				beforeDeselectShape: 24,
+				beforeSelectShape: 25,
+				beforeUpdateShape: 26
 			},
 			[-1, -1]
 		);
 	}
 
 	get name() {
-		return this.$$.ctx[30];
+		return this.$$.ctx[33];
 	}
 
 	get isActive() {
@@ -35836,8 +39957,17 @@ class Decorate extends SvelteComponent {
 		flush();
 	}
 
-	get willRenderShapePresetToolbar() {
+	get markupEditorTextInputMode() {
 		return this.$$.ctx[10];
+	}
+
+	set markupEditorTextInputMode(markupEditorTextInputMode) {
+		this.$set({ markupEditorTextInputMode });
+		flush();
+	}
+
+	get willRenderShapePresetToolbar() {
+		return this.$$.ctx[11];
 	}
 
 	set willRenderShapePresetToolbar(willRenderShapePresetToolbar) {
@@ -35846,7 +39976,7 @@ class Decorate extends SvelteComponent {
 	}
 
 	get decorateTools() {
-		return this.$$.ctx[11];
+		return this.$$.ctx[12];
 	}
 
 	set decorateTools(decorateTools) {
@@ -35855,7 +39985,7 @@ class Decorate extends SvelteComponent {
 	}
 
 	get decorateToolShapes() {
-		return this.$$.ctx[12];
+		return this.$$.ctx[13];
 	}
 
 	set decorateToolShapes(decorateToolShapes) {
@@ -35864,7 +39994,7 @@ class Decorate extends SvelteComponent {
 	}
 
 	get decorateShapeControls() {
-		return this.$$.ctx[13];
+		return this.$$.ctx[14];
 	}
 
 	set decorateShapeControls(decorateShapeControls) {
@@ -35882,7 +40012,7 @@ class Decorate extends SvelteComponent {
 	}
 
 	get decorateEnableButtonFlipVertical() {
-		return this.$$.ctx[14];
+		return this.$$.ctx[15];
 	}
 
 	set decorateEnableButtonFlipVertical(decorateEnableButtonFlipVertical) {
@@ -35891,7 +40021,7 @@ class Decorate extends SvelteComponent {
 	}
 
 	get decorateEnableSelectImagePreset() {
-		return this.$$.ctx[15];
+		return this.$$.ctx[16];
 	}
 
 	set decorateEnableSelectImagePreset(decorateEnableSelectImagePreset) {
@@ -35900,7 +40030,7 @@ class Decorate extends SvelteComponent {
 	}
 
 	get decoratePresets() {
-		return this.$$.ctx[16];
+		return this.$$.ctx[17];
 	}
 
 	set decoratePresets(decoratePresets) {
@@ -35909,7 +40039,7 @@ class Decorate extends SvelteComponent {
 	}
 
 	get decorateWillRenderShapePresetToolbar() {
-		return this.$$.ctx[17];
+		return this.$$.ctx[18];
 	}
 
 	set decorateWillRenderShapePresetToolbar(decorateWillRenderShapePresetToolbar) {
@@ -35917,8 +40047,26 @@ class Decorate extends SvelteComponent {
 		flush();
 	}
 
+	get enableSelectToolToAddShape() {
+		return this.$$.ctx[19];
+	}
+
+	set enableSelectToolToAddShape(enableSelectToolToAddShape) {
+		this.$set({ enableSelectToolToAddShape });
+		flush();
+	}
+
+	get enableTapToAddText() {
+		return this.$$.ctx[20];
+	}
+
+	set enableTapToAddText(enableTapToAddText) {
+		this.$set({ enableTapToAddText });
+		flush();
+	}
+
 	get willRenderShapeControls() {
-		return this.$$.ctx[18];
+		return this.$$.ctx[21];
 	}
 
 	set willRenderShapeControls(willRenderShapeControls) {
@@ -35927,7 +40075,7 @@ class Decorate extends SvelteComponent {
 	}
 
 	get beforeAddShape() {
-		return this.$$.ctx[19];
+		return this.$$.ctx[22];
 	}
 
 	set beforeAddShape(beforeAddShape) {
@@ -35936,7 +40084,7 @@ class Decorate extends SvelteComponent {
 	}
 
 	get beforeRemoveShape() {
-		return this.$$.ctx[20];
+		return this.$$.ctx[23];
 	}
 
 	set beforeRemoveShape(beforeRemoveShape) {
@@ -35945,7 +40093,7 @@ class Decorate extends SvelteComponent {
 	}
 
 	get beforeDeselectShape() {
-		return this.$$.ctx[21];
+		return this.$$.ctx[24];
 	}
 
 	set beforeDeselectShape(beforeDeselectShape) {
@@ -35954,7 +40102,7 @@ class Decorate extends SvelteComponent {
 	}
 
 	get beforeSelectShape() {
-		return this.$$.ctx[22];
+		return this.$$.ctx[25];
 	}
 
 	set beforeSelectShape(beforeSelectShape) {
@@ -35963,7 +40111,7 @@ class Decorate extends SvelteComponent {
 	}
 
 	get beforeUpdateShape() {
-		return this.$$.ctx[23];
+		return this.$$.ctx[26];
 	}
 
 	set beforeUpdateShape(beforeUpdateShape) {
@@ -35977,7 +40125,7 @@ var _plugin_decorate = { util: ['decorate', Decorate] };
 
 /* src/core/ui/plugins/sticker/index.svelte generated by Svelte v3.37.0 */
 
-function create_fragment$2(ctx) {
+function create_fragment$6(ctx) {
 	let shapeutil;
 	let current;
 
@@ -36093,7 +40241,7 @@ function create_fragment$2(ctx) {
 	};
 }
 
-function instance$2($$self, $$props, $$invalidate) {
+function instance$6($$self, $$props, $$invalidate) {
 	let $rootRect;
 	let $imageSize;
 	let $imageTransforms;
@@ -36231,8 +40379,8 @@ class Sticker extends SvelteComponent {
 		init(
 			this,
 			options,
-			instance$2,
-			create_fragment$2,
+			instance$6,
+			create_fragment$6,
 			safe_not_equal,
 			{
 				name: 34,
@@ -36429,323 +40577,199 @@ class Sticker extends SvelteComponent {
 // @ts-ignore
 var _plugin_sticker = { util: ['sticker', Sticker] };
 
-var smoothstep = (min, max, value, ease = (x) => x * x * (3 - 2 * x)) => ease(Math.max(0, Math.min(1, (value - min) / (max - min))));
+/* src/core/ui/plugins/frame/index.svelte generated by Svelte v3.37.0 */
 
-/* src/core/ui/plugins/resize/index.svelte generated by Svelte v3.37.0 */
-
-function create_default_slot_1(ctx) {
-	let g;
-
-	let raw_value = (isString(/*locale*/ ctx[2].resizeIconButtonMaintainAspectRatio)
-	? /*locale*/ ctx[2].resizeIconButtonMaintainAspectRatio
-	: /*locale*/ ctx[2].resizeIconButtonMaintainAspectRatio(/*maintainAspectRatio*/ ctx[3], /*$iconActiveFraction*/ ctx[12])) + "";
-
-	return {
-		c() {
-			g = svg_element("g");
-		},
-		m(target, anchor) {
-			insert(target, g, anchor);
-			g.innerHTML = raw_value;
-		},
-		p(ctx, dirty) {
-			if (dirty[0] & /*locale, maintainAspectRatio, $iconActiveFraction*/ 4108 && raw_value !== (raw_value = (isString(/*locale*/ ctx[2].resizeIconButtonMaintainAspectRatio)
-			? /*locale*/ ctx[2].resizeIconButtonMaintainAspectRatio
-			: /*locale*/ ctx[2].resizeIconButtonMaintainAspectRatio(/*maintainAspectRatio*/ ctx[3], /*$iconActiveFraction*/ ctx[12])) + "")) g.innerHTML = raw_value;		},
-		d(detaching) {
-			if (detaching) detach(g);
-		}
-	};
-}
-
-// (550:12) <Button type="submit" class="implicit">
-function create_default_slot(ctx) {
-	let t;
-
-	return {
-		c() {
-			t = text("Save");
-		},
-		m(target, anchor) {
-			insert(target, t, anchor);
-		},
-		d(detaching) {
-			if (detaching) detach(t);
-		}
-	};
-}
-
-// (523:4) 
-function create_footer_slot(ctx) {
-	let form;
-	let div4;
-	let fieldset;
-	let legend;
-	let t0_value = /*locale*/ ctx[2].resizeLabelFormCaption + "";
+function create_option_slot(ctx) {
+	let div;
+	let html_tag;
+	let raw_value = (/*getOptionThumb*/ ctx[13](/*option*/ ctx[29].value) || "") + "";
 	let t0;
+	let span;
+
+	let t1_value = (isFunction(/*option*/ ctx[29].label)
+	? /*option*/ ctx[29].label(/*locale*/ ctx[1])
+	: /*option*/ ctx[29].label) + "";
+
 	let t1;
-	let div3;
-	let div0;
-	let label0;
-	let t2_value = /*locale*/ ctx[2].resizeLabelInputWidth + "";
-	let t2;
-	let label0_title_value;
-	let label0_aria_label_value;
-	let t3;
-	let input0;
-	let t4;
-	let div1;
-	let input1;
-	let t5;
-	let label1;
-	let icon;
-	let label1_title_value;
-	let t6;
-	let div2;
-	let label2;
-	let t7_value = /*locale*/ ctx[2].resizeLabelInputHeight + "";
-	let t7;
-	let label2_title_value;
-	let label2_aria_label_value;
-	let t8;
-	let input2;
-	let t9;
-	let button;
+
+	return {
+		c() {
+			div = element("div");
+			t0 = space();
+			span = element("span");
+			t1 = text(t1_value);
+			html_tag = new HtmlTag(t0);
+			attr(div, "slot", "option");
+		},
+		m(target, anchor) {
+			insert(target, div, anchor);
+			html_tag.m(raw_value, div);
+			append(div, t0);
+			append(div, span);
+			append(span, t1);
+		},
+		p(ctx, dirty) {
+			if (dirty & /*option*/ 536870912 && raw_value !== (raw_value = (/*getOptionThumb*/ ctx[13](/*option*/ ctx[29].value) || "") + "")) html_tag.p(raw_value);
+
+			if (dirty & /*option, locale*/ 536870914 && t1_value !== (t1_value = (isFunction(/*option*/ ctx[29].label)
+			? /*option*/ ctx[29].label(/*locale*/ ctx[1])
+			: /*option*/ ctx[29].label) + "")) set_data(t1, t1_value);
+		},
+		d(detaching) {
+			if (detaching) detach(div);
+		}
+	};
+}
+
+// (134:8) <Scrollable elasticity={scrollElasticity}>
+function create_default_slot$2(ctx) {
+	let radiogroup;
 	let current;
-	let mounted;
-	let dispose;
 
-	icon = new Icon({
+	radiogroup = new RadioGroup({
 			props: {
-				$$slots: { default: [create_default_slot_1] },
-				$$scope: { ctx }
-			}
-		});
-
-	button = new Button({
-			props: {
-				type: "submit",
-				class: "implicit",
-				$$slots: { default: [create_default_slot] },
+				locale: /*locale*/ ctx[1],
+				layout: "row",
+				options: /*frameOptions*/ ctx[2],
+				selectedIndex: /*selectedFrameIndex*/ ctx[10],
+				onchange: /*handleChangeFrame*/ ctx[11],
+				$$slots: {
+					option: [
+						create_option_slot,
+						({ option }) => ({ 29: option }),
+						({ option }) => option ? 536870912 : 0
+					]
+				},
 				$$scope: { ctx }
 			}
 		});
 
 	return {
 		c() {
-			form = element("form");
-			div4 = element("div");
-			fieldset = element("fieldset");
-			legend = element("legend");
-			t0 = text(t0_value);
-			t1 = space();
-			div3 = element("div");
-			div0 = element("div");
-			label0 = element("label");
-			t2 = text(t2_value);
-			t3 = space();
-			input0 = element("input");
-			t4 = space();
-			div1 = element("div");
-			input1 = element("input");
-			t5 = space();
-			label1 = element("label");
-			create_component(icon.$$.fragment);
-			t6 = space();
-			div2 = element("div");
-			label2 = element("label");
-			t7 = text(t7_value);
-			t8 = space();
-			input2 = element("input");
-			t9 = space();
-			create_component(button.$$.fragment);
-			attr(legend, "class", "implicit");
-			attr(label0, "for", "width-" + /*formId*/ ctx[24]);
-			attr(label0, "title", label0_title_value = /*locale*/ ctx[2].resizeTitleInputWidth);
-			attr(label0, "aria-label", label0_aria_label_value = /*locale*/ ctx[2].resizeTitleInputWidth);
-			attr(input0, "id", "width-" + /*formId*/ ctx[24]);
-			attr(input0, "type", "text");
-			attr(input0, "inputmode", "numeric");
-			attr(input0, "pattern", "[0-9]*");
-			attr(input0, "data-state", /*widthState*/ ctx[9]);
-			attr(input0, "autocomplete", "off");
-			attr(input0, "placeholder", /*widthPlaceholder*/ ctx[7]);
-			attr(div0, "class", "PinturaInputDimension");
-			attr(input1, "class", "implicit");
-			attr(input1, "id", "maintainAspectRatio-" + /*formId*/ ctx[24]);
-			attr(input1, "type", "checkbox");
-			attr(label1, "for", "maintainAspectRatio-" + /*formId*/ ctx[24]);
-			attr(label1, "title", label1_title_value = /*locale*/ ctx[2].resizeTitleButtonMaintainAspectRatio);
-			attr(label2, "for", "height-" + /*formId*/ ctx[24]);
-			attr(label2, "title", label2_title_value = /*locale*/ ctx[2].resizeTitleInputHeight);
-			attr(label2, "aria-label", label2_aria_label_value = /*locale*/ ctx[2].resizeTitleInputHeight);
-			attr(input2, "id", "height-" + /*formId*/ ctx[24]);
-			attr(input2, "type", "text");
-			attr(input2, "inputmode", "numeric");
-			attr(input2, "pattern", "[0-9]*");
-			attr(input2, "autocomplete", "off");
-			attr(input2, "data-state", /*heightState*/ ctx[10]);
-			attr(input2, "placeholder", /*heightPlaceholder*/ ctx[8]);
-			attr(div2, "class", "PinturaInputDimension");
-			attr(div3, "class", "PinturaFieldsetInner");
-			attr(div4, "class", "PinturaFormInner");
-			attr(form, "slot", "footer");
-			attr(form, "style", /*footerStyle*/ ctx[11]);
+			create_component(radiogroup.$$.fragment);
 		},
 		m(target, anchor) {
-			insert(target, form, anchor);
-			append(form, div4);
-			append(div4, fieldset);
-			append(fieldset, legend);
-			append(legend, t0);
-			append(fieldset, t1);
-			append(fieldset, div3);
-			append(div3, div0);
-			append(div0, label0);
-			append(label0, t2);
-			append(div0, t3);
-			append(div0, input0);
-			set_input_value(input0, /*width*/ ctx[4]);
-			append(div3, t4);
-			append(div3, div1);
-			append(div1, input1);
-			input1.checked = /*maintainAspectRatio*/ ctx[3];
-			append(div1, t5);
-			append(div1, label1);
-			mount_component(icon, label1, null);
-			append(div3, t6);
-			append(div3, div2);
-			append(div2, label2);
-			append(label2, t7);
-			append(div2, t8);
-			append(div2, input2);
-			set_input_value(input2, /*height*/ ctx[5]);
-			/*div3_binding*/ ctx[63](div3);
-			append(div4, t9);
-			mount_component(button, div4, null);
+			mount_component(radiogroup, target, anchor);
 			current = true;
-
-			if (!mounted) {
-				dispose = [
-					listen(input0, "input", /*input0_input_handler*/ ctx[60]),
-					listen(input1, "change", /*input1_change_handler*/ ctx[61]),
-					listen(input2, "input", /*input2_input_handler*/ ctx[62]),
-					listen(div3, "focusin", /*handleFocusIn*/ ctx[25]),
-					listen(div3, "focusout", /*handleFocusOut*/ ctx[26]),
-					listen(form, "submit", prevent_default(/*handleSubmit*/ ctx[27]))
-				];
-
-				mounted = true;
-			}
 		},
 		p(ctx, dirty) {
-			if ((!current || dirty[0] & /*locale*/ 4) && t0_value !== (t0_value = /*locale*/ ctx[2].resizeLabelFormCaption + "")) set_data(t0, t0_value);
-			if ((!current || dirty[0] & /*locale*/ 4) && t2_value !== (t2_value = /*locale*/ ctx[2].resizeLabelInputWidth + "")) set_data(t2, t2_value);
+			const radiogroup_changes = {};
+			if (dirty & /*locale*/ 2) radiogroup_changes.locale = /*locale*/ ctx[1];
+			if (dirty & /*frameOptions*/ 4) radiogroup_changes.options = /*frameOptions*/ ctx[2];
 
-			if (!current || dirty[0] & /*locale*/ 4 && label0_title_value !== (label0_title_value = /*locale*/ ctx[2].resizeTitleInputWidth)) {
-				attr(label0, "title", label0_title_value);
+			if (dirty & /*$$scope, option, locale*/ 1610612738) {
+				radiogroup_changes.$$scope = { dirty, ctx };
 			}
 
-			if (!current || dirty[0] & /*locale*/ 4 && label0_aria_label_value !== (label0_aria_label_value = /*locale*/ ctx[2].resizeTitleInputWidth)) {
-				attr(label0, "aria-label", label0_aria_label_value);
+			radiogroup.$set(radiogroup_changes);
+		},
+		i(local) {
+			if (current) return;
+			transition_in(radiogroup.$$.fragment, local);
+			current = true;
+		},
+		o(local) {
+			transition_out(radiogroup.$$.fragment, local);
+			current = false;
+		},
+		d(detaching) {
+			destroy_component(radiogroup, detaching);
+		}
+	};
+}
+
+// (125:4) 
+function create_footer_slot$1(ctx) {
+	let div;
+	let shapestyleeditor;
+	let t;
+	let scrollable;
+	let current;
+
+	shapestyleeditor = new ShapeStyleEditor({
+			props: {
+				locale: /*locale*/ ctx[1],
+				shape: /*$imageFrame*/ ctx[5],
+				onchange: /*handleUpdateSelectedFrameShape*/ ctx[12],
+				controls: /*markupEditorShapeStyleControls*/ ctx[3],
+				scrollElasticity: /*computedScrollElasticity*/ ctx[4]
+			}
+		});
+
+	scrollable = new Scrollable({
+			props: {
+				elasticity: /*scrollElasticity*/ ctx[8],
+				$$slots: { default: [create_default_slot$2] },
+				$$scope: { ctx }
+			}
+		});
+
+	return {
+		c() {
+			div = element("div");
+			create_component(shapestyleeditor.$$.fragment);
+			t = space();
+			create_component(scrollable.$$.fragment);
+			attr(div, "slot", "footer");
+			attr(div, "style", /*footerStyle*/ ctx[6]);
+		},
+		m(target, anchor) {
+			insert(target, div, anchor);
+			mount_component(shapestyleeditor, div, null);
+			append(div, t);
+			mount_component(scrollable, div, null);
+			current = true;
+		},
+		p(ctx, dirty) {
+			const shapestyleeditor_changes = {};
+			if (dirty & /*locale*/ 2) shapestyleeditor_changes.locale = /*locale*/ ctx[1];
+			if (dirty & /*$imageFrame*/ 32) shapestyleeditor_changes.shape = /*$imageFrame*/ ctx[5];
+			if (dirty & /*markupEditorShapeStyleControls*/ 8) shapestyleeditor_changes.controls = /*markupEditorShapeStyleControls*/ ctx[3];
+			if (dirty & /*computedScrollElasticity*/ 16) shapestyleeditor_changes.scrollElasticity = /*computedScrollElasticity*/ ctx[4];
+			shapestyleeditor.$set(shapestyleeditor_changes);
+			const scrollable_changes = {};
+
+			if (dirty & /*$$scope, locale, frameOptions*/ 1073741830) {
+				scrollable_changes.$$scope = { dirty, ctx };
 			}
 
-			if (!current || dirty[0] & /*widthState*/ 512) {
-				attr(input0, "data-state", /*widthState*/ ctx[9]);
-			}
+			scrollable.$set(scrollable_changes);
 
-			if (!current || dirty[0] & /*widthPlaceholder*/ 128) {
-				attr(input0, "placeholder", /*widthPlaceholder*/ ctx[7]);
-			}
-
-			if (dirty[0] & /*width*/ 16 && input0.value !== /*width*/ ctx[4]) {
-				set_input_value(input0, /*width*/ ctx[4]);
-			}
-
-			if (dirty[0] & /*maintainAspectRatio*/ 8) {
-				input1.checked = /*maintainAspectRatio*/ ctx[3];
-			}
-
-			const icon_changes = {};
-
-			if (dirty[0] & /*locale, maintainAspectRatio, $iconActiveFraction*/ 4108 | dirty[2] & /*$$scope*/ 4096) {
-				icon_changes.$$scope = { dirty, ctx };
-			}
-
-			icon.$set(icon_changes);
-
-			if (!current || dirty[0] & /*locale*/ 4 && label1_title_value !== (label1_title_value = /*locale*/ ctx[2].resizeTitleButtonMaintainAspectRatio)) {
-				attr(label1, "title", label1_title_value);
-			}
-
-			if ((!current || dirty[0] & /*locale*/ 4) && t7_value !== (t7_value = /*locale*/ ctx[2].resizeLabelInputHeight + "")) set_data(t7, t7_value);
-
-			if (!current || dirty[0] & /*locale*/ 4 && label2_title_value !== (label2_title_value = /*locale*/ ctx[2].resizeTitleInputHeight)) {
-				attr(label2, "title", label2_title_value);
-			}
-
-			if (!current || dirty[0] & /*locale*/ 4 && label2_aria_label_value !== (label2_aria_label_value = /*locale*/ ctx[2].resizeTitleInputHeight)) {
-				attr(label2, "aria-label", label2_aria_label_value);
-			}
-
-			if (!current || dirty[0] & /*heightState*/ 1024) {
-				attr(input2, "data-state", /*heightState*/ ctx[10]);
-			}
-
-			if (!current || dirty[0] & /*heightPlaceholder*/ 256) {
-				attr(input2, "placeholder", /*heightPlaceholder*/ ctx[8]);
-			}
-
-			if (dirty[0] & /*height*/ 32 && input2.value !== /*height*/ ctx[5]) {
-				set_input_value(input2, /*height*/ ctx[5]);
-			}
-
-			const button_changes = {};
-
-			if (dirty[2] & /*$$scope*/ 4096) {
-				button_changes.$$scope = { dirty, ctx };
-			}
-
-			button.$set(button_changes);
-
-			if (!current || dirty[0] & /*footerStyle*/ 2048) {
-				attr(form, "style", /*footerStyle*/ ctx[11]);
+			if (!current || dirty & /*footerStyle*/ 64) {
+				attr(div, "style", /*footerStyle*/ ctx[6]);
 			}
 		},
 		i(local) {
 			if (current) return;
-			transition_in(icon.$$.fragment, local);
-			transition_in(button.$$.fragment, local);
+			transition_in(shapestyleeditor.$$.fragment, local);
+			transition_in(scrollable.$$.fragment, local);
 			current = true;
 		},
 		o(local) {
-			transition_out(icon.$$.fragment, local);
-			transition_out(button.$$.fragment, local);
+			transition_out(shapestyleeditor.$$.fragment, local);
+			transition_out(scrollable.$$.fragment, local);
 			current = false;
 		},
 		d(detaching) {
-			if (detaching) detach(form);
-			destroy_component(icon);
-			/*div3_binding*/ ctx[63](null);
-			destroy_component(button);
-			mounted = false;
-			run_all(dispose);
+			if (detaching) detach(div);
+			destroy_component(shapestyleeditor);
+			destroy_component(scrollable);
 		}
 	};
 }
 
-function create_fragment$1(ctx) {
+function create_fragment$5(ctx) {
 	let util;
 	let current;
 
 	util = new Util({
 			props: {
-				$$slots: { footer: [create_footer_slot] },
+				$$slots: { footer: [create_footer_slot$1] },
 				$$scope: { ctx }
 			}
 		});
 
-	util.$on("measure", /*measure_handler*/ ctx[64]);
+	util.$on("measure", /*measure_handler*/ ctx[21]);
 
 	return {
 		c() {
@@ -36755,10 +40779,10 @@ function create_fragment$1(ctx) {
 			mount_component(util, target, anchor);
 			current = true;
 		},
-		p(ctx, dirty) {
+		p(ctx, [dirty]) {
 			const util_changes = {};
 
-			if (dirty[0] & /*footerStyle, fieldsGroup, heightState, heightPlaceholder, height, locale, maintainAspectRatio, $iconActiveFraction, widthState, widthPlaceholder, width*/ 8188 | dirty[2] & /*$$scope*/ 4096) {
+			if (dirty & /*$$scope, footerStyle, locale, frameOptions, $imageFrame, markupEditorShapeStyleControls, computedScrollElasticity*/ 1073741950) {
 				util_changes.$$scope = { dirty, ctx };
 			}
 
@@ -36779,50 +40803,729 @@ function create_fragment$1(ctx) {
 	};
 }
 
-const id = "resize-overlay";
-const maxOpacity = 0.85;
-const size = 180;
-const inset = 40;
-const margin = 0;
-
-function instance$1($$self, $$props, $$invalidate) {
-	let widthState;
-	let heightState;
-	let gradientOverlayHorizontal;
-	let gradientOverlayVertical;
-	let imageTargetSizeCurrent;
-	let overlayTop;
-	let overlayBottom;
-	let overlayLeft;
-	let overlayRight;
-	let gradientOverlays;
+function instance$5($$self, $$props, $$invalidate) {
+	let computedScrollElasticity;
 	let footerStyle;
-	let $imageCropRectAspectRatio;
-	let $imageCropRect;
-	let $imageOutputSize;
-	let $imageCropAspectRatio;
-	let $imageSize;
+	let $imageFrame;
+	let $animation;
 
 	let $isActive,
 		$$unsubscribe_isActive = noop,
-		$$subscribe_isActive = () => ($$unsubscribe_isActive(), $$unsubscribe_isActive = subscribe(isActive, $$value => $$invalidate(42, $isActive = $$value)), isActive);
+		$$subscribe_isActive = () => ($$unsubscribe_isActive(), $$unsubscribe_isActive = subscribe(isActive, $$value => $$invalidate(19, $isActive = $$value)), isActive);
 
-	let $rootBackgroundColor;
-	let $utilRect;
-	let $rootRect;
-
-	let $isActiveFraction,
-		$$unsubscribe_isActiveFraction = noop,
-		$$subscribe_isActiveFraction = () => ($$unsubscribe_isActiveFraction(), $$unsubscribe_isActiveFraction = subscribe(isActiveFraction, $$value => $$invalidate(50, $isActiveFraction = $$value)), isActiveFraction);
-
-	let $overlayYOpacity;
-	let $overlayXOpacity;
-	let $imageOverlayMarkup;
-	let $animation;
 	let $footerOffset;
-	let $iconActiveFraction;
 	$$self.$$.on_destroy.push(() => $$unsubscribe_isActive());
-	$$self.$$.on_destroy.push(() => $$unsubscribe_isActiveFraction());
+	const name = "frame";
+	let { isActive } = $$props;
+	$$subscribe_isActive();
+	let { stores } = $$props;
+	let { locale = {} } = $$props;
+	let { frameStyles = {} } = $$props;
+	let { frameOptions = [] } = $$props;
+	let { markupEditorShapeStyleControls = undefined } = $$props;
+
+	// connect filter choice to stores
+	const { history, animation, elasticityMultiplier, scrollElasticity, imageFrame } = stores;
+
+	component_subscribe($$self, animation, value => $$invalidate(18, $animation = value));
+	component_subscribe($$self, imageFrame, value => $$invalidate(5, $imageFrame = value));
+
+	// current index in frame list
+	let selectedFrameIndex = $imageFrame
+	? frameOptions.findIndex(([id]) => id === $imageFrame.id)
+	: 0;
+
+	// default frame styles
+	let frameActiveStyles = { frameColor: [1, 1, 1] };
+
+	const handleChangeFrame = ({ value }) => {
+		// get new frame
+		const frameBase = frameStyles[value];
+
+		// no new frame selected
+		if (!frameBase || !frameBase.shape) {
+			imageFrame.set(undefined);
+			history.write();
+			return;
+		}
+
+		// create new base frame
+		const frame = {
+			id: value,
+			// set base styles
+			...frameActiveStyles,
+			// copy the frame base, it's possible that this frame has a different layout
+			...shapeDeepCopy(frameBase.shape)
+		};
+
+		imageFrame.set(frame);
+		history.write();
+	};
+
+	let updateWriteHistoryTimeoutId;
+
+	function handleUpdateSelectedFrameShape(props) {
+		// remember color style for when creating or styling other element
+		if (hasProp(props, "frameColor")) frameActiveStyles.frameColor = props.frameColor;
+
+		// it's possible we're only updating default styles
+		if (!$imageFrame) return;
+
+		// frameSelected
+		shapeUpdateProps($imageFrame, props);
+
+		// update shape so ui shape controls are updated
+		imageFrame.set($imageFrame);
+
+		// so we don't write every state change to history
+		clearTimeout(updateWriteHistoryTimeoutId);
+
+		updateWriteHistoryTimeoutId = setTimeout(
+			() => {
+				history.write();
+			},
+			200
+		);
+	}
+
+	const isIncompleteSVGMarkup = str => (/rect|path|circle|line|<g>/i).test(str);
+	const isHTML = str => (/div/i).test(str);
+
+	const getThumb = value => {
+		if (isHTML(value)) return value;
+
+		// could be full svg
+		if (isSVGMarkup(value)) return value;
+
+		// could be a partial svg in which case we turn it into a full svg
+		if (isIncompleteSVGMarkup(value)) return `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" stroke-width="1" stroke="currentColor" fill="none" aria-hidden="true" focusable="false" stroke-linecap="round" stroke-linejoin="round">${value}</svg>`;
+
+		// if not, must be URL
+		return `<img src="${value}" alt=""/>`;
+	};
+
+	const getOptionThumb = key => {
+		const frameStyle = frameStyles[key];
+		if (!frameStyle || !frameStyle.thumb) return;
+		return getThumb(frameStyle.thumb);
+	};
+
+	//
+	// Footer style
+	//
+	const footerOffset = spring($animation ? 20 : 0);
+
+	component_subscribe($$self, footerOffset, value => $$invalidate(20, $footerOffset = value));
+
+	function measure_handler(event) {
+		bubble($$self, event);
+	}
+
+	$$self.$$set = $$props => {
+		if ("isActive" in $$props) $$subscribe_isActive($$invalidate(0, isActive = $$props.isActive));
+		if ("stores" in $$props) $$invalidate(16, stores = $$props.stores);
+		if ("locale" in $$props) $$invalidate(1, locale = $$props.locale);
+		if ("frameStyles" in $$props) $$invalidate(17, frameStyles = $$props.frameStyles);
+		if ("frameOptions" in $$props) $$invalidate(2, frameOptions = $$props.frameOptions);
+		if ("markupEditorShapeStyleControls" in $$props) $$invalidate(3, markupEditorShapeStyleControls = $$props.markupEditorShapeStyleControls);
+	};
+
+	$$self.$$.update = () => {
+		if ($$self.$$.dirty & /*$animation, $isActive*/ 786432) {
+			$animation && footerOffset.set($isActive ? 0 : 20);
+		}
+
+		if ($$self.$$.dirty & /*$footerOffset*/ 1048576) {
+			$$invalidate(6, footerStyle = $footerOffset
+			? `transform: translateY(${$footerOffset}px)`
+			: undefined);
+		}
+	};
+
+	$$invalidate(4, computedScrollElasticity = elasticityMultiplier * scrollElasticity);
+
+	return [
+		isActive,
+		locale,
+		frameOptions,
+		markupEditorShapeStyleControls,
+		computedScrollElasticity,
+		$imageFrame,
+		footerStyle,
+		animation,
+		scrollElasticity,
+		imageFrame,
+		selectedFrameIndex,
+		handleChangeFrame,
+		handleUpdateSelectedFrameShape,
+		getOptionThumb,
+		footerOffset,
+		name,
+		stores,
+		frameStyles,
+		$animation,
+		$isActive,
+		$footerOffset,
+		measure_handler
+	];
+}
+
+class Frame extends SvelteComponent {
+	constructor(options) {
+		super();
+
+		init(this, options, instance$5, create_fragment$5, safe_not_equal, {
+			name: 15,
+			isActive: 0,
+			stores: 16,
+			locale: 1,
+			frameStyles: 17,
+			frameOptions: 2,
+			markupEditorShapeStyleControls: 3
+		});
+	}
+
+	get name() {
+		return this.$$.ctx[15];
+	}
+
+	get isActive() {
+		return this.$$.ctx[0];
+	}
+
+	set isActive(isActive) {
+		this.$set({ isActive });
+		flush();
+	}
+
+	get stores() {
+		return this.$$.ctx[16];
+	}
+
+	set stores(stores) {
+		this.$set({ stores });
+		flush();
+	}
+
+	get locale() {
+		return this.$$.ctx[1];
+	}
+
+	set locale(locale) {
+		this.$set({ locale });
+		flush();
+	}
+
+	get frameStyles() {
+		return this.$$.ctx[17];
+	}
+
+	set frameStyles(frameStyles) {
+		this.$set({ frameStyles });
+		flush();
+	}
+
+	get frameOptions() {
+		return this.$$.ctx[2];
+	}
+
+	set frameOptions(frameOptions) {
+		this.$set({ frameOptions });
+		flush();
+	}
+
+	get markupEditorShapeStyleControls() {
+		return this.$$.ctx[3];
+	}
+
+	set markupEditorShapeStyleControls(markupEditorShapeStyleControls) {
+		this.$set({ markupEditorShapeStyleControls });
+		flush();
+	}
+}
+
+// @ts-ignore
+var _plugin_frame = { util: ['frame', Frame] };
+
+/* src/core/ui/plugins/resize/DimensionInput.svelte generated by Svelte v3.37.0 */
+
+function create_fragment$4(ctx) {
+	let div;
+	let label_1;
+	let t0;
+	let t1;
+	let input;
+	let input_value_value;
+	let mounted;
+	let dispose;
+
+	return {
+		c() {
+			div = element("div");
+			label_1 = element("label");
+			t0 = text(/*label*/ ctx[1]);
+			t1 = space();
+			input = element("input");
+			attr(label_1, "for", /*id*/ ctx[0]);
+			attr(label_1, "title", /*title*/ ctx[2]);
+			attr(label_1, "aria-label", /*title*/ ctx[2]);
+			attr(input, "id", /*id*/ ctx[0]);
+			attr(input, "type", "text");
+			attr(input, "inputmode", "numeric");
+			attr(input, "pattern", "[0-9]*");
+			attr(input, "data-state", /*state*/ ctx[3]);
+			attr(input, "autocomplete", "off");
+			attr(input, "placeholder", /*placeholder*/ ctx[4]);
+
+			input.value = input_value_value = /*value*/ ctx[5] === undefined
+			? ""
+			: /*format*/ ctx[7](/*value*/ ctx[5] + "");
+
+			attr(div, "class", "PinturaInputDimension");
+		},
+		m(target, anchor) {
+			insert(target, div, anchor);
+			append(div, label_1);
+			append(label_1, t0);
+			append(div, t1);
+			append(div, input);
+
+			if (!mounted) {
+				dispose = listen(input, "input", /*input_handler*/ ctx[8]);
+				mounted = true;
+			}
+		},
+		p(ctx, [dirty]) {
+			if (dirty & /*label*/ 2) set_data(t0, /*label*/ ctx[1]);
+
+			if (dirty & /*id*/ 1) {
+				attr(label_1, "for", /*id*/ ctx[0]);
+			}
+
+			if (dirty & /*title*/ 4) {
+				attr(label_1, "title", /*title*/ ctx[2]);
+			}
+
+			if (dirty & /*title*/ 4) {
+				attr(label_1, "aria-label", /*title*/ ctx[2]);
+			}
+
+			if (dirty & /*id*/ 1) {
+				attr(input, "id", /*id*/ ctx[0]);
+			}
+
+			if (dirty & /*state*/ 8) {
+				attr(input, "data-state", /*state*/ ctx[3]);
+			}
+
+			if (dirty & /*placeholder*/ 16) {
+				attr(input, "placeholder", /*placeholder*/ ctx[4]);
+			}
+
+			if (dirty & /*value, format*/ 160 && input_value_value !== (input_value_value = /*value*/ ctx[5] === undefined
+			? ""
+			: /*format*/ ctx[7](/*value*/ ctx[5] + "")) && input.value !== input_value_value) {
+				input.value = input_value_value;
+			}
+		},
+		i: noop,
+		o: noop,
+		d(detaching) {
+			if (detaching) detach(div);
+			mounted = false;
+			dispose();
+		}
+	};
+}
+
+function instance$4($$self, $$props, $$invalidate) {
+	let { id } = $$props;
+	let { label } = $$props;
+	let { title } = $$props;
+	let { state } = $$props;
+	let { placeholder } = $$props;
+	let { value } = $$props;
+	let { onchange } = $$props;
+	let { format = str => str.replace(/\D/g, "") } = $$props;
+	const input_handler = e => onchange(format(e.currentTarget.value));
+
+	$$self.$$set = $$props => {
+		if ("id" in $$props) $$invalidate(0, id = $$props.id);
+		if ("label" in $$props) $$invalidate(1, label = $$props.label);
+		if ("title" in $$props) $$invalidate(2, title = $$props.title);
+		if ("state" in $$props) $$invalidate(3, state = $$props.state);
+		if ("placeholder" in $$props) $$invalidate(4, placeholder = $$props.placeholder);
+		if ("value" in $$props) $$invalidate(5, value = $$props.value);
+		if ("onchange" in $$props) $$invalidate(6, onchange = $$props.onchange);
+		if ("format" in $$props) $$invalidate(7, format = $$props.format);
+	};
+
+	return [id, label, title, state, placeholder, value, onchange, format, input_handler];
+}
+
+class DimensionInput extends SvelteComponent {
+	constructor(options) {
+		super();
+
+		init(this, options, instance$4, create_fragment$4, safe_not_equal, {
+			id: 0,
+			label: 1,
+			title: 2,
+			state: 3,
+			placeholder: 4,
+			value: 5,
+			onchange: 6,
+			format: 7
+		});
+	}
+}
+
+/* src/core/ui/plugins/resize/DimensionLock.svelte generated by Svelte v3.37.0 */
+
+function create_default_slot$1(ctx) {
+	let g;
+
+	return {
+		c() {
+			g = svg_element("g");
+		},
+		m(target, anchor) {
+			insert(target, g, anchor);
+			g.innerHTML = /*icon*/ ctx[2];
+		},
+		p(ctx, dirty) {
+			if (dirty & /*icon*/ 4) g.innerHTML = /*icon*/ ctx[2];		},
+		d(detaching) {
+			if (detaching) detach(g);
+		}
+	};
+}
+
+function create_fragment$3(ctx) {
+	let div;
+	let input;
+	let t;
+	let label;
+	let icon_1;
+	let current;
+	let mounted;
+	let dispose;
+
+	icon_1 = new Icon({
+			props: {
+				$$slots: { default: [create_default_slot$1] },
+				$$scope: { ctx }
+			}
+		});
+
+	return {
+		c() {
+			div = element("div");
+			input = element("input");
+			t = space();
+			label = element("label");
+			create_component(icon_1.$$.fragment);
+			attr(input, "id", /*id*/ ctx[0]);
+			attr(input, "class", "implicit");
+			attr(input, "type", "checkbox");
+			input.checked = /*locked*/ ctx[1];
+			attr(label, "for", /*id*/ ctx[0]);
+			attr(label, "title", /*title*/ ctx[3]);
+		},
+		m(target, anchor) {
+			insert(target, div, anchor);
+			append(div, input);
+			append(div, t);
+			append(div, label);
+			mount_component(icon_1, label, null);
+			current = true;
+
+			if (!mounted) {
+				dispose = listen(input, "change", /*change_handler*/ ctx[5]);
+				mounted = true;
+			}
+		},
+		p(ctx, [dirty]) {
+			if (!current || dirty & /*id*/ 1) {
+				attr(input, "id", /*id*/ ctx[0]);
+			}
+
+			if (!current || dirty & /*locked*/ 2) {
+				input.checked = /*locked*/ ctx[1];
+			}
+
+			const icon_1_changes = {};
+
+			if (dirty & /*$$scope, icon*/ 68) {
+				icon_1_changes.$$scope = { dirty, ctx };
+			}
+
+			icon_1.$set(icon_1_changes);
+
+			if (!current || dirty & /*id*/ 1) {
+				attr(label, "for", /*id*/ ctx[0]);
+			}
+
+			if (!current || dirty & /*title*/ 8) {
+				attr(label, "title", /*title*/ ctx[3]);
+			}
+		},
+		i(local) {
+			if (current) return;
+			transition_in(icon_1.$$.fragment, local);
+			current = true;
+		},
+		o(local) {
+			transition_out(icon_1.$$.fragment, local);
+			current = false;
+		},
+		d(detaching) {
+			if (detaching) detach(div);
+			destroy_component(icon_1);
+			mounted = false;
+			dispose();
+		}
+	};
+}
+
+function instance$3($$self, $$props, $$invalidate) {
+	let { id } = $$props;
+	let { locked } = $$props;
+	let { icon } = $$props;
+	let { title } = $$props;
+	let { onchange } = $$props;
+	const change_handler = e => onchange(e.currentTarget.checked);
+
+	$$self.$$set = $$props => {
+		if ("id" in $$props) $$invalidate(0, id = $$props.id);
+		if ("locked" in $$props) $$invalidate(1, locked = $$props.locked);
+		if ("icon" in $$props) $$invalidate(2, icon = $$props.icon);
+		if ("title" in $$props) $$invalidate(3, title = $$props.title);
+		if ("onchange" in $$props) $$invalidate(4, onchange = $$props.onchange);
+	};
+
+	return [id, locked, icon, title, onchange, change_handler];
+}
+
+class DimensionLock extends SvelteComponent {
+	constructor(options) {
+		super();
+
+		init(this, options, instance$3, create_fragment$3, safe_not_equal, {
+			id: 0,
+			locked: 1,
+			icon: 2,
+			title: 3,
+			onchange: 4
+		});
+	}
+}
+
+/* src/core/ui/plugins/resize/index.svelte generated by Svelte v3.37.0 */
+
+function create_default_slot(ctx) {
+	let t;
+
+	return {
+		c() {
+			t = text("Save");
+		},
+		m(target, anchor) {
+			insert(target, t, anchor);
+		},
+		d(detaching) {
+			if (detaching) detach(t);
+		}
+	};
+}
+
+// (551:4) 
+function create_footer_slot(ctx) {
+	let form;
+	let div1;
+	let fieldset;
+	let legend;
+	let t0_value = /*locale*/ ctx[1].resizeLabelFormCaption + "";
+	let t0;
+	let t1;
+	let div0;
+	let dynamiccomponenttree;
+	let t2;
+	let button;
+	let current;
+	let mounted;
+	let dispose;
+	dynamiccomponenttree = new DynamicComponentTree_1({ props: { items: /*tools*/ ctx[3] } });
+
+	button = new Button({
+			props: {
+				type: "submit",
+				class: "implicit",
+				$$slots: { default: [create_default_slot] },
+				$$scope: { ctx }
+			}
+		});
+
+	return {
+		c() {
+			form = element("form");
+			div1 = element("div");
+			fieldset = element("fieldset");
+			legend = element("legend");
+			t0 = text(t0_value);
+			t1 = space();
+			div0 = element("div");
+			create_component(dynamiccomponenttree.$$.fragment);
+			t2 = space();
+			create_component(button.$$.fragment);
+			attr(legend, "class", "implicit");
+			attr(div0, "class", "PinturaFieldsetInner");
+			attr(div1, "class", "PinturaFormInner");
+			attr(form, "slot", "footer");
+			attr(form, "style", /*footerStyle*/ ctx[4]);
+		},
+		m(target, anchor) {
+			insert(target, form, anchor);
+			append(form, div1);
+			append(div1, fieldset);
+			append(fieldset, legend);
+			append(legend, t0);
+			append(fieldset, t1);
+			append(fieldset, div0);
+			mount_component(dynamiccomponenttree, div0, null);
+			/*div0_binding*/ ctx[62](div0);
+			append(div1, t2);
+			mount_component(button, div1, null);
+			current = true;
+
+			if (!mounted) {
+				dispose = [
+					listen(div0, "focusin", /*handleFocusIn*/ ctx[13]),
+					listen(div0, "focusout", /*handleFocusOut*/ ctx[14]),
+					listen(form, "submit", prevent_default(/*handleSubmit*/ ctx[15]))
+				];
+
+				mounted = true;
+			}
+		},
+		p(ctx, dirty) {
+			if ((!current || dirty[0] & /*locale*/ 2) && t0_value !== (t0_value = /*locale*/ ctx[1].resizeLabelFormCaption + "")) set_data(t0, t0_value);
+			const dynamiccomponenttree_changes = {};
+			if (dirty[0] & /*tools*/ 8) dynamiccomponenttree_changes.items = /*tools*/ ctx[3];
+			dynamiccomponenttree.$set(dynamiccomponenttree_changes);
+			const button_changes = {};
+
+			if (dirty[2] & /*$$scope*/ 2097152) {
+				button_changes.$$scope = { dirty, ctx };
+			}
+
+			button.$set(button_changes);
+
+			if (!current || dirty[0] & /*footerStyle*/ 16) {
+				attr(form, "style", /*footerStyle*/ ctx[4]);
+			}
+		},
+		i(local) {
+			if (current) return;
+			transition_in(dynamiccomponenttree.$$.fragment, local);
+			transition_in(button.$$.fragment, local);
+			current = true;
+		},
+		o(local) {
+			transition_out(dynamiccomponenttree.$$.fragment, local);
+			transition_out(button.$$.fragment, local);
+			current = false;
+		},
+		d(detaching) {
+			if (detaching) detach(form);
+			destroy_component(dynamiccomponenttree);
+			/*div0_binding*/ ctx[62](null);
+			destroy_component(button);
+			mounted = false;
+			run_all(dispose);
+		}
+	};
+}
+
+function create_fragment$2(ctx) {
+	let util;
+	let current;
+
+	util = new Util({
+			props: {
+				$$slots: { footer: [create_footer_slot] },
+				$$scope: { ctx }
+			}
+		});
+
+	util.$on("measure", /*measure_handler*/ ctx[63]);
+
+	return {
+		c() {
+			create_component(util.$$.fragment);
+		},
+		m(target, anchor) {
+			mount_component(util, target, anchor);
+			current = true;
+		},
+		p(ctx, dirty) {
+			const util_changes = {};
+
+			if (dirty[0] & /*footerStyle, fieldsGroup, tools, locale*/ 30 | dirty[2] & /*$$scope*/ 2097152) {
+				util_changes.$$scope = { dirty, ctx };
+			}
+
+			util.$set(util_changes);
+		},
+		i(local) {
+			if (current) return;
+			transition_in(util.$$.fragment, local);
+			current = true;
+		},
+		o(local) {
+			transition_out(util.$$.fragment, local);
+			current = false;
+		},
+		d(detaching) {
+			destroy_component(util, detaching);
+		}
+	};
+}
+
+function instance$2($$self, $$props, $$invalidate) {
+	let sizePresetLabel;
+	let widthPresetLabel;
+	let heightPresetLabel;
+	let canRenderSizePresets;
+	let canRenderWidthPresets;
+	let canRenderHeightPresets;
+	let canRenderSizeInputs;
+	let tools;
+	let footerStyle;
+	let $imageCropRectAspectRatio;
+	let $imageOutputSize;
+	let $imageCropAspectRatio;
+	let $imageSize;
+	let $formattedResizeSizePresetOptions;
+	let $formattedResizeSizePresetOptionsFlattened;
+	let $formattedResizeWidthPresetOptions;
+	let $formattedResizeWidthPresetOptionsFlattened;
+	let $formattedResizeHeightPresetOptions;
+	let $formattedResizeHeightPresetOptionsFlattened;
+	let $sizePresetSelectedIndex;
+	let $widthPresetSelectedIndex;
+	let $heightPresetSelectedIndex;
+	let $imageCropRect;
+	let $iconActiveFraction;
+	let $env;
+	let $animation;
+
+	let $isActive,
+		$$unsubscribe_isActive = noop,
+		$$subscribe_isActive = () => ($$unsubscribe_isActive(), $$unsubscribe_isActive = subscribe(isActive, $$value => $$invalidate(60, $isActive = $$value)), isActive);
+
+	let $footerOffset;
+	$$self.$$.on_destroy.push(() => $$unsubscribe_isActive());
 
 	const formatValue = (value, min = 0, max = 9999) => {
 		if (isString(value)) {
@@ -36838,39 +41541,46 @@ function instance$1($$self, $$props, $$invalidate) {
 	const name = "resize";
 	let { isActive } = $$props;
 	$$subscribe_isActive();
-	let { isActiveFraction } = $$props;
-	$$subscribe_isActiveFraction();
 	let { stores } = $$props;
 	let { locale = {} } = $$props;
 	let { resizeMinSize = sizeCreate(1, 1) } = $$props;
 	let { resizeMaxSize = sizeCreate(9999, 9999) } = $$props;
+	let { resizeSizePresetOptions = undefined } = $$props;
+	let { resizeWidthPresetOptions = undefined } = $$props;
+	let { resizeHeightPresetOptions = undefined } = $$props;
+	let { resizeWillRenderFooter = passthrough } = $$props;
 
 	// offset
 	const iconActiveFraction = spring(0, { stiffness: 0.15, damping: 0.3 });
 
-	component_subscribe($$self, iconActiveFraction, value => $$invalidate(12, $iconActiveFraction = value));
-	const { animation, utilRect, rootRect, rootBackgroundColor, imageSize, imageCropRect, imageCropRectAspectRatio, imageCropAspectRatio, imageOutputSize, imageOverlayMarkup, history } = stores;
-	component_subscribe($$self, animation, value => $$invalidate(58, $animation = value));
-	component_subscribe($$self, utilRect, value => $$invalidate(47, $utilRect = value));
-	component_subscribe($$self, rootRect, value => $$invalidate(49, $rootRect = value));
-	component_subscribe($$self, rootBackgroundColor, value => $$invalidate(43, $rootBackgroundColor = value));
-	component_subscribe($$self, imageSize, value => $$invalidate(67, $imageSize = value));
-	component_subscribe($$self, imageCropRect, value => $$invalidate(40, $imageCropRect = value));
+	component_subscribe($$self, iconActiveFraction, value => $$invalidate(57, $iconActiveFraction = value));
+	const { animation, imageSize, imageCropRect, imageCropRectAspectRatio, imageCropAspectRatio, imageOutputSize, history, env } = stores;
+	component_subscribe($$self, animation, value => $$invalidate(59, $animation = value));
+	component_subscribe($$self, imageSize, value => $$invalidate(69, $imageSize = value));
+	component_subscribe($$self, imageCropRect, value => $$invalidate(52, $imageCropRect = value));
 	component_subscribe($$self, imageCropRectAspectRatio, value => $$invalidate(39, $imageCropRectAspectRatio = value));
-	component_subscribe($$self, imageCropAspectRatio, value => $$invalidate(66, $imageCropAspectRatio = value));
-	component_subscribe($$self, imageOutputSize, value => $$invalidate(41, $imageOutputSize = value));
-	component_subscribe($$self, imageOverlayMarkup, value => $$invalidate(57, $imageOverlayMarkup = value));
+	component_subscribe($$self, imageCropAspectRatio, value => $$invalidate(68, $imageCropAspectRatio = value));
+	component_subscribe($$self, imageOutputSize, value => $$invalidate(67, $imageOutputSize = value));
+	component_subscribe($$self, env, value => $$invalidate(58, $env = value));
 	const formId = getUniqueId();
 	let fieldsGroup;
 	let maintainAspectRatio = false;
 	let width;
 	let height;
-	let widthFormatted;
-	let heightFormatted;
-	let widthPlaceholder;
-	let heightPlaceholder;
 	let activeField;
 	let lastActiveField;
+
+	const getState = (value, field, activeField, resizeMinSize, resizeMaxSize) => value != null && activeField !== field
+	? value >= resizeMinSize[field] && value <= resizeMaxSize[field]
+		? "valid"
+		: "invalid"
+	: "undetermined";
+
+	const getWidthPlaceholder = (value, cropAspectRatio, cropRect) => Math.round(value != null ? value * cropAspectRatio : cropRect.width);
+
+	const getHeightPlaceholder = (value, cropAspectRatio, cropRect) => Math.round(value != null
+	? value / cropAspectRatio
+	: cropRect.height);
 
 	// populate active field
 	const handleFocusIn = e => {
@@ -36894,23 +41604,26 @@ function instance$1($$self, $$props, $$invalidate) {
 
 	// sync fields if one has a value and aspect ratio should be maintained
 	const syncFields = () => {
+		if (!maintainAspectRatio || !width || !height) return;
+
 		if (activeField === "width") {
 			// sync height field
-			$$invalidate(5, height = Math.round(width / $imageCropRectAspectRatio));
+			$$invalidate(36, height = Math.round(width / $imageCropRectAspectRatio));
 		} else if (activeField === "height") {
 			// sync width field
-			$$invalidate(4, width = Math.round(height * $imageCropRectAspectRatio));
+			$$invalidate(35, width = Math.round(height * $imageCropRectAspectRatio));
 		} else {
 			if (lastActiveField === "width") {
-				$$invalidate(5, height = Math.round(width / $imageCropRectAspectRatio));
+				$$invalidate(36, height = Math.round(width / $imageCropRectAspectRatio));
 			} else if (lastActiveField === "height") {
-				$$invalidate(4, width = Math.round(height * $imageCropRectAspectRatio));
+				$$invalidate(35, width = Math.round(height * $imageCropRectAspectRatio));
 			}
 
 			consolidateSize();
 		}
 	};
 
+	// $: if (maintainAspectRatio && width && height) syncFields()
 	const consolidateSize = forcedAspectRatio => {
 		// first need to limit values
 		let inputWidth = formatValue(width);
@@ -36948,11 +41661,11 @@ function instance$1($$self, $$props, $$invalidate) {
 			currentSize = rectCoverRect(resizeMinSize, aspectRatio);
 		}
 
-		$$invalidate(4, width = inputWidth != null
+		$$invalidate(35, width = inputWidth != null
 		? Math.round(currentSize.width)
 		: undefined);
 
-		$$invalidate(5, height = inputHeight != null
+		$$invalidate(36, height = inputHeight != null
 		? Math.round(currentSize.height)
 		: undefined);
 	};
@@ -36985,22 +41698,22 @@ function instance$1($$self, $$props, $$invalidate) {
 	};
 
 	// handle external updates to outputSize
-	imageOutputSize.subscribe(size => {
+	const imageOutputSizeUnsub = imageOutputSize.subscribe(size => {
 		if (!size) {
-			$$invalidate(4, width = undefined);
-			$$invalidate(5, height = undefined);
+			$$invalidate(35, width = undefined);
+			$$invalidate(36, height = undefined);
 			return;
 		}
 
-		$$invalidate(4, width = size.width);
-		$$invalidate(5, height = size.height);
+		$$invalidate(35, width = size.width);
+		$$invalidate(36, height = size.height);
 
 		// make sure the size conforms to min max
 		consolidateSize();
 	});
 
 	// if the crop aspect ratio is changed we need to align width/height
-	imageCropAspectRatio.subscribe(cropAspectRatio => {
+	const imageCropAspectRatioUnsub = imageCropAspectRatio.subscribe(cropAspectRatio => {
 		// exit if no dimensions supplied
 		if (!width && !height) return;
 
@@ -37009,7 +41722,7 @@ function instance$1($$self, $$props, $$invalidate) {
 
 		// fix size to match new aspect ratio of the crop
 		if (width && height && getAspectRatio(width, height) !== cropAspectRatio) {
-			$$invalidate(5, height = width / cropAspectRatio);
+			$$invalidate(36, height = width / cropAspectRatio);
 			consolidateSize(cropAspectRatio);
 		} else {
 			consolidateSize();
@@ -37017,95 +41730,137 @@ function instance$1($$self, $$props, $$invalidate) {
 	});
 
 	//
-	// Overlay
+	// size presets
 	//
-	// create canvas gradient for use as menu backdrop
-	const getOverlayGradient = (width, height, color) => {
-		const ctx = document.createElement("canvas").getContext("2d");
-		ctx.canvas.width = Math.max(1, width);
-		ctx.canvas.height = Math.max(1, height);
-		const gradient = ctx.createLinearGradient(0, 0, width, height);
+	const formatPresetDimensionOption = option => {
+		if (isString(option[0])) {
+			option[1] = option[1].map(formatPresetDimensionOption);
+			return option;
+		}
 
-		[
-			[0, 0],
-			[0.013, 0.081],
-			[0.049, 0.155],
-			[0.104, 0.225],
-			[0.175, 0.29],
-			[0.259, 0.353],
-			[0.352, 0.412],
-			[0.45, 0.471],
-			[0.55, 0.529],
-			[0.648, 0.588],
-			[0.741, 0.647],
-			[0.825, 0.71],
-			[0.896, 0.775],
-			[0.951, 0.845],
-			[0.987, 0.919],
-			[1, 1]
-		].forEach(([o, s]) => gradient.addColorStop(s, `rgba(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255}, ${o})`));
-
-		ctx.fillStyle = gradient;
-		ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-		document.body.appendChild(ctx.canvas);
-		return ctx.canvas;
+		return isNumber(option) ? [option, "" + option] : option;
 	};
 
-	const calculateImageTargetSize = (outputSize, cropRect) => {
-		let { width, height } = outputSize;
-		const aspectRatio = rectAspectRatio(cropRect);
-		if (width && height) return outputSize;
-
-		if (width && !height) {
-			height = width / aspectRatio;
+	const formatPresetSizeOption = option => {
+		if (isString(option[0])) {
+			option[1] = option[1].map(formatPresetSizeOption);
+			return option;
 		}
 
-		if (height && !width) {
-			width = height * aspectRatio;
+		let [value, label] = option;
+
+		// Size only
+		if (isNumber(value) && isNumber(label)) {
+			const [w, h] = [value, label];
+			label = `${w} × ${h}`;
+			value = [w, h];
 		}
 
-		if (!width && !height) {
-			width = cropRect.width;
-			height = cropRect.height;
-		}
-
-		return sizeApply(sizeCreate(width, height), Math.round);
+		return [value, label];
 	};
 
-	const overlayXOpacity = spring(0);
-	component_subscribe($$self, overlayXOpacity, value => $$invalidate(54, $overlayXOpacity = value));
-	const overlayYOpacity = spring(0);
-	component_subscribe($$self, overlayYOpacity, value => $$invalidate(51, $overlayYOpacity = value));
+	const formattedResizeSizePresetOptions = writable();
+	component_subscribe($$self, formattedResizeSizePresetOptions, value => $$invalidate(40, $formattedResizeSizePresetOptions = value));
+	const formattedResizeSizePresetOptionsFlattened = writable();
+	component_subscribe($$self, formattedResizeSizePresetOptionsFlattened, value => $$invalidate(41, $formattedResizeSizePresetOptionsFlattened = value));
+	const formattedResizeWidthPresetOptions = writable();
+	component_subscribe($$self, formattedResizeWidthPresetOptions, value => $$invalidate(42, $formattedResizeWidthPresetOptions = value));
+	const formattedResizeWidthPresetOptionsFlattened = writable();
+	component_subscribe($$self, formattedResizeWidthPresetOptionsFlattened, value => $$invalidate(43, $formattedResizeWidthPresetOptionsFlattened = value));
+	const formattedResizeHeightPresetOptions = writable();
+	component_subscribe($$self, formattedResizeHeightPresetOptions, value => $$invalidate(44, $formattedResizeHeightPresetOptions = value));
+	const formattedResizeHeightPresetOptionsFlattened = writable();
+	component_subscribe($$self, formattedResizeHeightPresetOptionsFlattened, value => $$invalidate(45, $formattedResizeHeightPresetOptionsFlattened = value));
 
-	// make sure canvas only redraws if background color changes
-	let currentRootBackgroundColor;
+	const sizePresetSelectedIndex = derived([imageOutputSize, formattedResizeSizePresetOptionsFlattened], ([$imageOutputSize, $formattedResizeSizePresetOptionsFlattened], set) => {
+		if (!$formattedResizeSizePresetOptionsFlattened) return set(-1);
+
+		const index = $formattedResizeSizePresetOptionsFlattened.findIndex(([value]) => {
+			if (!value && !$imageOutputSize) return true;
+			if (!value) return false;
+			const [width, height] = value;
+			return $imageOutputSize.width === width && $imageOutputSize.height === height;
+		});
+
+		set(index < 0 ? 0 : index);
+	});
+
+	component_subscribe($$self, sizePresetSelectedIndex, value => $$invalidate(47, $sizePresetSelectedIndex = value));
+
+	const widthPresetSelectedIndex = derived([imageOutputSize, formattedResizeWidthPresetOptionsFlattened], ([$imageOutputSize, $formattedResizeWidthPresetOptionsFlattened], set) => {
+		if (!$formattedResizeWidthPresetOptionsFlattened) return set(-1);
+
+		const index = $formattedResizeWidthPresetOptionsFlattened.findIndex(([value]) => {
+			if (!value && !$imageOutputSize) return true;
+			if (!value) return false;
+			return $imageOutputSize.width === value;
+		});
+
+		set(index < 0 ? 0 : index);
+	});
+
+	component_subscribe($$self, widthPresetSelectedIndex, value => $$invalidate(49, $widthPresetSelectedIndex = value));
+
+	const heightPresetSelectedIndex = derived([imageOutputSize, formattedResizeHeightPresetOptionsFlattened], ([$imageOutputSize, $formattedResizeHeightPresetOptionsFlattened], set) => {
+		if (!$formattedResizeHeightPresetOptionsFlattened) return set(-1);
+
+		const index = $formattedResizeHeightPresetOptionsFlattened.findIndex(([value]) => {
+			if (!value && !$imageOutputSize) return true;
+			if (!value) return false;
+			return $imageOutputSize.height === value;
+		});
+
+		set(index < 0 ? 0 : index);
+	});
+
+	component_subscribe($$self, heightPresetSelectedIndex, value => $$invalidate(51, $heightPresetSelectedIndex = value));
+	let storedCropRect = undefined;
+	let storedCropAspectRatio = undefined;
+
+	const setImageOutputSizeWithArray = size => {
+		if (size && !storedCropRect) {
+			storedCropRect = { ...$imageCropRect };
+			storedCropAspectRatio = $imageCropAspectRatio;
+		}
+
+		if (!size) {
+			set_store_value(imageCropRect, $imageCropRect = storedCropRect, $imageCropRect);
+			set_store_value(imageCropAspectRatio, $imageCropAspectRatio = storedCropAspectRatio, $imageCropAspectRatio);
+			set_store_value(imageOutputSize, $imageOutputSize = undefined, $imageOutputSize);
+			storedCropRect = undefined;
+			storedCropAspectRatio = undefined;
+		} else {
+			set_store_value(imageCropAspectRatio, $imageCropAspectRatio = getAspectRatio(size[0], size[1]), $imageCropAspectRatio);
+			set_store_value(imageOutputSize, $imageOutputSize = sizeCreateFromArray(size), $imageOutputSize);
+		}
+
+		history.write();
+	};
+
+	//
+	// toolbar
+	//
+	let redrawTrigger = {};
 
 	//
 	// Footer
 	//
 	const footerOffset = spring($animation ? 20 : 0);
 
-	component_subscribe($$self, footerOffset, value => $$invalidate(59, $footerOffset = value));
+	component_subscribe($$self, footerOffset, value => $$invalidate(61, $footerOffset = value));
 
-	function input0_input_handler() {
-		width = this.value;
-		$$invalidate(4, width);
-	}
+	//
+	// Clean up
+	//
+	onDestroy(() => {
+		imageOutputSizeUnsub();
+		imageCropAspectRatioUnsub();
+	});
 
-	function input1_change_handler() {
-		maintainAspectRatio = this.checked;
-		$$invalidate(3, maintainAspectRatio);
-	}
-
-	function input2_input_handler() {
-		height = this.value;
-		$$invalidate(5, height);
-	}
-
-	function div3_binding($$value) {
+	function div0_binding($$value) {
 		binding_callbacks[$$value ? "unshift" : "push"](() => {
 			fieldsGroup = $$value;
-			$$invalidate(6, fieldsGroup);
+			$$invalidate(2, fieldsGroup);
 		});
 	}
 
@@ -37115,15 +41870,171 @@ function instance$1($$self, $$props, $$invalidate) {
 
 	$$self.$$set = $$props => {
 		if ("isActive" in $$props) $$subscribe_isActive($$invalidate(0, isActive = $$props.isActive));
-		if ("isActiveFraction" in $$props) $$subscribe_isActiveFraction($$invalidate(1, isActiveFraction = $$props.isActiveFraction));
-		if ("stores" in $$props) $$invalidate(32, stores = $$props.stores);
-		if ("locale" in $$props) $$invalidate(2, locale = $$props.locale);
-		if ("resizeMinSize" in $$props) $$invalidate(33, resizeMinSize = $$props.resizeMinSize);
-		if ("resizeMaxSize" in $$props) $$invalidate(34, resizeMaxSize = $$props.resizeMaxSize);
+		if ("stores" in $$props) $$invalidate(27, stores = $$props.stores);
+		if ("locale" in $$props) $$invalidate(1, locale = $$props.locale);
+		if ("resizeMinSize" in $$props) $$invalidate(28, resizeMinSize = $$props.resizeMinSize);
+		if ("resizeMaxSize" in $$props) $$invalidate(29, resizeMaxSize = $$props.resizeMaxSize);
+		if ("resizeSizePresetOptions" in $$props) $$invalidate(30, resizeSizePresetOptions = $$props.resizeSizePresetOptions);
+		if ("resizeWidthPresetOptions" in $$props) $$invalidate(31, resizeWidthPresetOptions = $$props.resizeWidthPresetOptions);
+		if ("resizeHeightPresetOptions" in $$props) $$invalidate(32, resizeHeightPresetOptions = $$props.resizeHeightPresetOptions);
+		if ("resizeWillRenderFooter" in $$props) $$invalidate(33, resizeWillRenderFooter = $$props.resizeWillRenderFooter);
 	};
 
 	$$self.$$.update = () => {
-		if ($$self.$$.dirty[0] & /*maintainAspectRatio*/ 8) {
+		if ($$self.$$.dirty[0] & /*resizeSizePresetOptions*/ 1073741824 | $$self.$$.dirty[1] & /*$formattedResizeSizePresetOptions*/ 512) {
+			if (resizeSizePresetOptions) {
+				set_store_value(formattedResizeSizePresetOptions, $formattedResizeSizePresetOptions = resizeSizePresetOptions.map(formatPresetSizeOption), $formattedResizeSizePresetOptions);
+				set_store_value(formattedResizeSizePresetOptionsFlattened, $formattedResizeSizePresetOptionsFlattened = flattenOptions($formattedResizeSizePresetOptions), $formattedResizeSizePresetOptionsFlattened);
+			}
+		}
+
+		if ($$self.$$.dirty[1] & /*$formattedResizeSizePresetOptions*/ 512) {
+			//
+			// helper bools
+			//
+			$$invalidate(53, canRenderSizePresets = !!$formattedResizeSizePresetOptions);
+		}
+
+		if ($$self.$$.dirty[1] & /*$sizePresetSelectedIndex, $formattedResizeSizePresetOptionsFlattened*/ 66560) {
+			$$invalidate(46, sizePresetLabel = $sizePresetSelectedIndex > -1 && $formattedResizeSizePresetOptionsFlattened[$sizePresetSelectedIndex][1]);
+		}
+
+		if ($$self.$$.dirty[1] & /*resizeWidthPresetOptions, $formattedResizeWidthPresetOptions*/ 2049) {
+			if (resizeWidthPresetOptions) {
+				set_store_value(formattedResizeWidthPresetOptions, $formattedResizeWidthPresetOptions = resizeWidthPresetOptions.map(formatPresetDimensionOption), $formattedResizeWidthPresetOptions);
+				set_store_value(formattedResizeWidthPresetOptionsFlattened, $formattedResizeWidthPresetOptionsFlattened = flattenOptions($formattedResizeWidthPresetOptions), $formattedResizeWidthPresetOptionsFlattened);
+			}
+		}
+
+		if ($$self.$$.dirty[1] & /*canRenderSizePresets, $formattedResizeWidthPresetOptions*/ 4196352) {
+			$$invalidate(54, canRenderWidthPresets = !canRenderSizePresets && $formattedResizeWidthPresetOptions);
+		}
+
+		if ($$self.$$.dirty[1] & /*$widthPresetSelectedIndex, $formattedResizeWidthPresetOptionsFlattened*/ 266240) {
+			$$invalidate(48, widthPresetLabel = $widthPresetSelectedIndex > -1 && $formattedResizeWidthPresetOptionsFlattened[$widthPresetSelectedIndex][1]);
+		}
+
+		if ($$self.$$.dirty[1] & /*resizeHeightPresetOptions, $formattedResizeHeightPresetOptions*/ 8194) {
+			if (resizeHeightPresetOptions) {
+				set_store_value(formattedResizeHeightPresetOptions, $formattedResizeHeightPresetOptions = resizeHeightPresetOptions.map(formatPresetDimensionOption), $formattedResizeHeightPresetOptions);
+				set_store_value(formattedResizeHeightPresetOptionsFlattened, $formattedResizeHeightPresetOptionsFlattened = flattenOptions($formattedResizeHeightPresetOptions), $formattedResizeHeightPresetOptionsFlattened);
+			}
+		}
+
+		if ($$self.$$.dirty[1] & /*canRenderSizePresets, $formattedResizeHeightPresetOptions*/ 4202496) {
+			$$invalidate(55, canRenderHeightPresets = !canRenderSizePresets && $formattedResizeHeightPresetOptions);
+		}
+
+		if ($$self.$$.dirty[1] & /*$heightPresetSelectedIndex, $formattedResizeHeightPresetOptionsFlattened*/ 1064960) {
+			$$invalidate(50, heightPresetLabel = $heightPresetSelectedIndex > -1 && $formattedResizeHeightPresetOptionsFlattened[$heightPresetSelectedIndex][1]);
+		}
+
+		if ($$self.$$.dirty[1] & /*canRenderSizePresets, canRenderWidthPresets, canRenderHeightPresets*/ 29360128) {
+			$$invalidate(56, canRenderSizeInputs = !canRenderSizePresets && !canRenderWidthPresets && !canRenderHeightPresets);
+		}
+
+		if ($$self.$$.dirty[0] & /*locale, resizeMinSize, resizeMaxSize*/ 805306370 | $$self.$$.dirty[1] & /*redrawTrigger, resizeWillRenderFooter, canRenderSizePresets, sizePresetLabel, $formattedResizeSizePresetOptions, $sizePresetSelectedIndex, canRenderWidthPresets, widthPresetLabel, $formattedResizeWidthPresetOptions, $widthPresetSelectedIndex, canRenderHeightPresets, heightPresetLabel, $formattedResizeHeightPresetOptions, $heightPresetSelectedIndex, canRenderSizeInputs, height, $imageCropRectAspectRatio, $imageCropRect, width, activeField, maintainAspectRatio, $iconActiveFraction, $env*/ 268413948) {
+			$$invalidate(3, tools = redrawTrigger && resizeWillRenderFooter(
+				[
+					canRenderSizePresets && [
+						"Dropdown",
+						"size-presets",
+						{
+							label: sizePresetLabel,
+							options: $formattedResizeSizePresetOptions,
+							onchange: item => setImageOutputSizeWithArray(item.value),
+							selectedIndex: $sizePresetSelectedIndex
+						}
+					],
+					canRenderWidthPresets && [
+						"Dropdown",
+						"width-presets",
+						{
+							label: widthPresetLabel,
+							options: $formattedResizeWidthPresetOptions,
+							onchange: item => {
+								$$invalidate(35, width = item.value);
+								handleSubmit();
+							},
+							selectedIndex: $widthPresetSelectedIndex
+						}
+					],
+					canRenderWidthPresets && canRenderHeightPresets && [
+						"span",
+						"times",
+						{
+							class: "PinturaResizeLabel",
+							innerHTML: "&times;"
+						}
+					],
+					canRenderHeightPresets && [
+						"Dropdown",
+						"height-presets",
+						{
+							label: heightPresetLabel,
+							options: $formattedResizeHeightPresetOptions,
+							onchange: item => {
+								$$invalidate(36, height = item.value);
+								handleSubmit();
+							},
+							selectedIndex: $heightPresetSelectedIndex
+						}
+					],
+					canRenderSizeInputs && [
+						DimensionInput,
+						"width-input",
+						{
+							id: `width-${formId}`,
+							title: locale.resizeTitleInputWidth,
+							label: locale.resizeLabelInputWidth,
+							placeholder: getWidthPlaceholder(formatValue(height), $imageCropRectAspectRatio, $imageCropRect),
+							value: width,
+							state: getState(formatValue(width), "width", activeField, resizeMinSize, resizeMaxSize),
+							onchange: value => {
+								$$invalidate(35, width = value);
+								syncFields();
+							}
+						}
+					],
+					canRenderSizeInputs && [
+						DimensionLock,
+						"aspect-ratio-lock",
+						{
+							id: `aspect-ratio-lock-${formId}`,
+							title: locale.resizeTitleButtonMaintainAspectRatio,
+							icon: isString(locale.resizeIconButtonMaintainAspectRatio)
+							? locale.resizeIconButtonMaintainAspectRatio
+							: locale.resizeIconButtonMaintainAspectRatio(maintainAspectRatio, $iconActiveFraction),
+							locked: maintainAspectRatio,
+							onchange: locked => {
+								$$invalidate(34, maintainAspectRatio = locked);
+								syncFields();
+							}
+						}
+					],
+					canRenderSizeInputs && [
+						DimensionInput,
+						"height-input",
+						{
+							id: `height-${formId}`,
+							title: locale.resizeTitleInputHeight,
+							label: locale.resizeLabelInputHeight,
+							placeholder: getHeightPlaceholder(formatValue(width), $imageCropRectAspectRatio, $imageCropRect),
+							value: height,
+							state: getState(formatValue(height), "height", activeField, resizeMinSize, resizeMaxSize),
+							onchange: value => {
+								$$invalidate(36, height = value);
+								syncFields();
+							}
+						}
+					]
+				].filter(Boolean),
+				{ ...$env },
+				() => $$invalidate(38, redrawTrigger = {})
+			).filter(Boolean));
+		}
+
+		if ($$self.$$.dirty[1] & /*maintainAspectRatio*/ 8) {
 			iconActiveFraction.set(maintainAspectRatio ? 1 : 0);
 		}
 
@@ -37131,146 +42042,12 @@ function instance$1($$self, $$props, $$invalidate) {
 			if (activeField) lastActiveField = activeField;
 		}
 
-		if ($$self.$$.dirty[0] & /*width*/ 16) {
-			$$invalidate(35, widthFormatted = formatValue(width));
-		}
-
-		if ($$self.$$.dirty[0] & /*height*/ 32) {
-			$$invalidate(36, heightFormatted = formatValue(height));
-		}
-
-		if ($$self.$$.dirty[1] & /*widthFormatted, activeField, resizeMinSize, resizeMaxSize*/ 92) {
-			$$invalidate(9, widthState = widthFormatted != null && activeField !== "width"
-			? widthFormatted >= resizeMinSize.width && widthFormatted <= resizeMaxSize.width
-				? "valid"
-				: "invalid"
-			: "undetermined");
-		}
-
-		if ($$self.$$.dirty[1] & /*heightFormatted, activeField, resizeMinSize, resizeMaxSize*/ 108) {
-			$$invalidate(10, heightState = heightFormatted != null && activeField !== "height"
-			? heightFormatted >= resizeMinSize.height && heightFormatted <= resizeMaxSize.height
-				? "valid"
-				: "invalid"
-			: "undetermined");
-		}
-
-		if ($$self.$$.dirty[1] & /*heightFormatted, $imageCropRectAspectRatio, $imageCropRect*/ 800) {
-			$$invalidate(7, widthPlaceholder = Math.round(heightFormatted != null
-			? heightFormatted * $imageCropRectAspectRatio
-			: $imageCropRect.width));
-		}
-
-		if ($$self.$$.dirty[1] & /*widthFormatted, $imageCropRectAspectRatio, $imageCropRect*/ 784) {
-			$$invalidate(8, heightPlaceholder = Math.round(widthFormatted != null
-			? widthFormatted / $imageCropRectAspectRatio
-			: $imageCropRect.height));
-		}
-
-		if ($$self.$$.dirty[0] & /*maintainAspectRatio, width, height*/ 56) {
-			if (maintainAspectRatio && width && height) syncFields();
-		}
-
-		if ($$self.$$.dirty[1] & /*$isActive, $rootBackgroundColor, currentRootBackgroundColor*/ 6272) {
-			if ($isActive && $rootBackgroundColor && (!currentRootBackgroundColor || !arrayEqual(currentRootBackgroundColor, $rootBackgroundColor))) {
-				$$invalidate(38, currentRootBackgroundColor = $rootBackgroundColor);
-			}
-		}
-
-		if ($$self.$$.dirty[1] & /*currentRootBackgroundColor*/ 128) {
-			$$invalidate(44, gradientOverlayHorizontal = currentRootBackgroundColor && getOverlayGradient(16, 0, currentRootBackgroundColor));
-		}
-
-		if ($$self.$$.dirty[1] & /*currentRootBackgroundColor*/ 128) {
-			$$invalidate(45, gradientOverlayVertical = currentRootBackgroundColor && getOverlayGradient(0, 16, currentRootBackgroundColor));
-		}
-
-		if ($$self.$$.dirty[1] & /*$imageOutputSize, $imageCropRect*/ 1536) {
-			$$invalidate(46, imageTargetSizeCurrent = calculateImageTargetSize($imageOutputSize || {}, $imageCropRect));
-		}
-
-		if ($$self.$$.dirty[1] & /*$utilRect, imageTargetSizeCurrent*/ 98304) {
-			$utilRect && overlayXOpacity.set(smoothstep($utilRect.width, $utilRect.width + inset, imageTargetSizeCurrent.width));
-		}
-
-		if ($$self.$$.dirty[1] & /*$utilRect, imageTargetSizeCurrent*/ 98304) {
-			$utilRect && overlayYOpacity.set(smoothstep($utilRect.height, $utilRect.height + inset, imageTargetSizeCurrent.height));
-		}
-
-		if ($$self.$$.dirty[1] & /*$rootRect, $isActiveFraction, $overlayYOpacity, gradientOverlayVertical*/ 1851392) {
-			$$invalidate(48, overlayTop = {
-				id,
-				x: 0,
-				y: -margin,
-				width: $rootRect.width,
-				height: size,
-				rotation: Math.PI,
-				opacity: $isActiveFraction * maxOpacity * $overlayYOpacity,
-				backgroundImage: gradientOverlayVertical
-			});
-		}
-
-		if ($$self.$$.dirty[1] & /*$rootRect, $isActiveFraction, $overlayYOpacity, gradientOverlayVertical*/ 1851392) {
-			$$invalidate(52, overlayBottom = {
-				id,
-				x: 0,
-				y: $rootRect.height - size + margin,
-				width: $rootRect.width,
-				height: size,
-				opacity: $isActiveFraction * maxOpacity * $overlayYOpacity,
-				backgroundImage: gradientOverlayVertical
-			});
-		}
-
-		if ($$self.$$.dirty[1] & /*$rootRect, $isActiveFraction, $overlayXOpacity, gradientOverlayHorizontal*/ 9183232) {
-			$$invalidate(53, overlayLeft = {
-				id,
-				x: -margin,
-				y: 0,
-				height: $rootRect.height,
-				width: size,
-				rotation: Math.PI,
-				opacity: $isActiveFraction * maxOpacity * $overlayXOpacity,
-				backgroundImage: gradientOverlayHorizontal
-			});
-		}
-
-		if ($$self.$$.dirty[1] & /*$rootRect, $isActiveFraction, $overlayXOpacity, gradientOverlayHorizontal*/ 9183232) {
-			$$invalidate(55, overlayRight = {
-				id,
-				x: $rootRect.width - size + margin,
-				y: 0,
-				height: $rootRect.height,
-				width: size,
-				opacity: $isActiveFraction * maxOpacity * $overlayXOpacity,
-				backgroundImage: gradientOverlayHorizontal
-			});
-		}
-
-		if ($$self.$$.dirty[1] & /*overlayTop, overlayRight, overlayBottom, overlayLeft*/ 23199744) {
-			$$invalidate(56, gradientOverlays = [overlayTop, overlayRight, overlayBottom, overlayLeft]);
-		}
-
-		if ($$self.$$.dirty[1] & /*overlayTop, $imageOverlayMarkup, $isActiveFraction, gradientOverlays*/ 101318656) {
-			// if overlay top changes
-			if (overlayTop) {
-				// remove existing resize overlays
-				const overlayMarkup = $imageOverlayMarkup.filter(markup => markup.id !== id);
-
-				if ($isActiveFraction > 0) {
-					set_store_value(imageOverlayMarkup, $imageOverlayMarkup = [...overlayMarkup, ...gradientOverlays], $imageOverlayMarkup);
-				} else {
-					set_store_value(imageOverlayMarkup, $imageOverlayMarkup = overlayMarkup, $imageOverlayMarkup);
-				}
-			}
-		}
-
-		if ($$self.$$.dirty[1] & /*$animation, $isActive*/ 134219776) {
+		if ($$self.$$.dirty[1] & /*$animation, $isActive*/ 805306368) {
 			$animation && footerOffset.set($isActive ? 0 : 20);
 		}
 
-		if ($$self.$$.dirty[1] & /*$footerOffset*/ 268435456) {
-			$$invalidate(11, footerStyle = $footerOffset
+		if ($$self.$$.dirty[1] & /*$footerOffset*/ 1073741824) {
+			$$invalidate(4, footerStyle = $footerOffset
 			? `transform: translateY(${$footerOffset}px)`
 			: undefined);
 		}
@@ -37278,69 +42055,68 @@ function instance$1($$self, $$props, $$invalidate) {
 
 	return [
 		isActive,
-		isActiveFraction,
 		locale,
-		maintainAspectRatio,
-		width,
-		height,
 		fieldsGroup,
-		widthPlaceholder,
-		heightPlaceholder,
-		widthState,
-		heightState,
+		tools,
 		footerStyle,
-		$iconActiveFraction,
 		iconActiveFraction,
 		animation,
-		utilRect,
-		rootRect,
-		rootBackgroundColor,
 		imageSize,
 		imageCropRect,
 		imageCropRectAspectRatio,
 		imageCropAspectRatio,
 		imageOutputSize,
-		imageOverlayMarkup,
-		formId,
+		env,
 		handleFocusIn,
 		handleFocusOut,
 		handleSubmit,
-		overlayXOpacity,
-		overlayYOpacity,
+		formattedResizeSizePresetOptions,
+		formattedResizeSizePresetOptionsFlattened,
+		formattedResizeWidthPresetOptions,
+		formattedResizeWidthPresetOptionsFlattened,
+		formattedResizeHeightPresetOptions,
+		formattedResizeHeightPresetOptionsFlattened,
+		sizePresetSelectedIndex,
+		widthPresetSelectedIndex,
+		heightPresetSelectedIndex,
 		footerOffset,
 		name,
 		stores,
 		resizeMinSize,
 		resizeMaxSize,
-		widthFormatted,
-		heightFormatted,
+		resizeSizePresetOptions,
+		resizeWidthPresetOptions,
+		resizeHeightPresetOptions,
+		resizeWillRenderFooter,
+		maintainAspectRatio,
+		width,
+		height,
 		activeField,
-		currentRootBackgroundColor,
+		redrawTrigger,
 		$imageCropRectAspectRatio,
+		$formattedResizeSizePresetOptions,
+		$formattedResizeSizePresetOptionsFlattened,
+		$formattedResizeWidthPresetOptions,
+		$formattedResizeWidthPresetOptionsFlattened,
+		$formattedResizeHeightPresetOptions,
+		$formattedResizeHeightPresetOptionsFlattened,
+		sizePresetLabel,
+		$sizePresetSelectedIndex,
+		widthPresetLabel,
+		$widthPresetSelectedIndex,
+		heightPresetLabel,
+		$heightPresetSelectedIndex,
 		$imageCropRect,
-		$imageOutputSize,
-		$isActive,
-		$rootBackgroundColor,
-		gradientOverlayHorizontal,
-		gradientOverlayVertical,
-		imageTargetSizeCurrent,
-		$utilRect,
-		overlayTop,
-		$rootRect,
-		$isActiveFraction,
-		$overlayYOpacity,
-		overlayBottom,
-		overlayLeft,
-		$overlayXOpacity,
-		overlayRight,
-		gradientOverlays,
-		$imageOverlayMarkup,
+		canRenderSizePresets,
+		canRenderWidthPresets,
+		canRenderHeightPresets,
+		canRenderSizeInputs,
+		$iconActiveFraction,
+		$env,
 		$animation,
+		$isActive,
 		$footerOffset,
-		input0_input_handler,
-		input1_change_handler,
-		input2_input_handler,
-		div3_binding,
+		div0_binding,
 		measure_handler
 	];
 }
@@ -37352,24 +42128,287 @@ class Resize extends SvelteComponent {
 		init(
 			this,
 			options,
-			instance$1,
-			create_fragment$1,
+			instance$2,
+			create_fragment$2,
 			safe_not_equal,
 			{
-				name: 31,
+				name: 26,
 				isActive: 0,
-				isActiveFraction: 1,
-				stores: 32,
-				locale: 2,
-				resizeMinSize: 33,
-				resizeMaxSize: 34
+				stores: 27,
+				locale: 1,
+				resizeMinSize: 28,
+				resizeMaxSize: 29,
+				resizeSizePresetOptions: 30,
+				resizeWidthPresetOptions: 31,
+				resizeHeightPresetOptions: 32,
+				resizeWillRenderFooter: 33
 			},
 			[-1, -1, -1]
 		);
 	}
 
 	get name() {
+		return this.$$.ctx[26];
+	}
+
+	get isActive() {
+		return this.$$.ctx[0];
+	}
+
+	set isActive(isActive) {
+		this.$set({ isActive });
+		flush();
+	}
+
+	get stores() {
+		return this.$$.ctx[27];
+	}
+
+	set stores(stores) {
+		this.$set({ stores });
+		flush();
+	}
+
+	get locale() {
+		return this.$$.ctx[1];
+	}
+
+	set locale(locale) {
+		this.$set({ locale });
+		flush();
+	}
+
+	get resizeMinSize() {
+		return this.$$.ctx[28];
+	}
+
+	set resizeMinSize(resizeMinSize) {
+		this.$set({ resizeMinSize });
+		flush();
+	}
+
+	get resizeMaxSize() {
+		return this.$$.ctx[29];
+	}
+
+	set resizeMaxSize(resizeMaxSize) {
+		this.$set({ resizeMaxSize });
+		flush();
+	}
+
+	get resizeSizePresetOptions() {
+		return this.$$.ctx[30];
+	}
+
+	set resizeSizePresetOptions(resizeSizePresetOptions) {
+		this.$set({ resizeSizePresetOptions });
+		flush();
+	}
+
+	get resizeWidthPresetOptions() {
 		return this.$$.ctx[31];
+	}
+
+	set resizeWidthPresetOptions(resizeWidthPresetOptions) {
+		this.$set({ resizeWidthPresetOptions });
+		flush();
+	}
+
+	get resizeHeightPresetOptions() {
+		return this.$$.ctx[32];
+	}
+
+	set resizeHeightPresetOptions(resizeHeightPresetOptions) {
+		this.$set({ resizeHeightPresetOptions });
+		flush();
+	}
+
+	get resizeWillRenderFooter() {
+		return this.$$.ctx[33];
+	}
+
+	set resizeWillRenderFooter(resizeWillRenderFooter) {
+		this.$set({ resizeWillRenderFooter });
+		flush();
+	}
+}
+
+// @ts-ignore
+var _plugin_resize = { util: ['resize', Resize] };
+
+/* src/core/ui/plugins/redact/index.svelte generated by Svelte v3.37.0 */
+
+function create_fragment$1(ctx) {
+	let shapeutil;
+	let current;
+
+	shapeutil = new ShapeUtil({
+			props: {
+				stores: /*stores*/ ctx[3],
+				locale: /*locale*/ ctx[4],
+				isActive: /*isActive*/ ctx[0],
+				isActiveFraction: /*isActiveFraction*/ ctx[1],
+				isVisible: /*isVisible*/ ctx[2],
+				mapScreenPointToImagePoint: /*mapScreenPointToImagePoint*/ ctx[7],
+				mapImagePointToScreenPoint: /*mapImagePointToScreenPoint*/ ctx[8],
+				utilKey: "redact",
+				imageRotation: /*$imageRotation*/ ctx[9],
+				imageFlipX: /*$imageFlipX*/ ctx[5],
+				imageFlipY: /*$imageFlipY*/ ctx[6],
+				shapes: /*imageRedaction*/ ctx[10],
+				tools: ["rect"],
+				toolShapes: {
+					rectangle: [{ x: 0, y: 0, width: 0, height: 0 }]
+				},
+				toolActive: "rectangle",
+				parentRect: /*imageSize*/ ctx[12],
+				enablePresetDropImage: false,
+				enablePresetSelectImage: false,
+				hooks: {
+					willRenderShapeControls: /*func*/ ctx[21]
+				}
+			}
+		});
+
+	shapeutil.$on("measure", /*measure_handler*/ ctx[22]);
+
+	return {
+		c() {
+			create_component(shapeutil.$$.fragment);
+		},
+		m(target, anchor) {
+			mount_component(shapeutil, target, anchor);
+			current = true;
+		},
+		p(ctx, [dirty]) {
+			const shapeutil_changes = {};
+			if (dirty & /*stores*/ 8) shapeutil_changes.stores = /*stores*/ ctx[3];
+			if (dirty & /*locale*/ 16) shapeutil_changes.locale = /*locale*/ ctx[4];
+			if (dirty & /*isActive*/ 1) shapeutil_changes.isActive = /*isActive*/ ctx[0];
+			if (dirty & /*isActiveFraction*/ 2) shapeutil_changes.isActiveFraction = /*isActiveFraction*/ ctx[1];
+			if (dirty & /*isVisible*/ 4) shapeutil_changes.isVisible = /*isVisible*/ ctx[2];
+			if (dirty & /*mapScreenPointToImagePoint*/ 128) shapeutil_changes.mapScreenPointToImagePoint = /*mapScreenPointToImagePoint*/ ctx[7];
+			if (dirty & /*mapImagePointToScreenPoint*/ 256) shapeutil_changes.mapImagePointToScreenPoint = /*mapImagePointToScreenPoint*/ ctx[8];
+			if (dirty & /*$imageRotation*/ 512) shapeutil_changes.imageRotation = /*$imageRotation*/ ctx[9];
+			if (dirty & /*$imageFlipX*/ 32) shapeutil_changes.imageFlipX = /*$imageFlipX*/ ctx[5];
+			if (dirty & /*$imageFlipY*/ 64) shapeutil_changes.imageFlipY = /*$imageFlipY*/ ctx[6];
+			shapeutil.$set(shapeutil_changes);
+		},
+		i(local) {
+			if (current) return;
+			transition_in(shapeutil.$$.fragment, local);
+			current = true;
+		},
+		o(local) {
+			transition_out(shapeutil.$$.fragment, local);
+			current = false;
+		},
+		d(detaching) {
+			destroy_component(shapeutil, detaching);
+		}
+	};
+}
+
+function instance$1($$self, $$props, $$invalidate) {
+	let mapScreenPointToImagePoint;
+	let mapImagePointToScreenPoint;
+	let $rootRect;
+	let $imageSize;
+	let $imageTransforms;
+	let $imageFlipX;
+	let $imageFlipY;
+	let $imageRotation;
+	const name = "redact";
+	let { isActive } = $$props;
+	let { isActiveFraction } = $$props;
+	let { isVisible } = $$props;
+	let { stores } = $$props;
+	let { locale = {} } = $$props;
+
+	// connect filter choice to stores
+	const { imageRedaction, rootRect, imageSize, imageTransforms, imageRotation, imageFlipX, imageFlipY } = stores;
+
+	component_subscribe($$self, rootRect, value => $$invalidate(18, $rootRect = value));
+	component_subscribe($$self, imageSize, value => $$invalidate(19, $imageSize = value));
+	component_subscribe($$self, imageTransforms, value => $$invalidate(20, $imageTransforms = value));
+	component_subscribe($$self, imageRotation, value => $$invalidate(9, $imageRotation = value));
+	component_subscribe($$self, imageFlipX, value => $$invalidate(5, $imageFlipX = value));
+	component_subscribe($$self, imageFlipY, value => $$invalidate(6, $imageFlipY = value));
+
+	const func = controls => {
+		const children = getNodeChildren(controls[0]);
+		removeNode("to-front", children);
+		return controls;
+	};
+
+	function measure_handler(event) {
+		bubble($$self, event);
+	}
+
+	$$self.$$set = $$props => {
+		if ("isActive" in $$props) $$invalidate(0, isActive = $$props.isActive);
+		if ("isActiveFraction" in $$props) $$invalidate(1, isActiveFraction = $$props.isActiveFraction);
+		if ("isVisible" in $$props) $$invalidate(2, isVisible = $$props.isVisible);
+		if ("stores" in $$props) $$invalidate(3, stores = $$props.stores);
+		if ("locale" in $$props) $$invalidate(4, locale = $$props.locale);
+	};
+
+	$$self.$$.update = () => {
+		if ($$self.$$.dirty & /*$rootRect, $imageSize, $imageTransforms, $imageFlipX, $imageFlipY*/ 1835104) {
+			//
+			// Mapping coordinates
+			//
+			$$invalidate(7, mapScreenPointToImagePoint = point => _mapScreenPointToImagePoint(point, $rootRect, $imageSize, $imageTransforms.origin, $imageTransforms.translation, $imageTransforms.rotation.z, $imageTransforms.scale, $imageFlipX, $imageFlipY));
+		}
+
+		if ($$self.$$.dirty & /*$rootRect, $imageSize, $imageTransforms, $imageFlipX, $imageFlipY*/ 1835104) {
+			$$invalidate(8, mapImagePointToScreenPoint = point => _mapImagePointToScreenPoint(point, $rootRect, $imageSize, $imageTransforms.origin, $imageTransforms.translation, $imageTransforms.rotation.z, $imageTransforms.scale, $imageFlipX, $imageFlipY));
+		}
+	};
+
+	return [
+		isActive,
+		isActiveFraction,
+		isVisible,
+		stores,
+		locale,
+		$imageFlipX,
+		$imageFlipY,
+		mapScreenPointToImagePoint,
+		mapImagePointToScreenPoint,
+		$imageRotation,
+		imageRedaction,
+		rootRect,
+		imageSize,
+		imageTransforms,
+		imageRotation,
+		imageFlipX,
+		imageFlipY,
+		name,
+		$rootRect,
+		$imageSize,
+		$imageTransforms,
+		func,
+		measure_handler
+	];
+}
+
+class Redact extends SvelteComponent {
+	constructor(options) {
+		super();
+
+		init(this, options, instance$1, create_fragment$1, safe_not_equal, {
+			name: 17,
+			isActive: 0,
+			isActiveFraction: 1,
+			isVisible: 2,
+			stores: 3,
+			locale: 4
+		});
+	}
+
+	get name() {
+		return this.$$.ctx[17];
 	}
 
 	get isActive() {
@@ -37390,8 +42429,17 @@ class Resize extends SvelteComponent {
 		flush();
 	}
 
+	get isVisible() {
+		return this.$$.ctx[2];
+	}
+
+	set isVisible(isVisible) {
+		this.$set({ isVisible });
+		flush();
+	}
+
 	get stores() {
-		return this.$$.ctx[32];
+		return this.$$.ctx[3];
 	}
 
 	set stores(stores) {
@@ -37400,35 +42448,17 @@ class Resize extends SvelteComponent {
 	}
 
 	get locale() {
-		return this.$$.ctx[2];
+		return this.$$.ctx[4];
 	}
 
 	set locale(locale) {
 		this.$set({ locale });
 		flush();
 	}
-
-	get resizeMinSize() {
-		return this.$$.ctx[33];
-	}
-
-	set resizeMinSize(resizeMinSize) {
-		this.$set({ resizeMinSize });
-		flush();
-	}
-
-	get resizeMaxSize() {
-		return this.$$.ctx[34];
-	}
-
-	set resizeMaxSize(resizeMaxSize) {
-		this.$set({ resizeMaxSize });
-		flush();
-	}
 }
 
 // @ts-ignore
-var _plugin_resize = { util: ['resize', Resize] };
+var _plugin_redact = { util: ['redact', Redact] };
 
 const IconCross =
     '<g fill="none" fill-rule="evenodd" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor" stroke-width=".125em"><path d="M18 6L6 18M6 6l12 12"></path></path></g>';
@@ -37445,6 +42475,15 @@ var _locale_en_gb = {
     labelEdit: 'Edit',
     labelClose: 'Close',
     labelSupportError: (features) => `${features.join(', ')} not supported on this browser`,
+
+    // defaults
+    labelColor: 'Color',
+    labelWidth: 'Width',
+    labelSize: 'Size',
+    labelOffset: 'Offset',
+    labelAmount: 'Amount',
+    labelInset: 'Inset',
+    labelRadius: 'Radius',
 
     // sizes
     labelSizeExtraSmall: 'Extra small',
@@ -37531,14 +42570,14 @@ const MarkupEditor = {
     shapeLabelFontStyleNormal: 'Normal',
     shapeLabelFontStyleBold: 'Bold',
     shapeLabelFontStyleItalic: 'Italic',
-    shapeLabelFontStyleItalicBold: 'Italic Bold',
+    shapeLabelFontStyleItalicBold: 'Bold Italic',
 
     shapeTitleBackgroundColor: 'Fill color',
 
     shapeTitleFontFamily: 'Font',
     shapeTitleFontSize: 'Font size',
     shapeTitleFontStyle: 'Font style',
-    shapeTitleLineHeight: 'Leading',
+    shapeTitleLineHeight: 'Line height',
 
     shapeTitleLineStart: 'Start',
     shapeTitleLineEnd: 'End',
@@ -37746,6 +42785,37 @@ var _plugin_sticker_locale_en_gb = {
         '<g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor" stroke-width=".125em"><path d="M12 22c2.773 0 1.189-5.177 3-7 1.796-1.808 7-.25 7-3 0-5.523-4.477-10-10-10S2 6.477 2 12s4.477 10 10 10z"/><path d="M20 17c-3 3-5 5-8 5"/></g>',
 };
 
+var _plugin_frame_locale_en_gb = {
+    frameLabel: 'Frame',
+    frameIcon: `<g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor" stroke-width=".125em">
+            <rect x="2" y="2" width="20" height="20" rx="4"/>
+            <rect x="6" y="6" width="12" height="12" rx="1"/>
+        </g>`,
+
+    frameLabelMatSharp: 'Mat',
+    frameLabelMatRound: 'Bevel',
+    frameLabelLineSingle: 'Line',
+    frameLabelLineMultiple: 'Zebra',
+    frameLabelEdgeSeparate: 'Inset',
+    frameLabelEdgeOverlap: 'Plus',
+    frameLabelEdgeCross: 'Lumber',
+    frameLabelCornerHooks: 'Hook',
+    frameLabelPolaroid: 'Polaroid',
+};
+
+var _plugin_redact_locale_en_gb = {
+    redactLabel: 'Redact',
+    redactIcon: `<g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor" stroke-width=".125em">
+        <path d="M 4 5 l 1 -1"/>
+        <path d="M 4 10 l 6 -6"/>
+        <path d="M 4 15 l 11 -11"/>
+        <path d="M 4 20 l 16 -16"/>
+        <path d="M 9 20 l 11 -11"/>
+        <path d="M 14 20 l 6 -6"/>
+        <path d="M 19 20 l 1 -1"/>
+    </g>`,
+};
+
 var hasDefinedCustomElement = (name) => document.createElement(name).constructor !== HTMLElement;
 
 var linkAccessors = (destination, origin) => {
@@ -37805,12 +42875,16 @@ var initEditorView = (target) => {
         on: subscribe,
         updateImage: (src) => new Promise((resolve, reject) => {
             // save history
-            const history = accessors.history.get();
+            const storedHistory = accessors.history.get();
+            // save state
+            const storedState = accessors.imageState;
             // update image
             core.loadImage(src)
                 .then((res) => {
                 // restore history
-                accessors.history.set(history);
+                accessors.history.set(storedHistory);
+                // restore state
+                accessors.imageState = storedState;
                 // done!
                 resolve(res);
             })
@@ -37878,14 +42952,14 @@ var _appendEditor = (target, options = {}) => {
 
 /* src/core/ui/modal/index.svelte generated by Svelte v3.37.0 */
 
-const { document: document_1 } = globals;
+const { document: document_1, window: window_1 } = globals;
 
 function create_fragment(ctx) {
 	let t;
 	let div;
 	let mounted;
 	let dispose;
-	add_render_callback(/*onwindowresize*/ ctx[20]);
+	add_render_callback(/*onwindowresize*/ ctx[27]);
 
 	return {
 		c() {
@@ -37897,18 +42971,18 @@ function create_fragment(ctx) {
 		m(target, anchor) {
 			insert(target, t, anchor);
 			insert(target, div, anchor);
-			/*div_binding*/ ctx[21](div);
+			/*div_binding*/ ctx[28](div);
 
 			if (!mounted) {
 				dispose = [
-					listen(window, "keydown", /*handleKey*/ ctx[10]),
-					listen(window, "orientationchange", /*spawnMeasureElement*/ ctx[11]),
-					listen(window, "resize", /*onwindowresize*/ ctx[20]),
+					listen(window_1, "keydown", /*handleKey*/ ctx[10]),
+					listen(window_1, "orientationchange", /*spawnMeasureElement*/ ctx[11]),
+					listen(window_1, "resize", /*onwindowresize*/ ctx[27]),
 					listen(document_1.body, "focusin", function () {
-						if (is_function(!/*hidden*/ ctx[3] && /*handleFocusIn*/ ctx[7])) (!/*hidden*/ ctx[3] && /*handleFocusIn*/ ctx[7]).apply(this, arguments);
+						if (is_function(!/*hidden*/ ctx[1] && /*handleFocusIn*/ ctx[7])) (!/*hidden*/ ctx[1] && /*handleFocusIn*/ ctx[7]).apply(this, arguments);
 					}),
 					listen(document_1.body, "focusout", function () {
-						if (is_function(/*hasFocussedTextField*/ ctx[1] && /*handleFocusOut*/ ctx[8])) (/*hasFocussedTextField*/ ctx[1] && /*handleFocusOut*/ ctx[8]).apply(this, arguments);
+						if (is_function(/*hasFocussedTextField*/ ctx[2] && /*handleFocusOut*/ ctx[8])) (/*hasFocussedTextField*/ ctx[2] && /*handleFocusOut*/ ctx[8]).apply(this, arguments);
 					}),
 					listen(div, "wheel", /*handleWheel*/ ctx[9], { passive: false })
 				];
@@ -37932,7 +43006,7 @@ function create_fragment(ctx) {
 		d(detaching) {
 			if (detaching) detach(t);
 			if (detaching) detach(div);
-			/*div_binding*/ ctx[21](null);
+			/*div_binding*/ ctx[28](null);
 			mounted = false;
 			run_all(dispose);
 		}
@@ -37940,48 +43014,55 @@ function create_fragment(ctx) {
 }
 
 function instance($$self, $$props, $$invalidate) {
+	let o;
 	let viewportRules;
+	let isOpaque;
 	let isIOSFooterVisible;
 	let style;
 	let className;
+	let scrollsBodyOnInteraction;
 	let $opacity;
 	const dispatch = createEventDispatcher();
 	let { root } = $$props;
 	let { preventZoomViewport = true } = $$props;
+	let { preventScrollBodyIfNeeded = true } = $$props;
+	let { preventFooterOverlapIfNeeded = true } = $$props;
 	let { class: klass = undefined } = $$props;
 	let hidden = true;
 	let hiding = false;
 	let showing = false;
+	let doc = isBrowser() && document.documentElement;
+	let body = isBrowser() && document.body;
+	let head = isBrowser() && document.head;
 	const opacity = spring(0, { precision: 0.001, damping: 0.5 });
-	component_subscribe($$self, opacity, value => $$invalidate(18, $opacity = value));
+	component_subscribe($$self, opacity, value => $$invalidate(23, $opacity = value));
 
 	// animate hide and show
-	const unsub = opacity.subscribe(o => {
+	const opacityUnsub = opacity.subscribe(o => {
 		if (showing && o >= 1) {
-			showing = false; // now shown
-			$$invalidate(3, hidden = false);
+			$$invalidate(19, showing = false); // now shown
+			$$invalidate(1, hidden = false);
 			dispatch("show");
 		} else if (hiding && o <= 0) {
-			hiding = false; // now hidden
-			$$invalidate(3, hidden = true);
+			$$invalidate(18, hiding = false); // now hidden
+			$$invalidate(1, hidden = true);
 			dispatch("hide");
 		}
 	});
 
-	// clean up when removed
-	onDestroy(() => unsub());
-
 	let hasFocussedTextField = false;
 	let viewportDefaults = undefined;
+	let themeDefaults = undefined;
 	let showTimeoutId = undefined;
 	const getViewPortElement = () => document.querySelector("meta[name=viewport]");
+	const getThemeElements = () => Array.from(document.querySelectorAll("meta[name=theme-color]"));
 
 	const show = () => {
 		// is visible, or busy becoming visible
 		if (showing || !hidden) return;
 
 		// now in 'showing' transition
-		showing = true;
+		$$invalidate(19, showing = true);
 
 		// store default viewport element values
 		const viewportElement = getViewPortElement() || h("meta", { name: "viewport" });
@@ -37992,9 +43073,29 @@ function instance($$self, $$props, $$invalidate) {
 		? ",viewport-fit=cover"
 		: ""));
 
-		if (!viewportElement.parentNode) document.head.appendChild(viewportElement);
+		if (!viewportElement.parentNode) head.append(viewportElement);
+
+		// store default theme element values
+		const backgroundColor = getComputedStyle(root).getPropertyValue("--color-background");
+
+		const themeElements = getThemeElements();
+
+		if (themeElements.length) {
+			// store defaults
+			themeDefaults = themeElements.map(element => element.getAttribute("content"));
+		} else {
+			// create element
+			const themeElement = h("meta", { name: "theme-color" });
+
+			head.append(themeElement);
+			themeElements.push(themeElement);
+		}
+
+		// update colors
+		themeElements.forEach(element => element.setAttribute("content", `rgb(${backgroundColor})`));
+
 		clearTimeout(showTimeoutId);
-		showTimeoutId = setTimeout(() => set_store_value(opacity, $opacity = 1, $opacity), 250);
+		showTimeoutId = setTimeout(() => opacity.set(1), 250);
 	};
 
 	const hide = () => {
@@ -38005,19 +43106,30 @@ function instance($$self, $$props, $$invalidate) {
 		clearTimeout(showTimeoutId);
 
 		// now in 'hiding' transition
-		hiding = true;
+		$$invalidate(18, hiding = true);
 
-		// get a reference to the viewport element, it should be there as we created it earlier, 
+		// get a reference to the viewport element, it should be there as we created it earlier,
 		// we restore defaults if the viewport metatag was defined, if not, we destroy it
 		const viewportElement = getViewPortElement();
 
-		if (viewportDefaults) viewportElement.setAttribute("content", viewportDefaults); else document.head.removeChild(viewportElement);
+		if (viewportDefaults) viewportElement.setAttribute("content", viewportDefaults); else viewportElement.remove();
+
+		// restore colors
+		const themeElements = getThemeElements();
+
+		if (themeDefaults) {
+			themeElements.forEach((element, index) => {
+				element.setAttribute("content", themeDefaults[index]);
+			});
+		} else themeElements.forEach(element => element.remove());
 
 		// let's hide!
-		set_store_value(opacity, $opacity = 0, $opacity);
+		opacity.set(0);
 	};
 
+	//
 	// handle soft keyboard impact on window height
+	//
 	let focusOutTimer;
 
 	let focusInWindowHeight;
@@ -38027,7 +43139,7 @@ function instance($$self, $$props, $$invalidate) {
 		if (!(/textarea/i).test(e.target)) return;
 
 		// now focussing a field
-		$$invalidate(1, hasFocussedTextField = true);
+		$$invalidate(2, hasFocussedTextField = true);
 
 		focusInWindowHeight = windowHeight;
 	};
@@ -38041,11 +43153,11 @@ function instance($$self, $$props, $$invalidate) {
 
 		// test if window height changed, if not, no soft keyboard appeared and we can set false to focus state immidiately
 		if (focusInWindowHeight === windowHeight) {
-			$$invalidate(1, hasFocussedTextField = false);
+			$$invalidate(2, hasFocussedTextField = false);
 		} else // soft keyboard might have appeared, test for window height change before setting unfocus state
 		{
 			const windowCurrentHeight = windowHeight;
-			runWhen(() => windowHeight !== windowCurrentHeight, () => $$invalidate(1, hasFocussedTextField = false));
+			runWhen(() => windowHeight !== windowCurrentHeight, () => $$invalidate(2, hasFocussedTextField = false));
 		}
 	};
 
@@ -38062,9 +43174,13 @@ function instance($$self, $$props, $$invalidate) {
 		requestAnimationFrame(frame);
 	};
 
+	//
 	// end soft keyboard logic
+	//
 	// prevent mousewheel from scrolling content behind modal
-	const handleWheel = e => e.preventDefault();
+	const handleWheel = e => {
+		if (e.target && (/PinturaStage/).test(e.target.className)) e.preventDefault();
+	};
 
 	// handle escape to close modal
 	const handleKey = e => {
@@ -38102,16 +43218,17 @@ function instance($$self, $$props, $$invalidate) {
 		// can't spawn more than one
 		if (measureElement) return;
 
+		// create measure element and append to body
 		measureElement = h("div", {
 			style: "position:fixed;height:100vh;top:0"
 		});
 
-		document.body.appendChild(measureElement);
+		body.append(measureElement);
 	};
 
 	onMount(() => {
 		// no need to run this logic if is not on iOS
-		if (!isIOS()) return;
+		if (!preventFooterOverlapIfNeeded || !isIOS()) return;
 
 		// will be used in first read to determine page height and bottom padding
 		spawnMeasureElement();
@@ -38122,16 +43239,59 @@ function instance($$self, $$props, $$invalidate) {
 		if (!measureElement) return;
 
 		// get height and store
-		$$invalidate(17, measureElementHeight = measureElement.offsetHeight);
+		$$invalidate(21, measureElementHeight = measureElement.offsetHeight);
 
 		// remove measure element
-		measureElement.parentNode.removeChild(measureElement);
+		measureElement.remove();
 
 		measureElement = undefined;
 	});
 
+	//
+	// document lock style for iOS 15.0
+	//
+	let scrollOffsetY = undefined;
+
+	// syncs height of doc lock with window
+	const syncHeight = () => doc.style.setProperty("--pintura-document-height", `${window.innerHeight}px`);
+
+	const toggleDocumentLock = isOpaque => {
+		if (isOpaque) {
+			scrollOffsetY = window.scrollY;
+
+			// prevents safari on iOS 15.0 from scrolling body and showing footer on drag interaction
+			doc.classList.add("PinturaDocumentLock");
+
+			// need to do this to sync height of initial window
+			syncHeight();
+
+			// also sync on resize
+			window.addEventListener("resize", syncHeight);
+		} else {
+			// stop syncing height
+			window.removeEventListener("resize", syncHeight);
+
+			// clean up
+			doc.classList.remove("PinturaDocumentLock");
+
+			isNumber(scrollOffsetY) && window.scrollTo(0, scrollOffsetY);
+			scrollOffsetY = undefined;
+		}
+	};
+
+	//
+	// clean up when removed
+	//
+	onDestroy(() => {
+		// make sure no longer locking body element
+		doc.classList.remove("PinturaModalBodyLock");
+
+		// clean up subs
+		opacityUnsub();
+	});
+
 	function onwindowresize() {
-		$$invalidate(2, windowHeight = window.innerHeight);
+		$$invalidate(3, windowHeight = window_1.innerHeight);
 	}
 
 	function div_binding($$value) {
@@ -38144,40 +43304,58 @@ function instance($$self, $$props, $$invalidate) {
 	$$self.$$set = $$props => {
 		if ("root" in $$props) $$invalidate(0, root = $$props.root);
 		if ("preventZoomViewport" in $$props) $$invalidate(12, preventZoomViewport = $$props.preventZoomViewport);
-		if ("class" in $$props) $$invalidate(13, klass = $$props.class);
+		if ("preventScrollBodyIfNeeded" in $$props) $$invalidate(13, preventScrollBodyIfNeeded = $$props.preventScrollBodyIfNeeded);
+		if ("preventFooterOverlapIfNeeded" in $$props) $$invalidate(14, preventFooterOverlapIfNeeded = $$props.preventFooterOverlapIfNeeded);
+		if ("class" in $$props) $$invalidate(15, klass = $$props.class);
 	};
 
 	$$self.$$.update = () => {
+		if ($$self.$$.dirty[0] & /*showing, hiding, $opacity, hidden*/ 9175042) {
+			$$invalidate(22, o = showing || hiding ? $opacity : hidden ? 0 : 1);
+		}
+
 		if ($$self.$$.dirty[0] & /*preventZoomViewport*/ 4096) {
 			viewportRules = "width=device-width,height=device-height,initial-scale=1" + (preventZoomViewport
 			? ",maximum-scale=1,user-scalable=0"
 			: "");
 		}
 
-		if ($$self.$$.dirty[0] & /*hasFocussedTextField, windowHeight*/ 6) {
-			if (!hasFocussedTextField) $$invalidate(16, windowHeightComputed = windowHeight);
+		if ($$self.$$.dirty[0] & /*showing, hidden, hiding*/ 786434) {
+			$$invalidate(24, isOpaque = !showing && !hidden && !hiding);
 		}
 
-		if ($$self.$$.dirty[0] & /*measureElementHeight, windowHeight*/ 131076) {
-			$$invalidate(19, isIOSFooterVisible = isIOS()
+		if ($$self.$$.dirty[0] & /*hasFocussedTextField, windowHeight*/ 12) {
+			if (!hasFocussedTextField) $$invalidate(20, windowHeightComputed = windowHeight);
+		}
+
+		if ($$self.$$.dirty[0] & /*measureElementHeight, windowHeight*/ 2097160) {
+			$$invalidate(25, isIOSFooterVisible = isNumber(measureElementHeight)
 			? `--viewport-pad-footer:${measureElementHeight > windowHeight ? 0 : 1}`
 			: "");
 		}
 
-		if ($$self.$$.dirty[0] & /*windowHeightComputed, $opacity, isIOSFooterVisible*/ 851968) {
-			$$invalidate(4, style = `height:${windowHeightComputed}px;opacity:${$opacity};--editor-modal:1;${isIOSFooterVisible}`);
+		if ($$self.$$.dirty[0] & /*o, windowHeightComputed, isIOSFooterVisible*/ 38797312) {
+			$$invalidate(4, style = `opacity:${o};height:${windowHeightComputed}px;--editor-modal:1;${isIOSFooterVisible}`);
 		}
 
-		if ($$self.$$.dirty[0] & /*klass*/ 8192) {
+		if ($$self.$$.dirty[0] & /*klass*/ 32768) {
 			$$invalidate(5, className = arrayJoin(["pintura-editor", "PinturaModal", klass]));
+		}
+
+		if ($$self.$$.dirty[0] & /*preventScrollBodyIfNeeded*/ 8192) {
+			$$invalidate(26, scrollsBodyOnInteraction = preventScrollBodyIfNeeded && isIOS() && (/15_/).test(navigator.userAgent));
+		}
+
+		if ($$self.$$.dirty[0] & /*scrollsBodyOnInteraction, isOpaque*/ 83886080) {
+			scrollsBodyOnInteraction && toggleDocumentLock(isOpaque);
 		}
 	};
 
 	return [
 		root,
+		hidden,
 		hasFocussedTextField,
 		windowHeight,
-		hidden,
 		style,
 		className,
 		opacity,
@@ -38187,13 +43365,20 @@ function instance($$self, $$props, $$invalidate) {
 		handleKey,
 		spawnMeasureElement,
 		preventZoomViewport,
+		preventScrollBodyIfNeeded,
+		preventFooterOverlapIfNeeded,
 		klass,
 		show,
 		hide,
+		hiding,
+		showing,
 		windowHeightComputed,
 		measureElementHeight,
+		o,
 		$opacity,
+		isOpaque,
 		isIOSFooterVisible,
+		scrollsBodyOnInteraction,
 		onwindowresize,
 		div_binding
 	];
@@ -38212,9 +43397,11 @@ class Modal extends SvelteComponent {
 			{
 				root: 0,
 				preventZoomViewport: 12,
-				class: 13,
-				show: 14,
-				hide: 15
+				preventScrollBodyIfNeeded: 13,
+				preventFooterOverlapIfNeeded: 14,
+				class: 15,
+				show: 16,
+				hide: 17
 			},
 			[-1, -1]
 		);
@@ -38238,8 +43425,26 @@ class Modal extends SvelteComponent {
 		flush();
 	}
 
-	get class() {
+	get preventScrollBodyIfNeeded() {
 		return this.$$.ctx[13];
+	}
+
+	set preventScrollBodyIfNeeded(preventScrollBodyIfNeeded) {
+		this.$set({ preventScrollBodyIfNeeded });
+		flush();
+	}
+
+	get preventFooterOverlapIfNeeded() {
+		return this.$$.ctx[14];
+	}
+
+	set preventFooterOverlapIfNeeded(preventFooterOverlapIfNeeded) {
+		this.$set({ preventFooterOverlapIfNeeded });
+		flush();
+	}
+
+	get class() {
+		return this.$$.ctx[15];
 	}
 
 	set class(klass) {
@@ -38248,11 +43453,11 @@ class Modal extends SvelteComponent {
 	}
 
 	get show() {
-		return this.$$.ctx[14];
+		return this.$$.ctx[16];
 	}
 
 	get hide() {
-		return this.$$.ctx[15];
+		return this.$$.ctx[17];
 	}
 }
 
@@ -38263,6 +43468,8 @@ var createModal = (options = {}, parent) => new Modal({
     props: {
         class: options.class,
         preventZoomViewport: options.preventZoomViewport,
+        preventScrollBodyIfNeeded: options.preventScrollBodyIfNeeded,
+        preventFooterOverlapIfNeeded: options.preventFooterOverlapIfNeeded,
     },
 });
 
@@ -38287,7 +43494,14 @@ var _openEditor = (options = {}, parent) => {
     accessors.handleEvent = noop$1;
     view.handleEvent = (type, detail) => accessors.handleEvent(type, detail);
     // route close request from view to modal
-    view.on('close', hide);
+    view.on('close', async () => {
+        const { willClose } = options;
+        if (!willClose)
+            return hide();
+        const shouldClose = await willClose();
+        if (shouldClose)
+            hide();
+    });
     const subscribe = (event, cb) => {
         // capture modal related events
         if (/show|hide/.test(event))
@@ -38321,10 +43535,12 @@ var _openEditor = (options = {}, parent) => {
     modal.$on('show', () => pub('show'));
     modal.$on('hide', () => {
         pub('hide');
-        destroy();
+        if (options.enableAutoDestroy !== false)
+            destroy();
     });
     // modal behavior
-    view.on('process', hide);
+    if (options.enableAutoHide !== false)
+        view.on('process', hide);
     view.on('loadstart', show);
     // test if should
     if (options.enableButtonClose !== false)
@@ -38344,12 +43560,572 @@ var _overlayEditor = (target, options) => {
     return editor;
 };
 
+// helper method to calculate end style params that are passed to lineEnd style functions
+const getLineEndParams = (start, end, strokeWidth, isSolid) => {
+    const direction = vectorCreate(end.x - start.x, end.y - start.y);
+    const normal = vectorNormalize(direction);
+    const scaledSize = 5 * strokeWidth;
+    let scaledSizeHalf;
+    // solid
+    if (isSolid) {
+        scaledSizeHalf = scaledSize * 0.5;
+    }
+    // stroke
+    else {
+        scaledSizeHalf = Math.ceil((scaledSize - 1) * 0.5);
+    }
+    const offset = vectorMultiply(vectorClone(normal), scaledSizeHalf);
+    return {
+        anchor: vectorClone(start),
+        offset,
+        normal,
+        solid: isSolid,
+        size: scaledSize,
+        sizeHalf: scaledSizeHalf,
+    };
+};
+// various available styles
+const lineEndStyleArrow = ({ anchor, solid, normal, offset, size, sizeHalf, strokeWidth, strokeColor }, anchorRef) => {
+    const x = anchor.x;
+    const y = anchor.y;
+    const tipOffset = vectorMultiply(vectorClone(normal), size);
+    const inset = vectorCreate(x + tipOffset.x, y + tipOffset.y);
+    vectorMultiply(tipOffset, 0.55);
+    if (solid) {
+        // move back so arrow triangle overlaps with end of line (otherwise line sticks out of triangle tip)
+        vectorAdd(anchorRef, offset);
+        const arrowOffset = vectorMultiply(vectorClone(normal), sizeHalf * 0.5);
+        return [
+            {
+                points: [
+                    vectorCreate(x - arrowOffset.x, y - arrowOffset.y),
+                    vectorCreate(inset.x - tipOffset.y, inset.y + tipOffset.x),
+                    vectorCreate(inset.x + tipOffset.y, inset.y - tipOffset.x),
+                ],
+                backgroundColor: strokeColor,
+            },
+        ];
+    }
+    else {
+        // this prevents trouble with sharp line rendering in webgl
+        const p = vectorMultiply(vectorPerpendicular(vectorClone(normal)), 0.5);
+        const tipLeft = vectorCreate(x - p.x, y - p.y);
+        const tipRight = vectorCreate(x + p.x, y + p.y);
+        return [
+            {
+                points: [
+                    vectorCreate(inset.x + tipOffset.y, inset.y - tipOffset.x),
+                    tipLeft,
+                    vectorCreate(x, y),
+                    tipRight,
+                    vectorCreate(inset.x - tipOffset.y, inset.y + tipOffset.x),
+                ],
+                strokeWidth: strokeWidth,
+                strokeColor: strokeColor,
+            },
+        ];
+    }
+};
+const lineEndStyleCircle = ({ anchor, solid, offset, normal, sizeHalf, strokeWidth, strokeColor }, anchorRef) => {
+    // update anchor point position
+    vectorAdd(anchorRef, offset);
+    // if solid, move line slightly towards circle as to make them overlap
+    if (solid)
+        vectorAdd(anchorRef, vectorInvert(vectorClone(normal)));
+    return [
+        {
+            x: anchor.x,
+            y: anchor.y,
+            rx: sizeHalf,
+            ry: sizeHalf,
+            backgroundColor: solid ? strokeColor : undefined,
+            strokeWidth: solid ? undefined : strokeWidth,
+            strokeColor: solid ? undefined : strokeColor,
+        },
+    ];
+};
+const lineEndStyleBar = ({ anchor, offset, strokeWidth, strokeColor }) => {
+    return [
+        {
+            points: [
+                vectorCreate(anchor.x - offset.y, anchor.y + offset.x),
+                vectorCreate(anchor.x + offset.y, anchor.y - offset.x),
+            ],
+            strokeWidth,
+            strokeColor,
+        },
+    ];
+};
+const lineEndStyleSquare = ({ anchor, solid, offset, normal, sizeHalf, strokeWidth, strokeColor }, anchorRef) => {
+    // update anchor point position
+    vectorAdd(anchorRef, offset);
+    return [
+        {
+            x: anchor.x - sizeHalf,
+            y: anchor.y - sizeHalf,
+            width: sizeHalf * 2,
+            height: sizeHalf * 2,
+            rotation: vectorAngle(normal),
+            backgroundColor: solid ? strokeColor : undefined,
+            strokeWidth: solid ? undefined : strokeWidth,
+            strokeColor: solid ? undefined : strokeColor,
+        },
+    ];
+};
+// this method parses the shape and checks if lineStart or lineEnd is being used
+const createLineEndProcessor = (styles = {}) => (shape) => {
+    if (!hasProp(shape, 'lineStart') && !hasProp(shape, 'lineEnd'))
+        return;
+    // resulting shapes
+    const res = [];
+    const { lineStart, lineEnd, strokeWidth, strokeColor } = shape;
+    const start = vectorCreate(shape.x1, shape.y1);
+    const end = vectorCreate(shape.x2, shape.y2);
+    const points = [start, end];
+    // handle lineStart
+    if (lineStart) {
+        const [style, solid] = lineStart.split('-');
+        const process = styles[style];
+        if (process) {
+            const params = getLineEndParams(start, end, strokeWidth, !!solid);
+            res.push(...process({
+                ...params,
+                strokeColor,
+                strokeWidth,
+            }, start));
+        }
+    }
+    // handle lineEnd
+    if (lineEnd) {
+        const [style, solid] = lineEnd.split('-');
+        const process = styles[style];
+        if (process) {
+            const params = getLineEndParams(end, start, strokeWidth, !!solid);
+            res.push(...process({
+                ...params,
+                strokeColor,
+                strokeWidth,
+            }, end));
+        }
+    }
+    return [
+        // return inner path
+        {
+            points,
+            strokeWidth,
+            strokeColor,
+        },
+        // add line end styles
+        ...res,
+    ];
+};
+// the default line end styles available, can import and extend
+const createDefaultLineEndStyles = () => ({
+    arrow: lineEndStyleArrow,
+    circle: lineEndStyleCircle,
+    square: lineEndStyleSquare,
+    bar: lineEndStyleBar,
+});
+
+const safeFactor = (value, factor) => {
+    const v = parseFloat(value) * factor;
+    return isString(value) ? `${v}%` : v;
+};
+const toValue = (value, total) => (isString(value) ? toPixelValue(value, total) : value);
+const frameStyleSolid = (shape) => [
+    {
+        ...shape,
+        frameStyle: 'line',
+        frameInset: 0,
+        frameOffset: 0,
+        frameSize: shape.frameSize ? safeFactor(shape.frameSize, 2) : '2.5%',
+        frameRadius: shape.frameRound ? safeFactor(shape.frameSize, 2) : 0,
+    },
+];
+const frameStyleNine = ({ width: contextWidth, height: contextHeight, frameImage, frameSize = '15%', frameSlices = {
+    x1: 0.15,
+    y1: 0.15,
+    x2: 0.85,
+    y2: 0.85,
+}, }, { isPreview }) => {
+    // need a frame image to render a frame
+    if (!frameImage)
+        return [];
+    const contextSize = Math.sqrt(contextWidth * contextHeight);
+    const size = toValue(frameSize, contextSize);
+    const width = isPreview ? size : Math.round(size);
+    const height = width;
+    const { x1, x2, y1, y2 } = frameSlices;
+    const shapeCoordinates = {
+        x0: 0,
+        y0: 0,
+        x1: width,
+        y1: height,
+        x2: contextWidth - width,
+        y2: contextHeight - height,
+        x3: contextWidth,
+        y3: contextHeight,
+        cw: width,
+        ch: height,
+        ew: contextWidth - width - width,
+        eh: contextHeight - height - height,
+    };
+    const overlap = isPreview ? 1 : 0;
+    const overlapDouble = overlap * 2;
+    const cornerGeneric = {
+        width: shapeCoordinates.cw,
+        height: shapeCoordinates.ch,
+        backgroundImage: frameImage,
+    };
+    return [
+        // edges
+        {
+            // t
+            x: shapeCoordinates.x1 - overlap,
+            y: shapeCoordinates.y0,
+            width: shapeCoordinates.ew + overlapDouble,
+            height: shapeCoordinates.ch,
+            backgroundCorners: [
+                { x: x1, y: 0 },
+                { x: x2, y: 0 },
+                { x: x2, y: y1 },
+                { x: x1, y: y1 },
+            ],
+            backgroundImage: frameImage,
+        },
+        {
+            // b
+            x: shapeCoordinates.x1 - overlap,
+            y: shapeCoordinates.y2,
+            width: shapeCoordinates.ew + overlapDouble,
+            height: shapeCoordinates.ch,
+            backgroundCorners: [
+                { x: x1, y: y2 },
+                { x: x2, y: y2 },
+                { x: x2, y: 1 },
+                { x: x1, y: 1 },
+            ],
+            backgroundImage: frameImage,
+        },
+        {
+            // l
+            x: shapeCoordinates.x0,
+            y: shapeCoordinates.y1 - overlap,
+            width: shapeCoordinates.cw,
+            height: shapeCoordinates.eh + overlapDouble,
+            backgroundCorners: [
+                { x: 0, y: y1 },
+                { x: x1, y: y1 },
+                { x: x1, y: y2 },
+                { x: 0, y: y2 },
+            ],
+            backgroundImage: frameImage,
+        },
+        {
+            // r
+            x: shapeCoordinates.x2,
+            y: shapeCoordinates.y1 - overlap,
+            width: shapeCoordinates.cw,
+            height: shapeCoordinates.eh + overlapDouble,
+            backgroundCorners: [
+                { x: x2, y: y1 },
+                { x: 1, y: y1 },
+                { x: 1, y: y2 },
+                { x: x2, y: y2 },
+            ],
+            backgroundImage: frameImage,
+        },
+        // corners
+        {
+            // tl
+            ...cornerGeneric,
+            x: shapeCoordinates.x0,
+            y: shapeCoordinates.y0,
+            backgroundCorners: [
+                { x: 0, y: 0 },
+                { x: x1, y: 0 },
+                { x: x1, y: y1 },
+                { x: 0, y: y1 },
+            ],
+        },
+        {
+            // tr
+            ...cornerGeneric,
+            x: shapeCoordinates.x2,
+            y: shapeCoordinates.y0,
+            backgroundCorners: [
+                { x: x2, y: 0 },
+                { x: 1, y: 0 },
+                { x: 1, y: y1 },
+                { x: x2, y: y1 },
+            ],
+        },
+        {
+            // br
+            ...cornerGeneric,
+            x: shapeCoordinates.x2,
+            y: shapeCoordinates.y2,
+            backgroundCorners: [
+                { x: x2, y: y2 },
+                { x: 1, y: y2 },
+                { x: 1, y: 1 },
+                { x: x2, y: 1 },
+            ],
+        },
+        {
+            // bl
+            ...cornerGeneric,
+            x: shapeCoordinates.x0,
+            y: shapeCoordinates.y2,
+            backgroundCorners: [
+                { x: 0, y: y2 },
+                { x: x1, y: y2 },
+                { x: x1, y: 1 },
+                { x: 0, y: 1 },
+            ],
+        },
+    ];
+};
+const frameStyleLine = ({ x, y, width, height, frameInset = '3.5%', frameSize = '.25%', frameColor = [1, 1, 1], frameOffset = '5%', frameAmount = 1, frameRadius = 0, expandsCanvas = false, }, { isPreview }) => {
+    const size = Math.sqrt(width * height);
+    let frameSizeValue = toValue(frameSize, size);
+    const frameInsetValue = toValue(frameInset, size);
+    const frameOffsetValue = toValue(frameOffset, size);
+    let center = 0;
+    if (!isPreview) {
+        frameSizeValue = Math.max(1, Math.round(frameSizeValue));
+        center = frameSizeValue % 2 == 0 ? 0 : 0.5;
+    }
+    const r = toValue(safeFactor(frameRadius, frameAmount), size);
+    return new Array(frameAmount).fill(undefined).map((_, index) => {
+        const offset = frameOffsetValue * index;
+        let left = x + frameInsetValue + offset;
+        let top = y + frameInsetValue + offset;
+        let right = x + width - frameInsetValue - offset;
+        let bottom = y + height - frameInsetValue - offset;
+        if (!isPreview) {
+            left = Math.round(left);
+            top = Math.round(top);
+            right = Math.round(right);
+            bottom = Math.round(bottom);
+        }
+        const radius = r > 0 ? r - offset : 0;
+        return {
+            x: left + center,
+            y: top + center,
+            width: right - left,
+            height: bottom - top,
+            cornerRadius: radius,
+            strokeWidth: frameSizeValue,
+            strokeColor: frameColor,
+            expandsCanvas,
+        };
+    });
+};
+const frameStyleEdge = ({ x, y, width, height, frameSize = '.25%', frameOffset = 0, frameInset = '2.5%', frameColor = [1, 1, 1], }, { isPreview }) => {
+    const size = Math.sqrt(width * height);
+    let frameSizeValue = toValue(frameSize, size);
+    let frameInsetValue = toValue(frameInset, size);
+    let frameOffsetValue = toValue(frameOffset, size);
+    let center = 0;
+    if (!isPreview) {
+        frameSizeValue = Math.max(1, Math.round(frameSizeValue));
+        frameInsetValue = Math.round(frameInsetValue);
+        frameOffsetValue = Math.round(frameOffsetValue);
+        center = frameSizeValue % 2 == 0 ? 0 : 0.5;
+    }
+    const offset = frameOffsetValue - frameInsetValue;
+    const left = x + frameInsetValue + center;
+    const top = y + frameInsetValue + center;
+    const right = x + width - frameInsetValue - center;
+    const bottom = y + height - frameInsetValue - center;
+    return [
+        // top
+        {
+            points: [vectorCreate(left + offset, top), vectorCreate(right - offset, top)],
+        },
+        {
+            points: [vectorCreate(right, top + offset), vectorCreate(right, bottom - offset)],
+        },
+        {
+            points: [vectorCreate(right - offset, bottom), vectorCreate(left + offset, bottom)],
+        },
+        {
+            points: [vectorCreate(left, bottom - offset), vectorCreate(left, top + offset)],
+        },
+    ].map((shape) => {
+        shape.strokeWidth = frameSizeValue;
+        shape.strokeColor = frameColor;
+        return shape;
+    });
+};
+const frameStyleHook = ({ x, y, width, height, frameSize = '.25%', frameInset = '2.5%', frameLength = '2.5%', frameColor = [1, 1, 1], }, { isPreview }) => {
+    const size = Math.sqrt(width * height);
+    let frameSizeValue = toValue(frameSize, size);
+    let frameInsetValue = toValue(frameInset, size);
+    let frameLengthValue = toValue(frameLength, size);
+    let center = 0;
+    if (!isPreview) {
+        frameSizeValue = Math.max(1, Math.round(frameSizeValue));
+        frameInsetValue = Math.round(frameInsetValue);
+        frameLengthValue = Math.round(frameLengthValue);
+        center = frameSizeValue % 2 == 0 ? 0 : 0.5;
+    }
+    const left = x + frameInsetValue + center;
+    const top = y + frameInsetValue + center;
+    const right = x + width - frameInsetValue - center;
+    const bottom = y + height - frameInsetValue - center;
+    return [
+        // top
+        {
+            points: [
+                vectorCreate(left, top + frameLengthValue),
+                vectorCreate(left, top),
+                vectorCreate(left + frameLengthValue, top),
+            ],
+        },
+        {
+            points: [
+                vectorCreate(right - frameLengthValue, top),
+                vectorCreate(right, top),
+                vectorCreate(right, top + frameLengthValue),
+            ],
+        },
+        {
+            points: [
+                vectorCreate(right, bottom - frameLengthValue),
+                vectorCreate(right, bottom),
+                vectorCreate(right - frameLengthValue, bottom),
+            ],
+        },
+        {
+            points: [
+                vectorCreate(left + frameLengthValue, bottom),
+                vectorCreate(left, bottom),
+                vectorCreate(left, bottom - frameLengthValue),
+            ],
+        },
+    ].map((shape) => {
+        shape.strokeWidth = frameSizeValue;
+        shape.strokeColor = frameColor;
+        return shape;
+    });
+};
+const frameStylePolaroid = ({ x, y, width, height, frameColor = [1, 1, 1] }, { isPreview }) => {
+    const size = Math.sqrt(width * height);
+    const borderWidth = 0.1 * size;
+    let chinHeight = 0.2 * size;
+    const borderWidthHalf = 0.5 * borderWidth;
+    let strokeWidth = 0.0025 * size;
+    if (!isPreview) {
+        chinHeight = Math.ceil(chinHeight);
+        strokeWidth = Math.max(2, strokeWidth);
+    }
+    // always remove opacity
+    frameColor.length = 3;
+    return [
+        // border
+        {
+            id: 'border',
+            x: x - borderWidthHalf,
+            y: y - borderWidthHalf,
+            width: width + borderWidth,
+            height: height + chinHeight,
+            frameStyle: 'line',
+            frameInset: 0,
+            frameOffset: 0,
+            frameSize: borderWidth,
+            frameColor,
+            expandsCanvas: true,
+        },
+        // chin
+        {
+            id: 'chin',
+            x: x - borderWidthHalf,
+            y: height,
+            width: width + borderWidth,
+            height: chinHeight,
+            backgroundColor: frameColor,
+            expandsCanvas: true,
+        },
+        // for preview only
+        isPreview && {
+            x,
+            y,
+            width,
+            height,
+            strokeWidth,
+            strokeColor: frameColor,
+        },
+    ].filter(Boolean);
+};
+const createFrameStyleProcessor = (styles = {}) => (shape, options) => {
+    // handle solid frameStyle
+    if (!hasProp(shape, 'frameStyle'))
+        return;
+    const style = shape.frameStyle;
+    // get parser for style
+    const process = styles[style];
+    if (!process)
+        return;
+    // remove frameStyle property so we don't get endless loops
+    const { frameStyle, ...shapeReadyToParse } = shape;
+    return process(shapeReadyToParse, options);
+};
+// the default frame styles available, can import and extend
+const createDefaultFrameStyles = () => ({
+    solid: frameStyleSolid,
+    hook: frameStyleHook,
+    line: frameStyleLine,
+    edge: frameStyleEdge,
+    polaroid: frameStylePolaroid,
+    nine: frameStyleNine,
+});
+
+// the default lineEnd parser to use
+const createDefaultLineEndProcessors = () => createLineEndProcessor(createDefaultLineEndStyles());
+const createDefaultFrameStyleProcessor = () => createFrameStyleProcessor(createDefaultFrameStyles());
+const createDefaultShapeProcessors = () => [
+    createDefaultFrameStyleProcessor(),
+    createDefaultLineEndProcessors(),
+];
+const createShapePreprocessor$1 = (processors) => {
+    const processShape = (shape, options = { isPreview: true }) => {
+        const res = processors
+            .map((process) => {
+            const res = process(shape, options);
+            // processor wasn't a match?
+            if (!res)
+                return;
+            return res.map((shape) => processShape(shape, options));
+        })
+            .filter(Boolean)
+            .flat();
+        return !res.length ? shape : res.flat();
+    };
+    return processShape;
+};
+
 const createDefaultImageReader = createDefaultImageReader$1;
 const createDefaultImageWriter = createDefaultImageWriter$1;
 const createDefaultImageOrienter = () => ({
     read: getImageOrientationFromFile,
     apply: orientImageData,
 });
+const createDefaultImageScrambler = (configurationOptions = {}) => {
+    // default configuration
+    const { blurAmount, scrambleAmount, enableSmoothing, backgroundColor } = configurationOptions;
+
+    // as called from editor ui
+    return (imageData, uiOptions) =>
+        imageDataScramble(imageData, {
+            blurAmount,
+            scrambleAmount,
+            enableSmoothing,
+            backgroundColor,
+            ...uiOptions,
+        });
+};
 const createEditor = createImageEditor;
 const getEditorProps = () => getEditorProps$1().concat(getEditorViewProps()); // private api for framework components
 
@@ -38372,10 +44148,13 @@ const plugin_finetune = _plugin_finetune;
 const plugin_annotate = _plugin_annotate;
 const plugin_decorate = _plugin_decorate;
 const plugin_sticker = _plugin_sticker;
+const plugin_frame = _plugin_frame;
+const plugin_redact = _plugin_redact;
 const plugin_resize = _plugin_resize;
 
 const plugin_finetune_defaults = _plugin_finetune_defaults;
 const plugin_filter_defaults = _plugin_filter_defaults;
+const plugin_frame_defaults = _plugin_frame_defaults;
 
 const locale_en_gb = _locale_en_gb;
 const markup_editor_locale_en_gb = MarkupEditor;
@@ -38387,6 +44166,8 @@ const plugin_resize_locale_en_gb = _plugin_resize_locale_en_gb;
 const plugin_decorate_locale_en_gb = _plugin_decorate_locale_en_gb;
 const plugin_annotate_locale_en_gb = _plugin_annotate_locale_en_gb;
 const plugin_sticker_locale_en_gb = _plugin_sticker_locale_en_gb;
+const plugin_frame_locale_en_gb = _plugin_frame_locale_en_gb;
+const plugin_redact_locale_en_gb = _plugin_redact_locale_en_gb;
 
 const elementsToEditor = (factory, targets, options = {}) => {
     const elements = isString(targets) ? Array.from(document.querySelectorAll(targets)) : targets;
@@ -38398,12 +44179,17 @@ const openEditor = _openEditor;
 const overlayEditor = _overlayEditor;
 const appendEditors = (targets, options) => elementsToEditor(appendEditor, targets, options);
 
+const createShapePreprocessor = createShapePreprocessor$1;
+
+const createDefaultShapePreprocessor = () =>
+    createShapePreprocessor$1(createDefaultShapeProcessors());
+
 //
 // creating default editors
 //
 
 const getEditorDefaultReadWriteOptions = (options = {}) => {
-    // allow passing reader writer options as object
+    // allow passing reader / writer / scrambler options as object
     let readerProps = undefined;
     if (!Array.isArray(options.imageWriter)) {
         readerProps = options.imageWriter;
@@ -38416,11 +44202,18 @@ const getEditorDefaultReadWriteOptions = (options = {}) => {
         delete options.imageWriter;
     }
 
+    let scramblerProps = undefined;
+    if (!isFunction(options.imageScrambler)) {
+        scramblerProps = options.imageScrambler;
+        delete options.imageScrambler;
+    }
+
     return {
         // default handling of images
         imageReader: createDefaultImageReader(readerProps),
         imageWriter: createDefaultImageWriter(writerProps),
         imageOrienter: createDefaultImageOrienter(),
+        imageScrambler: createDefaultImageScrambler(scramblerProps),
     };
 };
 
@@ -38437,6 +44230,8 @@ const getEditorDefaults = (options = {}) => {
             plugin_annotate,
             plugin_decorate,
             plugin_sticker,
+            plugin_frame,
+            plugin_redact,
             plugin_resize,
         ].filter(Boolean)
     );
@@ -38449,6 +44244,8 @@ const getEditorDefaults = (options = {}) => {
         'annotate',
         'decorate',
         options.stickers && 'sticker',
+        'frame',
+        'redact',
         'resize',
     ].filter(Boolean);
 
@@ -38462,6 +44259,8 @@ const getEditorDefaults = (options = {}) => {
         ...plugin_crop_locale_en_gb,
         ...plugin_filter_locale_en_gb,
         ...plugin_finetune_locale_en_gb,
+        ...plugin_frame_locale_en_gb,
+        ...plugin_redact_locale_en_gb,
         ...plugin_resize_locale_en_gb,
         ...plugin_decorate_locale_en_gb,
         ...plugin_annotate_locale_en_gb,
@@ -38476,12 +44275,16 @@ const getEditorDefaults = (options = {}) => {
             // set reader / writer / orienter
             ...defaultReadWriteOptions,
 
+            // shape preprocessor
+            shapePreprocessor: createDefaultShapePreprocessor(),
+
             // default utils
             utils,
 
             // default plugin options
             ...plugin_finetune_defaults,
             ...plugin_filter_defaults,
+            ...plugin_frame_defaults,
             ...markup_editor_defaults,
 
             // stickers stick to image by default
@@ -38514,4 +44317,4 @@ const overlayDefaultEditor = (element, options) =>
 const appendDefaultEditors = (targets, options) =>
     elementsToEditor(appendDefaultEditor, targets, options);
 
-export { appendDefaultEditor, appendDefaultEditors, appendEditor, appendEditors, appendNode, blobToFile, colorStringToColorArray, createDefaultColorOptions, createDefaultFontFamilyOptions, createDefaultFontScaleOptions, createDefaultFontSizeOptions, createDefaultFontStyleOptions, createDefaultImageOrienter, createDefaultImageReader, createDefaultImageWriter, createDefaultLineEndStyleOptions, createDefaultStrokeScaleOptions, createDefaultStrokeWidthOptions, createDefaultTextAlignOptions, createEditor, createBackgroundColorControl as createMarkupEditorBackgroundColorControl, createColorOptions as createMarkupEditorColorOptions, createFontColorControl as createMarkupEditorFontColorControl, createFontFamilyControl as createMarkupEditorFontFamilyControl, createFontFamilyOptions as createMarkupEditorFontFamilyOptions, createFontScaleOptions as createMarkupEditorFontScaleOptions, createFontSizeControl as createMarkupEditorFontSizeControl, createFontSizeOptions as createMarkupEditorFontSizeOptions, createFontStyleControl as createMarkupEditorFontStyleControl, createFontStyleOptions as createMarkupEditorFontStyleOptions, createLineEndStyleControl as createMarkupEditorLineEndStyleControl, createLineEndStyleOptions as createMarkupEditorLineEndStyleOptions, createLineHeightControl as createMarkupEditorLineHeightControl, createLineStartStyleControl as createMarkupEditorLineStartStyleControl, createMarkupEditorShapeStyleControls, createStrokeColorControl as createMarkupEditorStrokeColorControl, createStrokeScaleOptions as createMarkupEditorStrokeScaleOptions, createStrokeWidthControl as createMarkupEditorStrokeWidthControl, createStrokeWidthOptions as createMarkupEditorStrokeWidthOptions, createTextAlignControl as createMarkupEditorTextAlignControl, createToolStyle as createMarkupEditorToolStyle, createMarkupEditorToolStyles, createMarkupEditorToolbar, createNode, defineCustomElements, defineDefaultCustomElements, degToRad, dispatchEditorEvents, brightness as effectBrightness, clarity as effectClarity, contrast as effectContrast, exposure as effectExposure, gamma as effectGamma, saturation as effectSaturation, temperature as effectTemperature, vignette as effectVignette, chrome as filterChrome, cold as filterCold, fade as filterFade, invert as filterInvert, monoDefault as filterMonoDefault, monoNoir as filterMonoNoir, monoStark as filterMonoStark, monoWash as filterMonoWash, pastel as filterPastel, sepiaBlues as filterSepiaBlues, sepiaColor as filterSepiaColor, sepiaDefault as filterSepiaDefault, sepiaRust as filterSepiaRust, warm as filterWarm, findNode, getEditorDefaults, getEditorProps, insertNodeAfter, insertNodeBefore, isModernBrowser as isSupported, legacyDataToImageState, locale_en_gb, markup_editor_defaults, markup_editor_locale_en_gb, openDefaultEditor, openEditor, overlayDefaultEditor, overlayEditor, plugin_annotate, plugin_annotate_locale_en_gb, plugin_crop, plugin_crop_locale_en_gb, plugin_decorate, plugin_decorate_locale_en_gb, plugin_filter, plugin_filter_defaults, plugin_filter_locale_en_gb, plugin_finetune, plugin_finetune_defaults, plugin_finetune_locale_en_gb, plugin_resize, plugin_resize_locale_en_gb, plugin_sticker, plugin_sticker_locale_en_gb, processDefaultImage, processImage, removeNode, setPlugins, supportsWebGL };
+export { appendDefaultEditor, appendDefaultEditors, appendEditor, appendEditors, appendNode, blobToFile, colorStringToColorArray, createDefaultColorOptions, createDefaultFontFamilyOptions, createDefaultFontScaleOptions, createDefaultFontSizeOptions, createDefaultFontStyleOptions, createDefaultFrameStyles, createDefaultImageOrienter, createDefaultImageReader, createDefaultImageScrambler, createDefaultImageWriter, createDefaultLineEndStyleOptions, createDefaultLineEndStyles, createDefaultLineHeightOptions, createDefaultLineHeightScaleOptions, createDefaultShapePreprocessor, createDefaultStrokeScaleOptions, createDefaultStrokeWidthOptions, createDefaultTextAlignOptions, createEditor, createFrameStyleProcessor, createLineEndProcessor, createBackgroundColorControl as createMarkupEditorBackgroundColorControl, createColorControl as createMarkupEditorColorControl, createColorOptions as createMarkupEditorColorOptions, createFontColorControl as createMarkupEditorFontColorControl, createFontFamilyControl as createMarkupEditorFontFamilyControl, createFontFamilyOptions as createMarkupEditorFontFamilyOptions, createFontScaleOptions as createMarkupEditorFontScaleOptions, createFontSizeControl as createMarkupEditorFontSizeControl, createFontSizeOptions as createMarkupEditorFontSizeOptions, createFontStyleControl as createMarkupEditorFontStyleControl, createFontStyleOptions as createMarkupEditorFontStyleOptions, createLineEndStyleControl as createMarkupEditorLineEndStyleControl, createLineEndStyleOptions as createMarkupEditorLineEndStyleOptions, createLineHeightControl as createMarkupEditorLineHeightControl, createLineHeightOptions as createMarkupEditorLineHeightOptions, createLineHeightScaleOptions as createMarkupEditorLineHeightScaleOptions, createLineStartStyleControl as createMarkupEditorLineStartStyleControl, createMarkupEditorShapeStyleControls, createStrokeColorControl as createMarkupEditorStrokeColorControl, createStrokeScaleOptions as createMarkupEditorStrokeScaleOptions, createStrokeWidthControl as createMarkupEditorStrokeWidthControl, createStrokeWidthOptions as createMarkupEditorStrokeWidthOptions, createTextAlignControl as createMarkupEditorTextAlignControl, createToolStyle as createMarkupEditorToolStyle, createMarkupEditorToolStyles, createMarkupEditorToolbar, createNode, createShapePreprocessor, defineCustomElements, defineDefaultCustomElements, degToRad, dispatchEditorEvents, brightness as effectBrightness, clarity as effectClarity, contrast as effectContrast, exposure as effectExposure, gamma as effectGamma, saturation as effectSaturation, temperature as effectTemperature, vignette as effectVignette, chrome as filterChrome, cold as filterCold, fade as filterFade, invert as filterInvert, monoDefault as filterMonoDefault, monoNoir as filterMonoNoir, monoStark as filterMonoStark, monoWash as filterMonoWash, pastel as filterPastel, sepiaBlues as filterSepiaBlues, sepiaColor as filterSepiaColor, sepiaDefault as filterSepiaDefault, sepiaRust as filterSepiaRust, warm as filterWarm, findNode, edgeCross as frameEdgeCross, edgeOverlap as frameEdgeOverlap, edgeSeparate as frameEdgeSeparate, hook as frameHook, lineMultiple as frameLineMultiple, lineSingle as frameLineSingle, polaroid as framePolaroid, solidRound as frameSolidRound, solidSharp as frameSolidSharp, getEditorDefaults, getEditorProps, insertNodeAfter, insertNodeBefore, isModernBrowser as isSupported, legacyDataToImageState, locale_en_gb, markup_editor_defaults, markup_editor_locale_en_gb, openDefaultEditor, openEditor, overlayDefaultEditor, overlayEditor, plugin_annotate, plugin_annotate_locale_en_gb, plugin_crop, plugin_crop_locale_en_gb, plugin_decorate, plugin_decorate_locale_en_gb, plugin_filter, plugin_filter_defaults, plugin_filter_locale_en_gb, plugin_finetune, plugin_finetune_defaults, plugin_finetune_locale_en_gb, plugin_frame, plugin_frame_defaults, plugin_frame_locale_en_gb, plugin_redact, plugin_redact_locale_en_gb, plugin_resize, plugin_resize_locale_en_gb, plugin_sticker, plugin_sticker_locale_en_gb, processDefaultImage, processImage, removeNode, setPlugins, supportsWebGL };

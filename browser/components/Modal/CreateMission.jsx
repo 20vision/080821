@@ -78,6 +78,9 @@ export default function CreateMission() {
 
     return (
         <div>
+            <h1 style={{marginBottom: '35px', textAlign: 'center'}}>
+            Add Mission
+            </h1>
             <div className='areaLine'>
                 <input maxLength="100" ref={missionTitleRef} placeholder="Mission Title" onChange={e => {e.target.value = e.target.value.replace('_', ' '); setMissionTitle(e.target.value);}}/>
                 <div className={styles.body}>

@@ -55,6 +55,13 @@ span{
   line-height: 16px;
 }
 
+.overflowTextDot{
+  overflow:hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+}
+
 .smalltext{
   font-size: 12px!important;
   margin-top: 5px;
@@ -175,7 +182,12 @@ input[type=range]::-webkit-slider-thumb {
   cursor: pointer;
   margin-top: -5px;
 }
-
+br {
+  display: block;
+  margin-bottom: 5px;
+  font-size:5px;
+  line-height: 5px;
+}
 input[type=range]::-moz-range-thumb {
   border:none;
   height: 14px;

@@ -36,7 +36,7 @@ const AmmLayout = BufferLayout.struct(
 
 
 export default function Trade() {
-  const [selectedRoute, setSelectedRoute] = useState(1)
+  const [selectedRoute, setSelectedRoute] = useState(0)
   const [mint, setMint] = useState()
   const [tokenAmt, setTokenAmt] = useState()
   const [solAmt, setsolAmt] = useState()
@@ -63,44 +63,6 @@ export default function Trade() {
     }
   }
 
-  // const checkAndGetTokenAccountInfo = async(listenBool) => {
-  //   if(!mint || !publicKey) throw new Error('An error occurred')
-  //   const associatedUserPubKey = await Token.getAssociatedTokenAddress(ASSOCIATED_TOKEN_PROGRAM_ID,TOKEN_PROGRAM_ID,mint,publicKey)
-  //   const associatedUserAccoutInfo = await connection.getAccountInfo(associatedUserPubKey)
-  //   if ((listenBool == false) || (associatedUserAccoutInfo === null) || (!associatedUserAccoutInfo.owner.equals(TOKEN_PROGRAM_ID)) || (associatedUserAccoutInfo.data.length != ACCOUNT_LAYOUT.span)) {
-  //     setTokenBalance(null)
-  //     if(tokenAccountListenerId){
-  //       await connection.removeAccountChangeListener(tokenAccountListenerId)
-  //       setTokenAccountListenerId(null)
-  //     }
-  //   }else{
-  //     setTokenBalance(getBigNumber(ACCOUNT_LAYOUT.decode(Buffer.from(associatedUserAccoutInfo.data)).amount))
-  //     if(!tokenAccountListenerId && listenBool){
-  //       setTokenAccountListenerId(connection.onAccountChange(
-  //         associatedUserPubKey,
-  //         async info => {
-  //           if ((info != null) && (info.owner.equals(TOKEN_PROGRAM_ID)) && (info.data.length == ACCOUNT_LAYOUT.span)) {
-  //             setTokenBalance(getBigNumber(ACCOUNT_LAYOUT.decode(Buffer.from(info.data)).amount))
-  //           }else if(tokenBalance){
-  //             setTokenBalance(null)
-  //           }
-  //         },
-  //       ))
-  //     }
-  //   }
-  // }
-
-  // useEffect(async() => {
-  //   if(){
-
-  //   }
-  //   return async() => {
-  //     if(tokenAccountListenerId){
-  //       await connection.removeAccountChangeListener(tokenAccountListenerId)
-  //       setTokenAccountListenerId(null)
-  //     }
-  //   }
-  // }, [])
   const infoToTokenBalance = (info) =>{
     if ((info === null) || (info.lamports == 0) || (!info.owner.equals(TOKEN_PROGRAM_ID)) || (info.data.length != ACCOUNT_LAYOUT.span)) {
       if(tokenBalance){
@@ -663,76 +625,122 @@ export default function Trade() {
   return (
     <div className={styles.container}>
       <div className={`noselect ${styles.header}`}>
-          <h1 onClick={() => setSelectedRoute(0)} style={{marginRight: '10px'}} className={`${selectedRoute == 0?styles.highlight:null}`}>
-            Info
-          </h1>
-          <h1 onClick={() => setSelectedRoute(1)} style={{marginRight: '10px'}} className={`${selectedRoute == 1?styles.highlight:null}`}>
+          <h1 onClick={() => setSelectedRoute(0)} style={{marginLeft: '10px'}} className={`${selectedRoute == 0?styles.highlight:null}`}>
             Swap
           </h1>
-          <h1 onClick={() => setSelectedRoute(2)} style={{marginLeft: '10px'}} className={`${selectedRoute == 2?styles.highlight:null}`}>
-            %
+          <h1 onClick={() => setSelectedRoute(1)} style={{marginRight: '10px'}} className={`${selectedRoute == 1?styles.highlight:null}`}>
+            Info
           </h1>
+          {/* <h1 onClick={() => setSelectedRoute(2)} style={{marginLeft: '10px'}} className={`${selectedRoute == 2?styles.highlight:null}`}>
+            %
+          </h1> */}
       </div>
-      <div className={styles.selectionParent}>
-        {isBuy?<SelectionSol connected={connected} solPrice={solPrice} lamportsBalance={lamportsBalance} solAmt={solAmt} amtOut={(!solAmt && tokenAmt)?amtOut:null} setsolAmt={setsolAmt}/>:<SelectionPageToken connected={connected} tokenDollarAmt={tokenAmtDollar(tokenBalance)} tokenBalance={tokenBalance} tokenAmt={tokenAmt} amtOut={(solAmt && !tokenAmt)?amtOut:null} setTokenAmt={setTokenAmt}/>}
-          <div className={styles.tradeDirectionArrowParent}>
-            <div className={styles.tradeDirectionArrowChild}>
-              <a onClick={() => setIsBuy(!isBuy)}><Arrow strokeWidth='3'/></a>
+
+      { selectedRoute == 0?
+          <>
+            <div className={styles.selectionParent}>
+              {isBuy?<SelectionSol connected={connected} solPrice={solPrice} lamportsBalance={lamportsBalance} solAmt={solAmt} amtOut={(!solAmt && tokenAmt)?amtOut:null} setsolAmt={setsolAmt}/>:<SelectionPageToken connected={connected} tokenDollarAmt={tokenAmtDollar(tokenBalance)} tokenBalance={tokenBalance} tokenAmt={tokenAmt} amtOut={(solAmt && !tokenAmt)?amtOut:null} setTokenAmt={setTokenAmt}/>}
+                <div className={styles.tradeDirectionArrowParent}>
+                  <div className={styles.tradeDirectionArrowChild}>
+                    <a onClick={() => setIsBuy(!isBuy)}><Arrow strokeWidth='3'/></a>
+                  </div>
+                </div>
+              {isBuy?<SelectionPageToken connected={connected} tokenDollarAmt={tokenAmtDollar(tokenBalance)} tokenBalance={tokenBalance} tokenAmt={tokenAmt} amtOut={(solAmt && !tokenAmt)?amtOut:null} setTokenAmt={setTokenAmt}/>:<SelectionSol connected={connected} solPrice={solPrice} lamportsBalance={lamportsBalance} solAmt={solAmt} amtOut={(!solAmt && tokenAmt)?amtOut:null} setsolAmt={setsolAmt}/>}
             </div>
-          </div>
-        {isBuy?<SelectionPageToken connected={connected} tokenDollarAmt={tokenAmtDollar(tokenBalance)} tokenBalance={tokenBalance} tokenAmt={tokenAmt} amtOut={(solAmt && !tokenAmt)?amtOut:null} setTokenAmt={setTokenAmt}/>:<SelectionSol connected={connected} solPrice={solPrice} lamportsBalance={lamportsBalance} solAmt={solAmt} amtOut={(!solAmt && tokenAmt)?amtOut:null} setsolAmt={setsolAmt}/>}
-      </div>
-
-      <div className={`smalltext ${styles.priceInDollar}`}>
-        ~$
-        {tokenAmt && tokenAmtDollar(tokenAmt * 1000000000) > 0?
-          tokenAmtDollar(tokenAmt * 1000000000)
-        :
-        solAmt && (Math.round(solAmt * solPrice.price *100)/100) > 0?
-          Math.round(solAmt * solPrice.price *100)/100
-        :
-        0
-      }
-      </div>
-
-      {!profile.username || !wallet?
-        <a onClick={() => setModal(1)}>
-          <div className={styles.button}>
-            <h2>Connect Wallet</h2>
-          </div>
-        </a>
-      :!connected && wallet?
-        <a onClick={() => connectThisWallet()}>
-          <div className={styles.button}>
-            <h2>Connect Wallet</h2>
-          </div>
-        </a>
-      :!mint?
-        <a onClick={() => fundPageToken()}>
-          <div className={styles.button}>
-            <h2>Fund</h2>
-          </div>
-        </a>
-      :
-        <a onClick={() => {
-          isBuy?
-            buy(solAmt?(solAmt * 1000000000):amtOut, tokenAmt?(tokenAmt * 1000000000):amtOut)
-          :
-            sell(tokenAmt?(tokenAmt * 1000000000):amtOut, solAmt?(solAmt * 1000000000):amtOut)
-          }}>
-          <div className={`${
-          (loading || ((lamportsBalance == null) && isBuy) || ((tokenBalance == null) && !isBuy) || (isBuy && ((solAmt * 1000000000) > lamportsBalance)) || (!isBuy && ((tokenAmt * 1000000000) > tokenBalance)) || !amtOut || (!solAmt && !tokenAmt) || ((solAmt * 1000000000 < 0)) || ((tokenAmt * 1000000000 < 0)))?
-            styles.buttonInvalid
-          :
-            null
-          } ${styles.button}`}>
-            {loading?
-              <Loading/>
-            :
-              <h2>Swap</h2>
+            <div className={`smalltext ${styles.priceInDollar}`}>
+              ~$
+              {tokenAmt && tokenAmtDollar(tokenAmt * 1000000000) > 0?
+                tokenAmtDollar(tokenAmt * 1000000000)
+              :
+              solAmt && (Math.round(solAmt * solPrice.price *100)/100) > 0?
+                Math.round(solAmt * solPrice.price *100)/100
+              :
+              0
             }
-          </div>
-        </a>
+            </div>
+
+            {!profile.username || !wallet?
+              <a onClick={() => setModal(1)}>
+                <div className={styles.button}>
+                  <h2>Connect Wallet</h2>
+                </div>
+              </a>
+            :!connected && wallet?
+              <a onClick={() => connectThisWallet()}>
+                <div className={styles.button}>
+                  <h2>Connect Wallet</h2>
+                </div>
+              </a>
+            :!mint?
+              <a onClick={() => fundPageToken()}>
+                <div className={styles.button}>
+                  <h2>Fund</h2>
+                </div>
+              </a>
+            :
+              <a onClick={() => {
+                isBuy?
+                  buy(solAmt?(solAmt * 1000000000):amtOut, tokenAmt?(tokenAmt * 1000000000):amtOut)
+                :
+                  sell(tokenAmt?(tokenAmt * 1000000000):amtOut, solAmt?(solAmt * 1000000000):amtOut)
+                }}>
+                <div className={`${
+                (loading || ((lamportsBalance == null) && isBuy) || ((tokenBalance == null) && !isBuy) || (isBuy && ((solAmt * 1000000000) > lamportsBalance)) || (!isBuy && ((tokenAmt * 1000000000) > tokenBalance)) || !amtOut || (!solAmt && !tokenAmt) || ((solAmt * 1000000000 < 0)) || ((tokenAmt * 1000000000 < 0)))?
+                  styles.buttonInvalid
+                :
+                  null
+                } ${styles.button}`}>
+                  {loading?
+                    <Loading/>
+                  :
+                    <h2>Swap</h2>
+                  }
+                </div>
+              </a>
+            }
+          </>
+        :
+        <>
+          <span>
+            Voice Tokens at it's core are a Feedback-loop. They help holders to shape the future of a Page. 
+            Tokens are "tickets" to Page Related - Forum topics and influence the reach of discussion posts.
+            Holders have stake, thus will try their best to make the Page succeed in their goals and add valueable input.
+            As the Page gains attention, thus more buyers, the token value goes up.
+            Page Owners receive a custom Royalty fee on every token being bought. 20Vision charges a 1% fee on each transaction.
+            <a style={{textDecoration: 'underline'}}>(see more)</a>
+            <br/>
+            <br/>
+            <br/>
+            <b>Supply:</b>&nbsp;{tokenSupply?Math.floor((tokenSupply - 1000000000)/1000000000):0}
+            <br/>
+            <b>Royalty Fee:</b>&nbsp;{pageFee?pageFee/1000:2.5}%
+            <br/>
+            <div style={{display: 'flex', justifyContent: 'center', minWidth: '1px'}}>
+              <div><b>Mint:</b></div>&nbsp;
+              {mint?
+                <div style={{flexShrink: '1', minWidth: '1px'}}><a href={`https://explorer.solana.com/address/${mint}`} target="_blank" style={{textDecoration: 'underline'}} className={'overflowTextDot'}>{mint.toString()}</a></div>
+              :
+                '-'
+              }
+            
+            </div>
+            
+
+            {/* Capitalism at it's essence is a Feedback-loop. 
+            Investors allocate funds to Companies. 
+            Companies create goods or services.
+            Consumers choose upon the quality of goods and services.
+            Companies that outperformed, have proven their capability, thus should scale.
+            Investors that chose the winner, have proven their capability of choice, thus should scale in choice.
+            Although the core concept seems reasonable, money abstracts value in a large way.
+            Value should not be misinterpreted. As companies that create more worse than good, are still often profitable.
+            Humanity shouldn't loose 
+            // At it's core, value should be amount of positiveImapce x number of people impacted - amount of negative Impact x number of people impacted. */}
+          </span>
+          <br/>
+
+
+        </>
       }
     </div>
   )
