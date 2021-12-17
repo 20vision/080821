@@ -1,0 +1,23 @@
+.container{
+    height: 150px;
+    width: 600px;
+    display: flex;
+    margin-top:25px;
+}
+
+.child{
+    background-color: thistle;
+    color: var(--black);
+    flex-grow: 1;
+    border-radius: 25px;
+    border-top-right-radius:0px;
+    padding:25px;
+}
+
+.triangle{
+    width:0;
+    width:0;
+    border-top: 25px solid thistle;
+    border-right: 25px solid transparent;
+    border-top-right-radius: 3px;
+}

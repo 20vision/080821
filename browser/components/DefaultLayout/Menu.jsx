@@ -19,9 +19,19 @@ import Following from '../../assets/Following'
 import Saved from '../../assets/Saved'
 import Loading from '../../assets/Loading/Loading'
 import Plus from '../../assets/Plus'
+import { useEffect,useState } from 'react'
 
 export default function Index() {
     const opened = useMenuStore(state => state.opened)
+    const [menu, setMenu] = useState()
+    const router = useRouter()
+    const { pathname } = useRouter();
+
+    useEffect(() => {
+        if(menu){
+            router.push('/'+menu)
+        }
+    }, [menu])
 
     const variants = {
         opened: {
@@ -46,7 +56,7 @@ export default function Index() {
                 {
                     (opened == true)
                     ?
-                        <Menu opened={opened}/>
+                        <Menu opened={opened} setMenu={setMenu} pathname={pathname}/>
                     : 
                         null
                 }
@@ -74,8 +84,7 @@ function MenuNav() {
     )
 }
 
-function Menu({opened}) {
-    const { pathname } = useRouter();
+export function Menu({opened, setMenu, pathname}) {
     const [profile, isLoading, setUser] = useUserProfile()
     const setModal = useModalStore(state => state.setModal)
 
@@ -133,7 +142,7 @@ function Menu({opened}) {
             </div>
 
             <div className={`${!profile.username? 'no_click': null} ${styles.selectionContainer}`}>
-                <Link href={'/portfolio'}>
+                <a onClick={() => {setMenu('/portfolio')}}>
                     <a>
                         <div className={`${styles.selectionChild} ${(pathname == '/portfolio')?styles.highlight:null}`}>
                             <div className={styles.icon}>
@@ -142,9 +151,9 @@ function Menu({opened}) {
                             <h2>My Portfolio</h2>
                         </div>
                     </a>
-                </Link>
+                </a>
 
-                <Link href={'/'}>
+                <a onClick={() => {setMenu('/')}}>
                     <a>
                         <div className={`${styles.selectionChild} ${(pathname == '/')?styles.highlight:null}`}>
                             <div className={styles.icon}>
@@ -153,9 +162,9 @@ function Menu({opened}) {
                             <h2>Discover</h2>
                         </div>
                     </a>
-                </Link>
+                </a>
 
-                <Link href={'/following'}>
+                <a onClick={() => {setMenu('/following')}}>
                     <a>
                         <div className={`${styles.selectionChild} ${(pathname == '/following')?styles.highlight:null}`}>
                             <div className={styles.icon}>
@@ -164,9 +173,9 @@ function Menu({opened}) {
                             <h2>Following</h2>
                         </div>
                     </a>
-                </Link>
+                </a>
 
-                <Link href={'/saved'}>
+                <a onClick={() => {setMenu('/saved')}}>
                     <a>
                         <div className={`${styles.selectionChild} ${(pathname == '/saved')?styles.highlight:null}`}>
                             <div className={styles.icon}>
@@ -175,7 +184,7 @@ function Menu({opened}) {
                             <h2>Saved</h2>
                         </div>
                     </a>
-                </Link>
+                </a>
             </div>
 
             <UserConnection 

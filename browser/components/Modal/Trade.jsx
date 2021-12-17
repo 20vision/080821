@@ -703,7 +703,7 @@ export default function Trade() {
         <>
           <span>
             Voice Tokens at it's core are a Feedback-loop. They help holders to shape the future of a Page. 
-            Tokens are "tickets" to Page Related - Forum topics and influence the reach of discussion posts.
+            Tokens act as "tickets" to private forum topics and influence the reach of page related discussion posts.
             Holders have stake, thus will try their best to make the Page succeed in their goals and add valueable input.
             As the Page gains attention, thus more buyers, the token value goes up.
             Page Owners receive a custom Royalty fee on every token being bought. 20Vision charges a 1% fee on each transaction.
