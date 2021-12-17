@@ -1,5 +1,5 @@
 .container{
-    height: 150px;
+    height: 200px;
     width: 600px;
     display: flex;
     margin-top:25px;
@@ -20,4 +20,8 @@
     border-top: 25px solid thistle;
     border-right: 25px solid transparent;
     border-top-right-radius: 3px;
+}
+
+.textareaContainer textarea{
+    width: 100%;
 }
