@@ -53,13 +53,16 @@ function Loading({type}){
 function ProfileImg({uri, type}){
     return(
         <div className={
+            type=='small'?
+                styles.small
+            :
             type=='large'?
                 styles.large
             :
                 styles.medium
             }>
             {/* LARGE STARTS AT 200 -> get downsized to 150 and medium is 48px. 400 is XL */}
-            <img className={styles.img} src={config.FILE_SERVER_URL+uri+(type=='large'?'200x200':'48x48')+'.webp'}/>
+            <img style={type=='small'?{height:'35px', width: '35px'}:null} className={styles.img} src={config.FILE_SERVER_URL+uri+(type=='large'?'200x200':'48x48')+'.webp'}/>
         </div>
         
     )
@@ -68,6 +71,9 @@ function ProfileImg({uri, type}){
 function ProfileSvg({type}){
     return(
         <div className={
+            type=='small'?
+                styles.small
+            :
             type=='large'?
                 styles.large
             :

@@ -2,6 +2,11 @@
     border-radius: 100%;
 }
 
+.small{
+    width: 35px;
+    height: 35px;
+}
+
 .medium{
     width: 45px;
     height: 45px;
@@ -10,6 +15,11 @@
 .large{
     width: 150px;
     height: 150px;
+}
+
+.small .svg,.small .loading,.small .img{
+    width: 35px;
+    height: 35px;
 }
 
 .medium .svg,.medium .loading,.medium .img{

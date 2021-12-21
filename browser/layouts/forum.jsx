@@ -39,9 +39,7 @@ var Panel = onClickOutside(({children}) => {
             </div>
             <div className={styles.previewContainer}>
                 <div className={styles.previewChild}>
-                    <main>
-                        {children}
-                    </main>
+                    {children}
                 </div>
             </div>
             <div className={styles.postSelectionContainer}>
