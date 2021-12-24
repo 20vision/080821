@@ -1,4 +1,26 @@
-.container{
+.mirror{
+    -moz-transform: scale(-1, 1);
+    -webkit-transform: scale(-1, 1);
+    -o-transform: scale(-1, 1);
+    -ms-transform: scale(-1, 1);
+    transform: scale(-1, 1);
+}
+
+.triangle{
+    height:0;
+    width:0;
+    border-left: 25px solid transparent;
+    border-top-left-radius: 3px;
+}
+
+.bubble{
+    border-radius: 25px;
+    border-top-left-radius: 0px;
+    min-height: 100px;
+    width: 100%;
+}
+
+/* .container{
     width: 100%;
     display: flex;
 }
@@ -35,6 +57,14 @@
     border-radius: 4px; 
 }
 
+.mirror{
+    -moz-transform: scale(-1, 1);
+    -webkit-transform: scale(-1, 1);
+    -o-transform: scale(-1, 1);
+    -ms-transform: scale(-1, 1);
+    transform: scale(-1, 1);
+}
+
 .sendAndSettings{
     background-color: var(--lighter_black);
     padding: 10px 15px;
@@ -47,11 +77,18 @@
 .sendAndSettings h3{
     margin-left: 10px;
 }
-.invalidVision{
+.invalidPost{
+    transition: opacity 0.3s;
     opacity: 0.3;
     pointer-events: none;
     cursor: auto;
 }
+
+.validPost{
+    transition: opacity 0.3s;
+    opacity: 1;
+}
+
 .mirror{
     -moz-transform: scale(-1, 1);
     -webkit-transform: scale(-1, 1);
@@ -59,3 +96,13 @@
     -ms-transform: scale(-1, 1);
     transform: scale(-1, 1);
 }
+
+.inactive{
+    transition: opacity 0.3s;
+    opacity: 0.3;
+}
+
+.active{
+    transition: opacity 0.3s;
+    opacity: 1;
+} */

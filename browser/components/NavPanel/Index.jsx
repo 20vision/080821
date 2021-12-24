@@ -14,6 +14,7 @@ import { useRouter } from 'next/router'
 import AddSub from '../../assets/AddSub'
 import Loading from '../../assets/Loading/Loading'
 import usePaperSocket from '../../hooks/Socket/usePaperSocket'
+import Link from 'next/link'
 
 import { useState } from 'react'
 
@@ -33,13 +34,13 @@ export default function Index() {
                             {router.pathname.split('/')[4] == 'edit'?
                                 <PaperEdit/>             
                             :router.query.mission?
-                                <MissionNavWithRole/>
+                                <MissionNavWithRole router={router}/>
                             :
-                                <PageNavWithRole/>
+                                <PageNavWithRole router={router}/>
                             }
                         </>
                     :
-                        <PageNav/>
+                        <PageNav router={router}/>
                     }
                 </div>
             </div>
@@ -48,9 +49,7 @@ export default function Index() {
     )
 }
 
-function MissionNavWithRole(){
-    const router = useRouter()
-
+function MissionNavWithRole({router}){
     return(
         <>  
             <a onClick={() => router.push(`/${router.query.page}/${router.query.mission}/new-paper/edit`)}>
@@ -63,10 +62,12 @@ function MissionNavWithRole(){
                 <div>Trade</div>
             </a>
 
-            <a>
-                <MessageCircle color="#FAFAFA"/>
-                <div>Forum</div>
-            </a>
+            <Link href={`/forum/${router.query.page}?r=${router.query.mission}&s=missions`}>
+                <a>
+                    <MessageCircle color="#FAFAFA"/>
+                    <div>Forum</div>
+                </a>
+            </Link>
 
             <a>
                 <Tool color="#FAFAFA"/>
@@ -76,9 +77,8 @@ function MissionNavWithRole(){
     )
 }
 
-function PageNavWithRole(){
+function PageNavWithRole({router}){
     const setModal = useModalStore(state => state.setModal)
-
     return(
         <>
             <a onClick={() => setModal(4)}>
@@ -91,10 +91,12 @@ function PageNavWithRole(){
                 <div>Trade</div>
             </a>
 
-            <a>
-                <MessageCircle color="#FAFAFA"/>
-                <div>Forum</div>
-            </a>
+            <Link href={`/forum/${router.query.page}`}>
+                <a>
+                    <MessageCircle color="#FAFAFA"/>
+                    <div>Forum</div>
+                </a>
+            </Link>
 
             <a>
                 <Tool color="#FAFAFA"/>
@@ -104,7 +106,7 @@ function PageNavWithRole(){
     )
 }
 
-function PageNav(){
+function PageNav({router}){
     return(
         <>
             <a>
@@ -117,10 +119,12 @@ function PageNav(){
                 <div>Trade</div>
             </a>
 
-            <a>
-                <MessageCircle color="#FAFAFA"/>
-                <div>Forum</div>
-            </a>
+            <Link href={`/forum/${router.query.page}`}>
+                <a>
+                    <MessageCircle color="#FAFAFA"/>
+                    <div>Forum</div>
+                </a>
+            </Link>
 
             <a>
                 <Info color="#FAFAFA"/>

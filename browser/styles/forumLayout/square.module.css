@@ -1,0 +1,31 @@
+.pageNameDiv span{
+    color: var(--dark_white);
+}
+
+.pageNameDiv div{
+    font-weight: bold;
+}
+
+.pageNameDiv{
+    padding: 3px 15px;
+}
+
+.header{
+    margin-bottom: 15px;
+}
+
+.fontColor{
+    color: var(--lighter_grey);
+}
+.fontColor h2{
+    color: var(--dark_white);
+}
+
+.container{
+    min-height: 100px;
+    padding: 25px;
+    border-radius: 25px;
+    filter: drop-shadow( 0px 10px 20px rgb(0, 0, 0, 0.2));
+    margin-bottom: 45px;
+    margin-left: 55px;
+}

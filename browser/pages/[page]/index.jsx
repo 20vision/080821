@@ -1,6 +1,6 @@
 import PageLayout from '../../layouts/page'
 import axios from 'axios'
-import {useInfiniteQuery} from 'react-query'
+import {useInfiniteQuery, useQuery} from 'react-query'
 import Preview from '../../components/Paper/Preview'
 import {usePageSelectedStore} from '../../store/pageSelected'
 import { useEffect } from 'react'
@@ -13,6 +13,24 @@ export default function index({page, missions}) {
       setPageSelection(page)
     }
   }, [page])
+
+  const pageQuery = useQuery(`page/${page}`,
+  async () => {
+    const res = await axios.get(`http://localhost:4000/get/page/${context.params.page}`)
+    return res.data
+  },
+  {
+    initialData: page,
+    refetchOnWindowFocus: false,
+    refetchOnmount: false,
+    refetchOnReconnect: false,
+    retry: false,
+    staleTime: 1000 * 60 * 60 * 24,
+    onError: (error) => {
+      console.error(error)
+    },
+  })
+
   const papers = useInfiniteQuery(
     `papers/${page.unique_pagename}`,
     async () => {

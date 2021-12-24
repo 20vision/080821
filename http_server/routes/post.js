@@ -1,5 +1,6 @@
 const router = require("express").Router();
 const check = require('../middleware/check')
+const web3 = require('../middleware/web3')
 const input_validation = require('../middleware/input_validation')
 let pool = require('../config/db');
 const cloudStorage = require('../middleware/cloudStorage');
@@ -114,6 +115,40 @@ router.post("/fundPageToken", check.AuthRequired, check.fundTransaction, async (
                 }
             }
         );
+    }catch(err){
+        res.status(422).send('Transaction Error')
+        return
+    }
+});
+
+router.post("/forum", check.AuthRequired, web3.getTokenImpact, async (req, res) => {
+    const connection = new Connection('https://api.devnet.solana.com', 'confirmed')
+    try{
+        pool.getConnection(async function(err, conn) {
+            if (err){
+                res.status(500).send('An error occurred')
+                console.log(err)
+            }else{
+                if(req.body.subject && req.body.subject == 'mission'){
+                    conn.query(
+                        'INSERT into Main_Forum_Post_Adjacency_List values (?,?,?);',
+                        [req.mint, req.body.unique_pagename],
+                        function(err, results) {
+                            if (err){
+                                res.status(500).send('An error occurred')
+                                console.log(err)
+                                return
+                            }else{
+                                console.log(results)
+                                res.status(200).send()
+                                console.log('Okk2')
+                            }
+                        }
+                    );
+                }
+            }
+            pool.releaseConnection(conn);
+        })
     }catch(err){
         res.status(422).send('Transaction Error')
         return

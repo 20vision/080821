@@ -9,6 +9,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@project-serum/borsh": "^0.2.2",
     "@google-cloud/storage": "^5.8.5",
     "@solana/web3.js": "^1.28.0",
     "bs58": "^4.0.1",

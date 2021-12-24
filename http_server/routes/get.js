@@ -140,6 +140,8 @@ router.get("/page/:page_name/trade_info", check.AuthOptional, check.role, async 
                                 public_key: result[0].public_key,
                                 token_mint_address: result[0].token_mint_address,
                             })
+                        }else{
+                            res.status(404).send('Not found')
                         }
                     }
                 }
@@ -147,6 +149,71 @@ router.get("/page/:page_name/trade_info", check.AuthOptional, check.role, async 
         }
         pool.releaseConnection(conn);
     })
+})
+
+
+// FORUM
+
+
+/*
+    Route design
+    /forum/type?r=root_id&s=subject&v=version_id
+    type -> @unique_username, pagename, portfolio, *empty*(discover), following, saved
+    root_id = id of root (*empty*(page/all), mission, topic, paper, post) algorithm works of. If not page has to be in combination with subject "Type"
+    subject -> *empty*(all), missions, topics, papers, posts
+    version_id -> sub_post_id where hierarchy is defined
+*/
+router.get("/forum/:type/:root_id/:subject/:version", check.AuthOptional, check.role, async (req, res) => {
+    if( req.params.type 
+        && (req.params.type != ('portfolio' || 'following' || 'saved'))
+        && (!req.params.type.includes('@'))
+        && req.params.version == 'undefined'){
+        
+        pool.getConnection(function(err, conn) {
+            if (err){
+                res.status(500).send('An error occurred')
+                console.log(err)
+            }else{
+                conn.query(
+                    'SELECT page_icon, unique_pagename, vision FROM Page where unique_pagename = ?;',
+                    [req.params.type],
+                    function(err, results) {
+                        if (err){
+                            res.status(500).send('An error occurred')
+                            console.log(err)
+                        }else if(results.length > 0){
+                            if(req.params.root_id != 'undefined' && req.params.subject == 'missions'){
+                                conn.query(
+                                    'SELECT m.title, m.description, m.created from Mission m join Page p on m.page_id = p.page_id and p.unique_pagename = ? and m.title = ?;',
+                                    [req.params.type, req.params.root_id],
+                                    function(err, missionResults) {
+                                        if (err){
+                                            res.status(500).send('An error occurred')
+                                            console.log(err)
+                                        }else{
+                                            res.json({
+                                                page: results[0],
+                                                mission: missionResults[0]
+                                            })
+                                        }
+                                    }
+                                );
+                            }else{
+                                res.json({
+                                    page: results[0]
+                                })
+                            }
+                        }else{
+                            res.status(404).send()
+                        }
+                    }
+                );
+            }
+            pool.releaseConnection(conn);
+        })
+    }else{
+        res.status(422).send('Invalid query')
+    }
 })
 
 module.exports = router;

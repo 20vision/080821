@@ -2,8 +2,8 @@ import create from 'zustand'
 import { devtools } from 'zustand/middleware'
 
 let forumStore = (set) => ({
-    menu: '/',
-    setMenu: (type) => set(state => ({ menu: type }))
+    edit_bubble_index: null,
+    setEditBubbleIndex: (index) => set(state => ({ edit_bubble_index: index })),
 })
 
 forumStore = devtools(forumStore)

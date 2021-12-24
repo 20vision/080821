@@ -1,0 +1,29 @@
+.container{
+    margin: 25px;
+    color: var(--lighter_black);
+}
+
+.pickedColor{
+    background: white none repeat scroll 0% 0%;
+    height: 15px;
+    width: 15px; 
+    cursor: pointer; 
+    border-radius: 4px; 
+}
+
+.button{
+    margin-left: auto;
+    background-color: var(--lighter_black);
+    padding: 10px 15px;
+    border-radius: 10px;
+    display: flex;
+}
+.button a{
+    margin-right: 10px;
+}
+
+.footer{
+    display:flex;
+    align-items: center;
+    margin-top: 15px;
+}

@@ -65,7 +65,7 @@
 }
 
 .tradeDirectionArrowParent{
-    border-bottom: 1px solid var(--light_grey);
+    border-bottom: 1px solid var(--lighter_grey);
     height: 12px;
     margin-top:10px;
     margin-bottom: 35px;

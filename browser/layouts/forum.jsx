@@ -3,8 +3,7 @@ import menuStyle from "../styles/defaultLayout/menu.module.css"
 import {Menu} from "../components/DefaultLayout/Menu"
 import onClickOutside from "react-onclickoutside";
 import { useRouter } from "next/router";
-import { useState } from 'react'
-import { useForumStore } from "../store/forum";
+import { useState, useEffect } from 'react'
 
 export default function PageLayout( {children, page, missions} ) {
     return (
@@ -22,8 +21,13 @@ const clickOutsideConfig = {
 
 var Panel = onClickOutside(({children}) => {
     const router = useRouter()
-    const menu = useForumStore(state => state.menu)
-    const setMenu = useForumStore(state => state.setMenu)
+    const [menu, setMenu] = useState()
+
+    useEffect(() => {
+        if(menu){
+            router.push(`/forum${menu}`)
+        }
+    }, [menu])
 
     Panel.handleClickOutside = () => {
         router.push(`/`)
@@ -33,7 +37,7 @@ var Panel = onClickOutside(({children}) => {
         <div className={styles.child}>
             <div className={`${styles.menuContainer} ${menuStyle.container}`}>
                 <div className={styles.menu}>
-                    <ForumMenuNav/>
+                    <h1>Forum</h1>
                     <Menu opened={true} setMenu={setMenu} pathname={menu}/>
                 </div>
             </div>
@@ -51,12 +55,3 @@ var Panel = onClickOutside(({children}) => {
         </div>
     )
 }, clickOutsideConfig)
-
-function ForumMenuNav(){
-    return(
-        <div>
-            <h1>Forum</h1>
-            
-        </div>
-    )
-}
