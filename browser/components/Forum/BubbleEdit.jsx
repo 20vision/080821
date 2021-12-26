@@ -3,7 +3,7 @@ import styles from '../../styles/forumLayout/edit_bubble.module.css'
 import TextareaAutosize from 'react-textarea-autosize';
 import {TwitterPicker} from "react-color"
 
-export default function BubbleEdit({setEditHexColor, sendPost, setListeningProp}){
+export default function BubbleEdit({setEditHexColor, sendPost, setIsHighlight}){
     const [post, setPost] = useState('')
     const [pickerVisible, setPickerVisible] = useState(false)
     const [hex, setHex] = useState()
@@ -37,7 +37,7 @@ export default function BubbleEdit({setEditHexColor, sendPost, setListeningProp}
 
     function handleClickOutside(evt){
         if(bubbleEditRef.current && !bubbleEditRef.current.contains(evt.target) && (listeningRef.current == true)){
-            console.log('Bubble not highlighted')
+            setIsHighlight(false)
         }
     }
 
@@ -54,7 +54,7 @@ export default function BubbleEdit({setEditHexColor, sendPost, setListeningProp}
     }, [])
 
     return(
-        <div ref={bubbleEditRef} onClick={() => setListeningProp(true)} className={styles.container}>
+        <div ref={bubbleEditRef} onClick={() => setIsHighlight(true)} className={styles.container}>
             <TextareaAutosize 
                 style={{width: '100%'}}
                 minRows={2}

@@ -23,9 +23,8 @@ import useUserProfile from '../../hooks/User/useUserProfile'
 export default function index({root, content}) {
   const edit_bubble_index = useForumStore(state => state.edit_bubble_index)
   const setEditBubbleIndex = useForumStore(state => state.setEditBubbleIndex)
-  const [editHexColor, setEditHexColor] = useState()
   const [profile, isLoading, setUser] = useUserProfile()
-
+  const [editHexColor, setEditHexColor] = useState()
   const pageQuery = useQuery(`page/${root.page.unique_pagename}`,
   async () => {
     const res = await axios.get(`http://localhost:4000/get/page/${root.page.unique_pagename}`)
@@ -79,16 +78,13 @@ export default function index({root, content}) {
       <Square content={{page:root.page}}/>
       {root.mission?<Square content={{mission:root.mission}}/>:null}
       {content && content.map((cont, index) => {
-          <BubbleBasicLayout 
-          mirror={(index % 2 == 0)?false:true} color={index == edit_bubble_index?editHexColor:cont.hex_color}
-          profile={(cont && cont.profilePicture)?cont.profilePicture:profile.profilePicture}
-          >
-            {index == edit_bubble_index?
-              <BubbleEdit sendPost={post => sendPost(post, index)}  setEditHexColor={setEditHexColor}/>
-            :
-              <BubbleView onClick={setEditBubbleIndex(index)}/>
-            }
-          </BubbleBasicLayout>
+        <Bubble 
+        cont={cont} 
+        index={index} 
+        profile={profile} 
+        setEditBubbleIndex={setEditBubbleIndex} 
+        edit_bubble_index={edit_bubble_index}
+        sendPost={post => sendPost(post, index)}/>
       })}
       <BubbleBasicLayout 
       color={editHexColor} 
@@ -96,6 +92,29 @@ export default function index({root, content}) {
         <BubbleEdit sendPost={post => sendPost(post, content.length)} setEditHexColor={setEditHexColor}/>
       </BubbleBasicLayout>
     </ForumLayout>
+  )
+}
+
+function Bubble({cont, index, profile, setEditBubbleIndex, edit_bubble_index, sendPost}) {
+  const [editHexColor, setEditHexColor] = useState()
+  const [isHighlight, setIsHighlight] = useState()
+
+  return(
+    <BubbleBasicLayout 
+    mirror={(index % 2 == 0)?false:true} color={index == edit_bubble_index?editHexColor:cont.hex_color}
+    profile={(cont && cont.profilePicture)?cont.profilePicture:profile.profilePicture}
+    isHighlight={isHighlight}
+    >
+      {index == edit_bubble_index?
+        <BubbleEdit 
+        sendPost={sendPost}  
+        setEditHexColor={setEditHexColor} 
+        setIsHighlight={setIsHighlight}/>
+      :
+        <BubbleView 
+        onClick={setEditBubbleIndex(index)}/>
+      }
+    </BubbleBasicLayout>
   )
 }
 

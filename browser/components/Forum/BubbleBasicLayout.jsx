@@ -1,7 +1,7 @@
 import styles from '../../styles/forumLayout/layout_bubble.module.css'
 import ProfilePicture from '../User/ProfilePicture/ProfilePicture'
 
-export default function BubbleBasicLayout({children, mirror, color, profile}){
+export default function BubbleBasicLayout({children, mirror, color, profile, isHighlight}){
     return(
         <div style={{display:'flex'}}>
             <div style={{margin: '10px 5px'}}>
@@ -10,7 +10,7 @@ export default function BubbleBasicLayout({children, mirror, color, profile}){
 
             <div style={{width: '100%', marginLeft: '10px'}}>
                 <h3 style={{margin: '15px 0px'}}>@{profile.username}</h3>
-                <div className={mirror?styles.mirror:null} style={{display:'flex'}}>
+                <div className={`${mirror?styles.mirror:null} ${isHighlight?styles.active:styles.inactive}`} style={{display:'flex'}}>
                     <div className={styles.triangle} style={{borderTop: `25px solid ${'#'+color}`}}/>
                     <div className={styles.bubble} style={{backgroundColor: '#'+color}}>
                         <div className={mirror?styles.mirror:null}>
