@@ -55,7 +55,7 @@ export default function BubbleEdit({setEditHexColor, sendPost, setIsHighlight}){
 
     return(
         <div ref={bubbleEditRef} onClick={() => setIsHighlight(true)} className={styles.container}>
-            <TextareaAutosize 
+            <TextareaAutosize
                 style={{width: '100%'}}
                 minRows={2}
                 placeholder="Everybody is to a certain extend wrong. Try to make them less wrong."

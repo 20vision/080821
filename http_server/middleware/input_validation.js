@@ -100,9 +100,17 @@ exports.checkUniqueMissionTitle = function(req, res, next) {
     });
 };
 
-exports.missionBody = function(req, res, next) {
-    if((req.body.missionBody.length < 4) || (req.body.missionBody.length > 280)){
-        res.status(422).send("Your Mission has to contain at least 4 and at most 280 characters")
+exports.missionBody_and_forumPost = function(req, res, next) {
+    let content = 
+    req.body.missionBody?
+        req.body.missionBody
+    :req.body.forum_post?
+        req.body.forum_post
+    :
+        null
+
+    if(!content || (content.length < 1) || (content.length > 280)){
+        res.status(422).send("Your Mission has to contain 280 characters at most")
     }else{
         next();
     }

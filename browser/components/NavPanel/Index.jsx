@@ -62,7 +62,7 @@ function MissionNavWithRole({router}){
                 <div>Trade</div>
             </a>
 
-            <Link href={`/forum/${router.query.page}?r=${router.query.mission}&s=missions`}>
+            <Link href={`/forum/${router.query.page}/m/${router.query.mission}`}>
                 <a>
                     <MessageCircle color="#FAFAFA"/>
                     <div>Forum</div>

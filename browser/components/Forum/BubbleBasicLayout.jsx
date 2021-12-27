@@ -3,14 +3,14 @@ import ProfilePicture from '../User/ProfilePicture/ProfilePicture'
 
 export default function BubbleBasicLayout({children, mirror, color, profile, isHighlight}){
     return(
-        <div style={{display:'flex'}}>
+        <div style={{display:'flex'}} className={isHighlight?styles.active:styles.inactive}>
             <div style={{margin: '10px 5px'}}>
                 <ProfilePicture type={'small'} uri={profile.profilePicture}/>
             </div>
 
             <div style={{width: '100%', marginLeft: '10px'}}>
                 <h3 style={{margin: '15px 0px'}}>@{profile.username}</h3>
-                <div className={`${mirror?styles.mirror:null} ${isHighlight?styles.active:styles.inactive}`} style={{display:'flex'}}>
+                <div className={mirror?styles.mirror:null} style={{display:'flex'}}>
                     <div className={styles.triangle} style={{borderTop: `25px solid ${'#'+color}`}}/>
                     <div className={styles.bubble} style={{backgroundColor: '#'+color}}>
                         <div className={mirror?styles.mirror:null}>
