@@ -12,7 +12,7 @@ DB -> Paper -> private(tinyint) -> 0=public; 1=private; 2=banned;
 DB -> Paper_Version -> version(varcahr(14)) because decimal 9999.9999.9999 each minor update can be increated from .0 to .9999
 
 DB -> Forum_Post_Like -> type -> 0=main_forum_post, 1=sub_forum_post
-DB -> ForumPost -> parent_type -> 0=page, 1=topic, 2=mission, 3=paper
+DB -> ForumPost -> parent_type -> p=page, t=topic, m=mission, mp=paper
 
 DEVNET Contract: 969cdvMTsXAs2QfCFvGb2TmaR9gbFvMjRfG8u5v1if3d
 Test Wallet private key: CMgGx8WdMqLmGwvZHZboWaF6zeknrEtituyNziwg5hgqCEwvrL7zQNuZg6bAic8Bv6TsGL21BhStiwXC653NSvf
