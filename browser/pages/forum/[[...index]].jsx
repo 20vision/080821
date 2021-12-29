@@ -132,13 +132,7 @@ export async function getServerSideProps(context) {
     /forum/unique_pagename[/t_or_m(topic or mission)/mission_title_OR_topic_name/paper(only if subject is mission)] ?tree(get exact post tree)
   */
   try{
-    console.log(context.params.index[1])
-    const res = await axios.get(`http://localhost:4000/get/forum/
-      ${context.params.index?context.params.index[0]:null}/
-      ${context.params.index[1]?context.params.index[1]:null}/
-      ${context.params.index[2]?context.params.index[2]:null}/
-      ${context.params.index[3]?context.params.index[3]:null}/
-      ${context.query.tree?context.query.tree:null}`)
+    const res = await axios.get(`http://localhost:4000/get/${context.resolvedUrl}`)
     return{
       props: {
         root:{

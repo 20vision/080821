@@ -2,6 +2,7 @@ const router = require("express").Router();
 const input_validation = require('../middleware/input_validation');
 const check = require('../middleware/check')
 let pool = require('../config/db');
+let info = require('../utils/info');
 
 
 
@@ -77,45 +78,22 @@ router.get("/user_profile", check.AuthOptional, async (req, res) => {
 // PUBLIC //////////////////////////////////////////////////
 
 router.get("/page/:page_name", check.AuthOptional, check.role, async (req, res) => {
-    pool.getConnection(function(err, conn) {
+    pool.getConnection(async function(err, conn) {
         if (err){
             res.status(500).send('An error occurred')
             console.log(err)
         }else{
-            conn.query(
-                'SELECT page_icon, pagename, unique_pagename, vision FROM Page where unique_pagename = ?;',
-                [req.params.page_name],
-                function(err, results) {
-                    if (err){
-                        res.status(500).send('An error occurred')
-                        console.log(err)
-                    }else if(results.length > 0){
-                        if(req.query.missions && (req.query.missions == 'true')){
-                            conn.query(
-                                'SELECT m.title, m.description, m.created from Mission m join Page p on m.page_id = p.page_id and p.unique_pagename = ?;',
-                                [req.params.page_name],
-                                function(err, missionResults) {
-                                    if (err){
-                                        res.status(500).send('An error occurred')
-                                        console.log(err)
-                                    }else{
-                                        res.json({
-                                            page: results[0],
-                                            missions: missionResults
-                                        })
-                                    }
-                                }
-                            );
-                        }else{
-                            res.json({
-                                page: results[0]
-                            })
-                        }
-                    }else{
-                        res.status(404).send()
-                    }
-                }
-            );
+            try{
+                const pageByName = await info.getPageByName(conn, req.params.page_name)
+                const missions = await info.getMission_s(conn, req.params.page_name)
+                res.json({
+                    page: pageByName.page,
+                    missions: missions
+                })
+            }catch(err){
+                console.log(err)
+                res.status(err.status).send(err.message)
+            }
         }
         pool.releaseConnection(conn);
     })
@@ -155,30 +133,110 @@ router.get("/page/:page_name/trade_info", check.AuthOptional, check.role, async 
 // FORUM
 
 
-/*
-    Route design
-    /forum/unique_pagename[/t_or_m(topic or mission)/mission_title_or_topic_name/paper(only if subject is mission)] ?tree(get exact post tree)
-*/
-router.get("/forum/:unique_pagename/:t_or_m/:mission_title_or_topic_name/:paper_uid/:tree", check.AuthOptional, check.role, async (req, res) => {
-    let returnObject;
-    if(req.params.unique_pagename){
-        pool.getConnection(async function(err, conn) {
-            if (err){
-                res.status(500).send('An error occurred')
-                console.log(err)
-            }else{
-                try{
-                    const root = await getBasicForumSetup(conn,req)
-                    const content = await getContent(conn, root)
-                }catch(err){
-
-                }
-            }
-            pool.releaseConnection(conn);
-        })
-    }else{
-        res.status(422).send('Invalid query')
-    }
+router.get("/forum", async (req, res) => {
+    console.log('route not ready yet')
+    res.status(404).send('not ready yet')
 })
+router.get("/forum/:unique_pagename", async (req, res) => {
+    
+})
+// Only Page related
+router.get("/forum/:unique_pagename/p", async (req, res) => {
+    pool.getConnection(async function(err, conn) {
+        if (err){
+            res.status(500).send('An error occurred')
+            console.log(err)
+        }else{
+            try{
+                const pageByName = await info.getPageByName(conn, req.params.unique_pagename)
+                conn.query(
+                    `SELECT fp.forumpost_id, fp.message, u.username, u.profilePicture FROM ForumPost fp 
+                    join User u on u.user_id = fp.user_id 
+                    join ForumPost_Parent fpp on fp.forumpost_parent_id = fpp.forumpost_parent_id and fpp.parent_type = 'p' and fpp.parent_id = ?;`,
+                    [pageByName.page_id],
+                    function(err, content) {
+                        if (err){
+                            res.status(500).send('An error occurred')
+                            console.log(err)
+                        }else{
+                            res.json({
+                                page: pageByName.page,
+                                content: content
+                            })
+                        }
+                    }
+                );
+            }catch(err){
+                console.log(err)
+                res.status(err.status).send(err.message)
+            }
+        }
+        pool.releaseConnection(conn);
+    })
+})
+// Only Mission related
+router.get("/forum/:unique_pagename/m/:mission_title", async (req, res) => {
+    pool.getConnection(async function(err, conn) {
+        if (err){
+            res.status(500).send('An error occurred')
+            console.log(err)
+        }else{
+            try{
+                const pageByName = await info.getPageByName(conn, req.params.unique_pagename)
+                const mission_s = await info.getMission_s(conn, req.params.unique_pagename, req.params.mission_title)
+                conn.query(
+                    `SELECT fp.forumpost_id, fp.message, u.username, u.profilePicture FROM ForumPost fp 
+                    join User u on u.user_id = fp.user_id 
+                    join ForumPost_Parent fpp on fp.forumpost_parent_id = fpp.forumpost_parent_id and fpp.parent_type = 'm' and fpp.parent_id = ?;`,
+                    [mission_s.mission_id],
+                    function(err, content) {
+                        if (err){
+                            res.status(500).send('An error occurred')
+                            console.log(err)
+                        }else{
+                            res.json({
+                                page: pageByName.page,
+                                mission: mission_s.mission,
+                                content: content
+                            })
+                        }
+                    }
+                );
+            }catch(err){
+                console.log(err)
+                res.status(err.status).send(err.message)
+            }
+        }
+        pool.releaseConnection(conn);
+    })
+})
+// Only Topic related
+router.get("/forum/:unique_pagename/t/:topic_name", async (req, res) => {
+    console.log('route not ready yet')
+    res.status(404).send('not ready yet')
+})
+// Only Paper related
+router.get("/forum/:unique_pagename/pa/:uid", async (req, res) => {
+    console.log('route not ready yet')
+    res.status(404).send('not ready yet')
+})
+
+// router.get("/forum/post/:offset", async (req, res) => {
+//     console.log(req.params.forumpost_parent_OR_post_id)
+//     pool.getConnection(async function(err, conn) {
+//         if (err){
+//             res.status(500).send('An error occurred')
+//             console.log(err)
+//         }else{
+//             try{
+//                 const root = await getForumRootElements(conn,req)
+//                 const content = await getContent(conn, root.parentId)
+//             }catch(err){
+
+//             }
+//         }
+//         pool.releaseConnection(conn);
+//     })
+// })
 
 module.exports = router;
