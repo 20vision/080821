@@ -5,7 +5,8 @@ const input_validation = require('../middleware/input_validation')
 let pool = require('../config/db');
 const cloudStorage = require('../middleware/cloudStorage');
 const { sendAndConfirmRawTransaction, Connection } = require("@solana/web3.js");
-const { getForumInfo } = require("../utils/info");
+const gets = require("../utils/gets");
+const inserts = require("../utils/inserts");
 
 const colorOptions = [
     '7dbef5', '097bdc', '2dc3bc', '70908e', '67c166', '189c3b', 'c3c52e', 'd28e2a', 'dcb882', 'af9877', 'd64675', 'bb82c5', 'ac34c1', '9778bf', 'bf1402'
@@ -122,41 +123,64 @@ router.post("/fundPageToken", check.AuthRequired, check.fundTransaction, async (
     }
 });
 
-router.post("/forum", check.AuthRequired, input_validation.missionBody_and_forumPost, async (req, res) => {
-    // // Main_Forum_Post_Adjacency_List -> parent_type -> 0=page, 1=mission, 2=topics, 3=paper
-    // console.log(req)
-    // pool.getConnection(async function(err, conn) {
-    //     if (err){
-    //         res.status(500).send('An error occurred')
-    //         console.log(err)
-    //     }else{
-    //         try{
-    //             const info = await getForumInfo(conn, req)
-    //             const impact = await web3.getTokenImpact(conn, req)
-    //             console.log(req.body.subject)
-    //             if(req.body.subject == null){
-    //                 // Handle Sub_Forum_Post
-    //             }else{
-    //                 conn.query(
-    //                     'INSERT INTO Main_Forum_Post_Adjacency_List values (?,?,?,?,?,?,?,now());',
-    //                     [null, info.id, req.body.subject, req.body.forum_post, req.user_id, req.body.hexColor, impact],
-    //                     async function(err, forum_result) {
-    //                         if (err){
-    //                             res.status(500).send('An error occurred')
-    //                             console.log(err)
-    //                         }else{
-    //                             res.status(200).send()
-    //                         }
-    //                     }
-    //                 );
-    //             }
-    //         }catch(err){
-    //             console.log(err)
-    //             res.status(err.status).send(err.message)
-    //         }
-    //     }
-    //     pool.releaseConnection(conn);
-    // })
-});
+router.post("/forum/:unique_pagename", check.AuthRequired, input_validation.missionBody_and_forumPost, input_validation.hex_color, async (req, res) => {
+    pool.getConnection(async function(err, conn) {
+        if (err){
+            res.status(500).send('An error occurred')
+            console.log(err)
+        }else{
+            try{
+                const pageByName = await gets.getPageByName(conn, req.params.unique_pagename)
+                const forumpost_parent_id = await inserts.forumpost_parent(conn, pageByName.page_id, 'p')
+                const user_token_impact_per_mission = await web3.getTokenImpact(conn, pageByName.token_mint_address, req.user_id)
+                const forumpost_id = await inserts.forumpost(conn, forumpost_parent_id, 0, 1, req.body.forum_post, req.user_id, req.body.hex_color, user_token_impact_per_mission)
+                res.json({
+                    forumpost_id: forumpost_id
+                })
+            }catch(err){
+                console.log(err)
+                res.status(err.status).send(err.message)
+            }
+        }
+        pool.releaseConnection(conn);
+    })
+})
+
+// router.post("/forum", check.AuthRequired, input_validation.missionBody_and_forumPost, async (req, res) => {
+//     // // Main_Forum_Post_Adjacency_List -> parent_type -> 0=page, 1=mission, 2=topics, 3=paper
+//     // console.log(req)
+//     // pool.getConnection(async function(err, conn) {
+//     //     if (err){
+//     //         res.status(500).send('An error occurred')
+//     //         console.log(err)
+//     //     }else{
+//     //         try{
+//     //             const info = await getForumInfo(conn, req)
+//     //             const impact = await web3.getTokenImpact(conn, req)
+//     //             console.log(req.body.subject)
+//     //             if(req.body.subject == null){
+//     //                 // Handle Sub_Forum_Post
+//     //             }else{
+//     //                 conn.query(
+//     //                     'INSERT INTO Main_Forum_Post_Adjacency_List values (?,?,?,?,?,?,?,now());',
+//     //                     [null, gets.id, req.body.subject, req.body.forum_post, req.user_id, req.body.hexColor, impact],
+//     //                     async function(err, forum_result) {
+//     //                         if (err){
+//     //                             res.status(500).send('An error occurred')
+//     //                             console.log(err)
+//     //                         }else{
+//     //                             res.status(200).send()
+//     //                         }
+//     //                     }
+//     //                 );
+//     //             }
+//     //         }catch(err){
+//     //             console.log(err)
+//     //             res.status(err.status).send(err.message)
+//     //         }
+//     //     }
+//     //     pool.releaseConnection(conn);
+//     // })
+// });
 
 module.exports = router;

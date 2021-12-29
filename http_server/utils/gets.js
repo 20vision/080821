@@ -1,7 +1,7 @@
 
 const getPageByName = (conn, unique_pagename) => new Promise((resolve, reject) => {
     conn.query(
-        `SELECT page_id, page_icon, pagename, unique_pagename, vision FROM Page where unique_pagename = ?;`,
+        `SELECT page_id, page_icon, pagename, unique_pagename, token_mint_address, vision FROM Page where unique_pagename = ?;`,
         [unique_pagename],
         function(err, page) {
             if (err){

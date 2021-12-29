@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import ForumLayout from '../../layouts/forum'
 import BubbleBasicLayout from '../../components/Forum/BubbleBasicLayout' 
 import dynamic from 'next/dynamic';
@@ -19,59 +19,43 @@ export default function index({root, content}) {
   const [profile, isLoading, setUser] = useUserProfile()
   const [editHexColor, setEditHexColor] = useState()
   const [isBottomHighlight, setIsBottomHighlight] = useState()
-  const pageQuery = useQuery(`page/${root.page.unique_pagename}`,
-  async () => {
-    const res = await axios.get(`http://localhost:4000/get/page/${root.page.unique_pagename}`)
-    return res.data
-  },
-  {
-    initialData: root.page,
-    refetchOnWindowFocus: false,
-    refetchOnmount: false,
-    refetchOnReconnect: false,
-    retry: false,
-    staleTime: 1000 * 60 * 60 * 24,
-    onError: (error) => {
-      console.error(error)
-    },
-  })
+  // const pageQuery = useQuery(`page/${root.page.unique_pagename}`, async () => {
+  //   const res = await axios.get(`http://localhost:4000/get/page/${root.page.unique_pagename}`)
+  //   return res.data
+  // },
+  // {
+  //   initialData: root.page,
+  //   refetchOnWindowFocus: false,
+  //   refetchOnmount: false,
+  //   refetchOnReconnect: false,
+  //   retry: false,
+  //   staleTime: 1000 * 60 * 60 * 24,
+  //   onError: (error) => {
+  //     console.error(error)
+  //   },
+  // })
 
-  const sendPost = (post, index, hex) => {
-    let arg;
+  useEffect(() => {
+    console.log(content)
+  }, [])
 
-    if(index == 0){
-      arg = 
-      root.mission?
-        {
-          parent_key: root.mission.title,
-          subject: 1
-        }
+  const sendPost = (post, hex, postIndex) => {
+    axios.post(`http://localhost:4000/post/forum/${
+      (postIndex == 0)?
+        (root.mission)?
+          root.page.unique_pagename+'/'+root.mission.title
+        :
+          root.page.unique_pagename
       :
-        {
-          subject: 0
-        }// If root = Page, return nothing
-    }
-    //else if(){
-    // subject: 'post'
-    // Handle Post through parent post id with index-1
-    // }else{
-    //   return
-    //   toast.error('Subject not found')
-    // }
-    axios.post('http://localhost:4000/post/forum',{
-      ...{
-        forum_post: post,
-        hexColor: hex,
-        unique_pagename: root.page.unique_pagename,
-      }, 
-      ...arg
-    },{
+        null
+    }`,{forum_post: post, hex_color: hex},{
       withCredentials: true
     }
     ).then(async response => {
       console.log('posted')
     })
     .catch(error =>{
+      console.log(error)
       if(error.response) toast.error(`${error.response.status}: An error occured`)
     })
   }
@@ -80,21 +64,24 @@ export default function index({root, content}) {
     <ForumLayout>
       <Square content={{page:root.page}}/>
       {root.mission?<Square content={{mission:root.mission}}/>:null}
-      {content && content.map((cont, index) => {
-        <Bubble 
-        cont={cont} 
-        index={index} 
-        profile={profile} 
-        setEditBubbleIndex={setEditBubbleIndex} 
-        edit_bubble_index={edit_bubble_index}
-        sendPost={(post, hex) => sendPost(post, index, hex)}/>
-      })}
+      {content.map((cont, index) => 
+        <>
+          <Bubble 
+          cont={cont} 
+          index={index} 
+          profile={profile} 
+          setEditBubbleIndex={setEditBubbleIndex} 
+          edit_bubble_index={edit_bubble_index}
+          sendPost={(post, hex) => sendPost(post, hex, index)}/>
+        </>
+      )}
       <BubbleBasicLayout 
+      mirror={(content.length % 2 == 0)?false:true}
       color={editHexColor} 
       profile={profile}
       isHighlight={isBottomHighlight}>
         <BubbleEdit 
-        sendPost={post => sendPost(post, content?content.length:0, editHexColor)} 
+        sendPost={post => sendPost(post, editHexColor, content?content.length:0,)} 
         setEditHexColor={setEditHexColor}
         setIsHighlight={setIsBottomHighlight}
         />
@@ -106,11 +93,13 @@ export default function index({root, content}) {
 function Bubble({cont, index, profile, setEditBubbleIndex, edit_bubble_index, sendPost}) {
   const [editHexColor, setEditHexColor] = useState()
   const [isHighlight, setIsHighlight] = useState(false)
-
+  useEffect((arg) => {
+    console.log(arg)
+  }, [setIsHighlight])
   return(
     <BubbleBasicLayout 
     mirror={(index % 2 == 0)?false:true} color={index == edit_bubble_index?editHexColor:cont.hex_color}
-    profile={(cont && cont.profilePicture)?cont.profilePicture:profile.profilePicture}
+    profile={cont?cont:profile}
     isHighlight={isHighlight}
     >
       {index == edit_bubble_index?
@@ -120,7 +109,8 @@ function Bubble({cont, index, profile, setEditBubbleIndex, edit_bubble_index, se
         setIsHighlight={setIsHighlight}/>
       :
         <BubbleView 
-        onClick={setEditBubbleIndex(index)}/>
+        message={cont.message}
+        setEditBubbleIndex={() => setEditBubbleIndex(index)}/>
       }
     </BubbleBasicLayout>
   )

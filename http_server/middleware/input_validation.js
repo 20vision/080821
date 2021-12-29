@@ -1,7 +1,7 @@
 let pool = require('../config/db');
-var usernameRe = /^[a-z0-9_.]{0,30}$/
-var pagenameRe = /^[a-zA-Z0-9_.]{0,30}$/
-
+const usernameRe = /^[a-z0-9_.]{0,30}$/
+const pagenameRe = /^[a-zA-Z0-9_.]{0,30}$/
+const hexRegex = /^([a-fA-F0-9]{6}|[a-fA-F0-9]{3})$/ //Without #
 //Check Username
 
 exports.checkUniqueUsername = function(req, res, next) {
@@ -115,3 +115,12 @@ exports.missionBody_and_forumPost = function(req, res, next) {
         next();
     }
 };
+
+exports.hex_color = function(req, res, next){
+    if(!hexRegex.test(req.body.hex_color)){
+        console.log(req.body.hex_color)
+        res.status(422).send("Invalid Color")
+    }else{
+        next()
+    }
+}

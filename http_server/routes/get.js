@@ -2,7 +2,7 @@ const router = require("express").Router();
 const input_validation = require('../middleware/input_validation');
 const check = require('../middleware/check')
 let pool = require('../config/db');
-let info = require('../utils/info');
+let gets = require('../utils/gets');
 
 
 
@@ -84,8 +84,8 @@ router.get("/page/:page_name", check.AuthOptional, check.role, async (req, res) 
             console.log(err)
         }else{
             try{
-                const pageByName = await info.getPageByName(conn, req.params.page_name)
-                const missions = await info.getMission_s(conn, req.params.page_name)
+                const pageByName = await gets.getPageByName(conn, req.params.page_name)
+                const missions = await gets.getMission_s(conn, req.params.page_name)
                 res.json({
                     page: pageByName.page,
                     missions: missions
@@ -148,9 +148,9 @@ router.get("/forum/:unique_pagename/p", async (req, res) => {
             console.log(err)
         }else{
             try{
-                const pageByName = await info.getPageByName(conn, req.params.unique_pagename)
+                const pageByName = await gets.getPageByName(conn, req.params.unique_pagename)
                 conn.query(
-                    `SELECT fp.forumpost_id, fp.message, u.username, u.profilePicture FROM ForumPost fp 
+                    `SELECT fp.forumpost_id, fp.hex_color, fp.message, fp.created, u.username, u.profilePicture FROM ForumPost fp 
                     join User u on u.user_id = fp.user_id 
                     join ForumPost_Parent fpp on fp.forumpost_parent_id = fpp.forumpost_parent_id and fpp.parent_type = 'p' and fpp.parent_id = ?;`,
                     [pageByName.page_id],
@@ -182,8 +182,8 @@ router.get("/forum/:unique_pagename/m/:mission_title", async (req, res) => {
             console.log(err)
         }else{
             try{
-                const pageByName = await info.getPageByName(conn, req.params.unique_pagename)
-                const mission_s = await info.getMission_s(conn, req.params.unique_pagename, req.params.mission_title)
+                const pageByName = await gets.getPageByName(conn, req.params.unique_pagename)
+                const mission_s = await gets.getMission_s(conn, req.params.unique_pagename, req.params.mission_title)
                 conn.query(
                     `SELECT fp.forumpost_id, fp.message, u.username, u.profilePicture FROM ForumPost fp 
                     join User u on u.user_id = fp.user_id 
@@ -209,6 +209,11 @@ router.get("/forum/:unique_pagename/m/:mission_title", async (req, res) => {
         }
         pool.releaseConnection(conn);
     })
+})
+// Only Topic related
+router.get("/post/forum/:post_id", async (req, res) => {
+    console.log('route not ready yet')
+    res.status(404).send('not ready yet')
 })
 // Only Topic related
 router.get("/forum/:unique_pagename/t/:topic_name", async (req, res) => {
