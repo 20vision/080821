@@ -12,42 +12,43 @@ import {useQuery} from 'react-query'
 import { useForumStore } from '../../store/forum'
 import useUserProfile from '../../hooks/User/useUserProfile'
 import { toast } from 'react-toastify';
-
+import { useRouter } from 'next/router'
 export default function index({root, content}) {
   const edit_bubble_index = useForumStore(state => state.edit_bubble_index)
   const setEditBubbleIndex = useForumStore(state => state.setEditBubbleIndex)
   const [profile, isLoading, setUser] = useUserProfile()
   const [editHexColor, setEditHexColor] = useState()
   const [isBottomHighlight, setIsBottomHighlight] = useState()
-  // const pageQuery = useQuery(`page/${root.page.unique_pagename}`, async () => {
-  //   const res = await axios.get(`http://localhost:4000/get/page/${root.page.unique_pagename}`)
-  //   return res.data
-  // },
-  // {
-  //   initialData: root.page,
-  //   refetchOnWindowFocus: false,
-  //   refetchOnmount: false,
-  //   refetchOnReconnect: false,
-  //   retry: false,
-  //   staleTime: 1000 * 60 * 60 * 24,
-  //   onError: (error) => {
-  //     console.error(error)
-  //   },
-  // })
+  const router = useRouter()
+  let contentQuery = useQuery(`forum-post/${content[0].forumpost_id}`, async () => {
+    const res = await axios.get(`http://localhost:4000/get${router.asPath}`)
+    return res.data
+  },
+  {
+    initialData: root.page,
+    refetchOnWindowFocus: false,
+    refetchOnmount: false,
+    refetchOnReconnect: false,
+    retry: false,
+    staleTime: 1000 * 60 * 60 * 24,
+    onError: (error) => {
+      console.error(error)
+    },
+  })
 
   useEffect(() => {
-    console.log(content)
+    console.log(router)
   }, [])
 
   const sendPost = (post, hex, postIndex) => {
-    axios.post(`http://localhost:4000/post/forum/${
+    axios.post(`http://localhost:4000/post/forum${(postIndex>0)?'-post':''}/${
       (postIndex == 0)?
         (root.mission)?
           root.page.unique_pagename+'/'+root.mission.title
         :
           root.page.unique_pagename
       :
-        null
+        contentQuery[postIndex - 1].forumpost_id
     }`,{forum_post: post, hex_color: hex},{
       withCredentials: true
     }

@@ -146,6 +146,29 @@ router.post("/forum/:unique_pagename", check.AuthRequired, input_validation.miss
     })
 })
 
+router.post("/forum-post/:parent_forumpost_id", check.AuthRequired, input_validation.missionBody_and_forumPost, input_validation.hex_color, async (req, res) => {
+    pool.getConnection(async function(err, conn) {
+        if (err){
+            res.status(500).send('An error occurred')
+            console.log(err)
+        }else{
+            try{
+                const forumpost_parent_info = await gets.getForumPostParentInfo(conn, req.body.parent_forumpost_id)
+                const user_token_impact_per_mission = await web3.getTokenImpact(conn, forumpost_parent_info.token_mint_address, req.user_id)
+                await updates.updateNestedForumSet(conn, forumpost_parent_info.right, forumpost_parent_info.forumpost_parent_id)
+                const forumpost_id = await inserts.forumpost(conn, forumpost_parent_info.forumpost_parent_id, forumpost_parent_info.left+1, forumpost_parent_info.right+1, req.body.forum_post, req.user_id, req.body.hex_color, user_token_impact_per_mission)
+                res.json({
+                    forumpost_id: forumpost_id
+                })
+            }catch(err){
+                console.log(err)
+                res.status(err.status).send(err.message)
+            }
+        }
+        pool.releaseConnection(conn);
+    })
+})
+
 // router.post("/forum", check.AuthRequired, input_validation.missionBody_and_forumPost, async (req, res) => {
 //     // // Main_Forum_Post_Adjacency_List -> parent_type -> 0=page, 1=mission, 2=topics, 3=paper
 //     // console.log(req)

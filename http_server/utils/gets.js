@@ -61,7 +61,73 @@ const getMission_s = (conn, unique_pagename, title) => new Promise((resolve, rej
     );
 })
 
+const getForumPostParentInfo = (conn, parent_post_id) => new Promise((resolve, reject) => {
+    conn.query(
+        `SELECT fpp.parent_id, fpp.parent_type, fp.left, fp.right from ForumPost_Parent fpp
+        join ForumPost fp on fp.forumpost_parent_id = fpp.forumpost_parent_id where fp.forumpost_id = ?;`,
+        [parent_post_id],
+        function(err, forumpost_parent) {
+            if (err){
+                reject({
+                    status: 500,
+                    message: 'An error occurred'
+                })
+                console.log(err)
+            }else{
+                if(forumpost_parent.length == 0){
+                    reject({
+                        status: 404,
+                        message: 'Forum Post not found'
+                    })
+                }else{
+                    const forumpost_parent = forumpost_parent[0]
+                    conn.query(
+                        `SELECT p.token_mint_address from Page p 
+                        ${
+                        forumpost_parent.parent_type == 't'?
+                            'JOIN Topics t on p.page_id = t.page_id and t.topic_id = '+forumpost_parent.parent_id
+                        :forumpost_parent.parent_type == 'm'?
+                            'JOIN Mission m on m.page_id=p.page_id and m.mission_id = '+forumpost_parent.parent_id
+                        :forumpost_parent.parent_type == 'mp'?
+                            'JOIN Mission m on m.mission_id = p.page_id JOIN Paper pa on pa.mission_id = m.mission_id and pa.paper_id ='+forumpost_parent.parent_id
+                        :forumpost_parent.parent_type == 'p'?
+                            'where p.page_id='+forumpost_parent.parent_id
+                        :
+                            null
+                        };`,
+                        [],
+                        function(err, pagetokenmint) {
+                            if (err){
+                                reject({
+                                    status: 500,
+                                    message: 'An error occurred'
+                                })
+                                console.log(err)
+                            }else{
+                                if(pagetokenmint.length == 0){
+                                    reject({
+                                        status: 404,
+                                        message: 'Forum Post not found'
+                                    })
+                                }else{
+                                    resolve({
+                                        forumpost_parent_id: forumpost_parent[0].forumpost_parent_id,
+                                        left: forumpost_parent[0].left,
+                                        right: forumpost_parent[0].right,
+                                        token_mint_address: pagetokenmint[0].token_mint_address
+                                    })
+                                }
+                            }
+                        }
+                    );
+                }
+            }
+        }
+    );
+})
+
 module.exports = {
     getPageByName,
-    getMission_s
+    getMission_s,
+    getForumPostParentInfo
 }

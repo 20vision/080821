@@ -3,16 +3,16 @@ import ProfilePicture from '../User/ProfilePicture/ProfilePicture'
 
 export default function BubbleBasicLayout({children, mirror, color, profile, isHighlight}){
     return(
-        <div style={{display:'flex', marginBottom: '45px'}} className={isHighlight?styles.active:styles.inactive}>
-            <div style={{margin: '10px 5px'}}>
+        <div style={{display:'flex', marginBottom: '45px'}} className={`${isHighlight?styles.active:styles.inactive} ${mirror?styles.mirror:null}`}>
+            <div style={{margin: '5px 0px'}} className={mirror?styles.mirror:null}>
                 <ProfilePicture type={'small'} uri={profile.profilePicture}/>
             </div>
 
             <div style={{width: '100%', marginLeft: '10px'}}>
-                <h3 style={{margin: '15px 0px'}}>@{profile.username}</h3>
-                <div className={mirror?styles.mirror:null} style={{display:'flex'}}>
+                <h3 style={{...{margin: '15px 0px'},...mirror?{textAlign:'right'}:null}} className={mirror?styles.mirror:null}>@{profile.username}</h3>
+                <div style={{display:'flex'}}>
                     <div className={styles.triangle} style={{borderTop: `25px solid ${'#'+color}`}}/>
-                    <div className={styles.bubble} style={{backgroundColor: '#'+color, marginRight:'20px'}}>
+                    <div className={styles.bubble} style={{backgroundColor: '#'+color, marginRight:'50px'}}>
                         <div className={mirror?styles.mirror:null}>
                             {children}
                         </div>
