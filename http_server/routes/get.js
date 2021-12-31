@@ -141,7 +141,7 @@ router.get("/forum/:unique_pagename", async (req, res) => {
     
 })
 // Only Page related
-router.get("/forum/:unique_pagename/p", async (req, res) => {
+router.get("/forum/:unique_pagename/p", check.AuthOptional, async (req, res) => {
     pool.getConnection(async function(err, conn) {
         if (err){
             res.status(500).send('An error occurred')
@@ -150,15 +150,18 @@ router.get("/forum/:unique_pagename/p", async (req, res) => {
             try{
                 const pageByName = await gets.getPageByName(conn, req.params.unique_pagename)
                 conn.query(
-                    `SELECT fp.forumpost_id, fp.hex_color, fp.message, fp.created, u.username, u.profilePicture FROM ForumPost fp 
+                    `SELECT IF(fpl.forum_post_like_id, true, false) as 'like', fp.forumpost_id, fp.hex_color, fp.message, fp.created, u.username, u.profilePicture FROM ForumPost fp
                     join User u on u.user_id = fp.user_id 
-                    join ForumPost_Parent fpp on fp.forumpost_parent_id = fpp.forumpost_parent_id and fpp.parent_type = 'p' and fpp.parent_id = ?;`,
-                    [pageByName.page_id],
+                    join ForumPost_Parent fpp on fp.forumpost_parent_id = fpp.forumpost_parent_id and fpp.parent_type = 'p' and fpp.parent_id = ?
+                    left join ForumPost_Like fpl on fpl.forumpost_id = fp.forumpost_id and fpl.user_id = ?
+                    group by fp.forumpost_id;`,
+                    [pageByName.page_id, req.user_id],
                     function(err, content) {
                         if (err){
                             res.status(500).send('An error occurred')
                             console.log(err)
                         }else{
+                            console.log(content)
                             res.json({
                                 page: pageByName.page,
                                 content: content

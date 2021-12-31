@@ -4,6 +4,7 @@ const forumpost_parent = (conn, id, type) => new Promise((resolve, reject) => {
         [null,id,type],
         function(err, insert) {
             if (err){
+                console.log(err)
                 reject({
                     status: 500,
                     message: 'An error occurred'
@@ -21,6 +22,7 @@ const forumpost = (conn, forumpost_parent_id, left, right, message, user_id, hex
         [null,forumpost_parent_id, left, right, message, user_id, hex_color, user_token_impact_per_mission],
         function(err, insert) {
             if (err){
+                console.log(err)
                 reject({
                     status: 500,
                     message: 'An error occurred'

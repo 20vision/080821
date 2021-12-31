@@ -20,25 +20,30 @@ export default function index({root, content}) {
   const [editHexColor, setEditHexColor] = useState()
   const [isBottomHighlight, setIsBottomHighlight] = useState()
   const router = useRouter()
-  let contentQuery = useQuery(`forum-post/${content[0].forumpost_id}`, async () => {
-    const res = await axios.get(`http://localhost:4000/get${router.asPath}`)
+  let contentQuery = useQuery(`forum-post/${router.asPath}`, async () => {
+    const res = await axios.get(`http://localhost:4000/get${router.asPath}`, {
+      withCredentials: true
+    })
     return res.data
   },
   {
-    initialData: root.page,
+    initialData: root.content,
     refetchOnWindowFocus: false,
     refetchOnmount: false,
     refetchOnReconnect: false,
     retry: false,
     staleTime: 1000 * 60 * 60 * 24,
+    onSuccess: data => {
+      console.log(data)
+    },
     onError: (error) => {
       console.error(error)
     },
   })
 
-  useEffect(() => {
-    console.log(router)
-  }, [])
+  // useEffect(() => {
+  //   console.log(contentQuery.data && contentQuery.data.content?contentQuery.data.content[0]:null)
+  // }, [contentQuery])
 
   const sendPost = (post, hex, postIndex) => {
     axios.post(`http://localhost:4000/post/forum${(postIndex>0)?'-post':''}/${
@@ -48,7 +53,7 @@ export default function index({root, content}) {
         :
           root.page.unique_pagename
       :
-        contentQuery[postIndex - 1].forumpost_id
+        (contentQuery.data && contentQuery.data.content)?contentQuery.data.content[postIndex - 1].forumpost_id:null
     }`,{forum_post: post, hex_color: hex},{
       withCredentials: true
     }
@@ -65,7 +70,7 @@ export default function index({root, content}) {
     <ForumLayout>
       <Square content={{page:root.page}}/>
       {root.mission?<Square content={{mission:root.mission}}/>:null}
-      {content.map((cont, index) => 
+      {contentQuery && contentQuery.data && contentQuery.data.content.map((cont, index) => 
         <>
           <Bubble 
           cont={cont} 
@@ -94,9 +99,7 @@ export default function index({root, content}) {
 function Bubble({cont, index, profile, setEditBubbleIndex, edit_bubble_index, sendPost}) {
   const [editHexColor, setEditHexColor] = useState()
   const [isHighlight, setIsHighlight] = useState(false)
-  useEffect((arg) => {
-    console.log(arg)
-  }, [setIsHighlight])
+
   return(
     <BubbleBasicLayout 
     mirror={(index % 2 == 0)?false:true} color={index == edit_bubble_index?editHexColor:cont.hex_color}
@@ -105,13 +108,32 @@ function Bubble({cont, index, profile, setEditBubbleIndex, edit_bubble_index, se
     >
       {index == edit_bubble_index?
         <BubbleEdit 
-        sendPost={(sendPost, editHexColor)}  
+        sendPost={post => sendPost(post, editHexColor, index)}  
         setEditHexColor={setEditHexColor} 
         setIsHighlight={setIsHighlight}/>
       :
         <BubbleView 
         message={cont.message}
-        setEditBubbleIndex={() => setEditBubbleIndex(index)}/>
+        setEditBubbleIndex={() => setEditBubbleIndex(index)}
+        like={cont.like}
+        setLike={
+          () => new Promise((resolve, reject) => {
+            axios.post(`http://localhost:4000/update/like/forum-post`,
+            {forumpost_id: cont.forumpost_id}
+            ,{
+              withCredentials: true
+            }
+            ).then(async response => {
+              resolve()
+            })
+            .catch(error =>{
+              console.log(error)
+              if(error.response) toast.error(`${error.response.status}: An error occured`)
+              reject()
+            })
+          })
+        }
+        />
       }
     </BubbleBasicLayout>
   )

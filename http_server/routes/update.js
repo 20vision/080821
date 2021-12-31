@@ -34,5 +34,59 @@ router.post("/username", check.AuthRequired, input_validation.checkRegexUsername
 
 })
 
+router.post("/like/forum-post", check.AuthRequired, async (req, res) => {
+    if(!req.body.forumpost_id || !Number.isInteger(req.body.forumpost_id)){
+        console.log(req.body.forumpost_id)
+        res.status(422).send('invalid post id')
+        return
+    }
+    pool.getConnection(async function(err, conn) {
+        if (err){
+            res.status(500).send('An error occurred')
+            console.log(err)
+        }else{
+            conn.query(
+                `SELECT forum_post_like_id from ForumPost_Like where forumpost_id = ? and user_id = ?;`,
+                [req.body.forumpost_id, req.user_id],
+                function(err, like) {
+                    if (err){
+                        console.log(err)
+                        res.status(500).send('An error occurred')
+                    }else{
+                        if(like.length > 0){
+                            conn.query(
+                                `DELETE from ForumPost_Like where forumpost_id = ? and user_id = ?;`,
+                                [req.body.forumpost_id, req.user_id],
+                                function(err, like) {
+                                    if (err){
+                                        console.log(err)
+                                        res.status(500).send('An error occurred')
+                                    }else{
+                                        res.status(200).send()
+                                    }
+                                }
+                            );
+                        }else{
+                            conn.query(
+                                `INSERT into ForumPost_Like values(?,?,?,now());`,
+                                [null,req.user_id, req.body.forumpost_id],
+                                function(err, like) {
+                                    if (err){
+                                        console.log(err)
+                                        res.status(500).send('An error occurred')
+                                    }else{
+                                        res.status(200).send()
+                                    }
+                                }
+                            );
+                        }
+                    }
+                }
+            );
+        }
+        pool.releaseConnection(conn);
+    })
+})
+
 
 module.exports = router;

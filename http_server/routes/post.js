@@ -7,6 +7,7 @@ const cloudStorage = require('../middleware/cloudStorage');
 const { sendAndConfirmRawTransaction, Connection } = require("@solana/web3.js");
 const gets = require("../utils/gets");
 const inserts = require("../utils/inserts");
+const updates = require("../utils/updates");
 
 const colorOptions = [
     '7dbef5', '097bdc', '2dc3bc', '70908e', '67c166', '189c3b', 'c3c52e', 'd28e2a', 'dcb882', 'af9877', 'd64675', 'bb82c5', 'ac34c1', '9778bf', 'bf1402'
@@ -153,10 +154,11 @@ router.post("/forum-post/:parent_forumpost_id", check.AuthRequired, input_valida
             console.log(err)
         }else{
             try{
-                const forumpost_parent_info = await gets.getForumPostParentInfo(conn, req.body.parent_forumpost_id)
+                const forumpost_parent_info = await gets.getForumPostParentInfo(conn, req.params.parent_forumpost_id)
                 const user_token_impact_per_mission = await web3.getTokenImpact(conn, forumpost_parent_info.token_mint_address, req.user_id)
-                await updates.updateNestedForumSet(conn, forumpost_parent_info.right, forumpost_parent_info.forumpost_parent_id)
-                const forumpost_id = await inserts.forumpost(conn, forumpost_parent_info.forumpost_parent_id, forumpost_parent_info.left+1, forumpost_parent_info.right+1, req.body.forum_post, req.user_id, req.body.hex_color, user_token_impact_per_mission)
+                await updates.updateNestedForumSet(conn, forumpost_parent_info.forumpost_parent_id, forumpost_parent_info.right, forumpost_parent_info.right + 1)
+                const forumpost_id = await inserts.forumpost(conn, forumpost_parent_info.forumpost_parent_id, forumpost_parent_info.right, forumpost_parent_info.right+1, req.body.forum_post, req.user_id, req.body.hex_color, user_token_impact_per_mission)
+                console.log(forumpost_id)
                 res.json({
                     forumpost_id: forumpost_id
                 })
