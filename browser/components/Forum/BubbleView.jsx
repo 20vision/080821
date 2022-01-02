@@ -2,32 +2,31 @@ import styles from '../../styles/forumLayout/view_bubble.module.css'
 import Heart from '../../assets/Heart'
 import { useRef, useState, useEffect } from 'react'
 
-export default function BubbleView({message, setEditBubbleIndex, like, setLike}){
+export default function BubbleView({message, setEditBubbleIndex, mylike, setLike}){
     const bubbleRef = useRef()
-    const [isLike, setIsLike] = useState(false)
+    const [isMyLike, setIsMyLike] = useState(false)
     useEffect(() => {
-        console.log(like)
-        if(like){
-            setIsLike(true)
+        if(mylike){
+            setIsMyLike(true)
         }
-    }, [like])
+    }, [mylike])
     return(
         <div className={styles.container} onClick={async evt => {
             if (bubbleRef.current && !bubbleRef.current.contains(evt.target)){
                 setEditBubbleIndex()
             }else{
                 try{
-                    setIsLike(!isLike)
+                    setIsMyLike(!isMyLike)
                     await setLike()
                 }catch(err){
-                    setIsLike(isLike)
+                    setIsMyLike(isMyLike)
                 }
             }
         }}>
             <div>
                 {message}
             </div>
-            <a ref={bubbleRef}><Heart color={isLike?'#FF5B77':null}/></a>
+            <a ref={bubbleRef}><Heart color={isMyLike?'#FF5B77':null}/></a>
         </div>
     )
 }

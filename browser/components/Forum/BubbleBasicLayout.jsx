@@ -1,9 +1,11 @@
 import styles from '../../styles/forumLayout/layout_bubble.module.css'
 import ProfilePicture from '../User/ProfilePicture/ProfilePicture'
+import disableScroll from 'disable-scroll';
 
-export default function BubbleBasicLayout({children, mirror, color, profile, isHighlight}){
+export default function BubbleBasicLayout({children, mirror, color, profile, isHighlight, makeScroll}){
+    
     return(
-        <div style={{display:'flex', marginBottom: '45px'}} className={`${isHighlight?styles.active:styles.inactive} ${mirror?styles.mirror:null}`}>
+        <div style={{display:'flex', marginBottom: '45px'}} className={mirror?styles.mirror:null}>
             <div style={{margin: '5px 0px'}} className={mirror?styles.mirror:null}>
                 <ProfilePicture type={'small'} uri={profile.profilePicture}/>
             </div>
@@ -12,7 +14,7 @@ export default function BubbleBasicLayout({children, mirror, color, profile, isH
                 <h3 style={{...{margin: '15px 0px'},...mirror?{textAlign:'right'}:null}} className={mirror?styles.mirror:null}>@{profile.username}</h3>
                 <div style={{display:'flex'}}>
                     <div className={styles.triangle} style={{borderTop: `25px solid ${'#'+color}`}}/>
-                    <div className={styles.bubble} style={{backgroundColor: '#'+color, marginRight:'50px'}}>
+                    <div className={styles.bubble} style={{backgroundColor: '#'+color, marginRight:'50px'}} onWheel={() => makeScroll()} onMouseEnter={e => disableScroll.on()} onMouseLeave={() => disableScroll.off()}>
                         <div className={mirror?styles.mirror:null}>
                             {children}
                         </div>

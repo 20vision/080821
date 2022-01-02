@@ -134,7 +134,7 @@ router.post("/forum/:unique_pagename", check.AuthRequired, input_validation.miss
                 const pageByName = await gets.getPageByName(conn, req.params.unique_pagename)
                 const forumpost_parent_id = await inserts.forumpost_parent(conn, pageByName.page_id, 'p')
                 const user_token_impact_per_mission = await web3.getTokenImpact(conn, pageByName.token_mint_address, req.user_id)
-                const forumpost_id = await inserts.forumpost(conn, forumpost_parent_id, 0, 1, req.body.forum_post, req.user_id, req.body.hex_color, user_token_impact_per_mission)
+                const forumpost_id = await inserts.forumpost(conn, forumpost_parent_id, 0, 1, 0, req.body.forum_post, req.user_id, req.body.hex_color, user_token_impact_per_mission)
                 res.json({
                     forumpost_id: forumpost_id
                 })
@@ -157,7 +157,7 @@ router.post("/forum-post/:parent_forumpost_id", check.AuthRequired, input_valida
                 const forumpost_parent_info = await gets.getForumPostParentInfo(conn, req.params.parent_forumpost_id)
                 const user_token_impact_per_mission = await web3.getTokenImpact(conn, forumpost_parent_info.token_mint_address, req.user_id)
                 await updates.updateNestedForumSet(conn, forumpost_parent_info.forumpost_parent_id, forumpost_parent_info.right, forumpost_parent_info.right + 1)
-                const forumpost_id = await inserts.forumpost(conn, forumpost_parent_info.forumpost_parent_id, forumpost_parent_info.right, forumpost_parent_info.right+1, req.body.forum_post, req.user_id, req.body.hex_color, user_token_impact_per_mission)
+                const forumpost_id = await inserts.forumpost(conn, forumpost_parent_info.forumpost_parent_id, forumpost_parent_info.right, forumpost_parent_info.right+1, forumpost_parent_info.depth + 1, req.body.forum_post, req.user_id, req.body.hex_color, user_token_impact_per_mission)
                 console.log(forumpost_id)
                 res.json({
                     forumpost_id: forumpost_id

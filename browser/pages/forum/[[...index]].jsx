@@ -13,6 +13,7 @@ import { useForumStore } from '../../store/forum'
 import useUserProfile from '../../hooks/User/useUserProfile'
 import { toast } from 'react-toastify';
 import { useRouter } from 'next/router'
+import { motion, useAnimation } from 'framer-motion';
 export default function index({root, content}) {
   const edit_bubble_index = useForumStore(state => state.edit_bubble_index)
   const setEditBubbleIndex = useForumStore(state => state.setEditBubbleIndex)
@@ -71,15 +72,13 @@ export default function index({root, content}) {
       <Square content={{page:root.page}}/>
       {root.mission?<Square content={{mission:root.mission}}/>:null}
       {contentQuery && contentQuery.data && contentQuery.data.content.map((cont, index) => 
-        <>
-          <Bubble 
-          cont={cont} 
-          index={index} 
-          profile={profile} 
-          setEditBubbleIndex={setEditBubbleIndex} 
-          edit_bubble_index={edit_bubble_index}
-          sendPost={(post, hex) => sendPost(post, hex, index)}/>
-        </>
+        <Bubble 
+        cont={cont} 
+        index={index} 
+        profile={profile} 
+        setEditBubbleIndex={setEditBubbleIndex} 
+        edit_bubble_index={edit_bubble_index}
+        sendPost={(post, hex) => sendPost(post, hex, index)}/>
       )}
       <BubbleBasicLayout 
       mirror={(content.length % 2 == 0)?false:true}
@@ -99,43 +98,105 @@ export default function index({root, content}) {
 function Bubble({cont, index, profile, setEditBubbleIndex, edit_bubble_index, sendPost}) {
   const [editHexColor, setEditHexColor] = useState()
   const [isHighlight, setIsHighlight] = useState(false)
+  const [frontIndex, setFrontIndex] = useState(0)
+  const controls = useAnimation()
 
   return(
-    <BubbleBasicLayout 
-    mirror={(index % 2 == 0)?false:true} color={index == edit_bubble_index?editHexColor:cont.hex_color}
-    profile={cont?cont:profile}
-    isHighlight={isHighlight}
-    >
-      {index == edit_bubble_index?
-        <BubbleEdit 
-        sendPost={post => sendPost(post, editHexColor, index)}  
-        setEditHexColor={setEditHexColor} 
-        setIsHighlight={setIsHighlight}/>
-      :
-        <BubbleView 
-        message={cont.message}
-        setEditBubbleIndex={() => setEditBubbleIndex(index)}
-        like={cont.like}
-        setLike={
-          () => new Promise((resolve, reject) => {
-            axios.post(`http://localhost:4000/update/like/forum-post`,
-            {forumpost_id: cont.forumpost_id}
-            ,{
-              withCredentials: true
-            }
-            ).then(async response => {
-              resolve()
+    <div style={{position: 'relative', marginBottom: '45px', left: '0', right: '0'}}>
+      <BubbleBasicLayout
+      mirror={(index % 2 == 0)?false:true} color={(frontIndex == null)?editHexColor:cont[frontIndex].hex_color}
+      profile={(frontIndex != null)?cont[frontIndex]:profile}
+      isHighlight={isHighlight}
+      makeScroll={() => controls.start({
+        scale: '1',
+        opacity: '1',
+        zIndex: '1',
+        top: '0%',
+        transition: {type: "ease", ease: 'easeOut', time: '2s'}
+      })}
+      >
+        
+        {frontIndex == null?
+          <BubbleEdit 
+          sendPost={post => sendPost(post, editHexColor, index)}  
+          setEditHexColor={setEditHexColor} 
+          setIsHighlight={setIsHighlight}/>
+        :
+          <BubbleView 
+          message={cont[frontIndex].message}
+          setEditBubbleIndex={() => setEditBubbleIndex(index)}
+          mylike={cont[frontIndex].mylike}
+          setLike={
+            () => new Promise((resolve, reject) => {
+              axios.post(`http://localhost:4000/update/like/forum-post`,
+              {forumpost_id: cont[frontIndex].forumpost_id}
+              ,{
+                withCredentials: true
+              }
+              ).then(async response => {
+                resolve()
+              })
+              .catch(error =>{
+                console.log(error)
+                if(error.response) toast.error(`${error.response.status}: An error occured`)
+                reject()
+              })
             })
-            .catch(error =>{
-              console.log(error)
-              if(error.response) toast.error(`${error.response.status}: An error occured`)
-              reject()
-            })
-          })
+          }
+          />
         }
-        />
-      }
-    </BubbleBasicLayout>
+      </BubbleBasicLayout>
+
+      {(cont.length > (frontIndex + 1))?
+        <motion.div
+          animate={controls}
+          style={{
+          position:'absolute',
+          width: '100%',
+          scale: '0.85',
+          opacity: '0.3',
+          zIndex: '-1',
+          top: '15%'}}
+        >
+          <BubbleBasicLayout 
+          mirror={(index % 2 == 0)?false:true} color={cont[frontIndex + 1].hex_color}
+          profile={cont[frontIndex + 1]}
+          isHighlight={isHighlight}
+          >
+            {frontIndex == null?
+              <BubbleEdit 
+              sendPost={post => sendPost(post, editHexColor, index)}  
+              setEditHexColor={setEditHexColor} 
+              setIsHighlight={setIsHighlight}/>
+            :
+              <BubbleView 
+              message={cont[frontIndex].message}
+              setEditBubbleIndex={() => setEditBubbleIndex(index)}
+              mylike={cont[frontIndex].mylike}
+              setLike={
+                () => new Promise((resolve, reject) => {
+                  axios.post(`http://localhost:4000/update/like/forum-post`,
+                  {forumpost_id: cont[frontIndex].forumpost_id}
+                  ,{
+                    withCredentials: true
+                  }
+                  ).then(async response => {
+                    resolve()
+                  })
+                  .catch(error =>{
+                    console.log(error)
+                    if(error.response) toast.error(`${error.response.status}: An error occured`)
+                    reject()
+                  })
+                })
+              }
+              />
+            }
+          </BubbleBasicLayout>
+        </motion.div>
+      :
+        null}
+    </div>
   )
 }
 

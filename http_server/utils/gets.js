@@ -63,7 +63,7 @@ const getMission_s = (conn, unique_pagename, title) => new Promise((resolve, rej
 
 const getForumPostParentInfo = (conn, parent_post_id) => new Promise((resolve, reject) => {
     conn.query(
-        `SELECT fpp.parent_id, fpp.parent_type, fpp.forumpost_parent_id, fp.left, fp.right from ForumPost_Parent fpp
+        `SELECT fpp.parent_id, fpp.parent_type, fpp.forumpost_parent_id, fp.left, fp.right, fp.depth from ForumPost_Parent fpp
         join ForumPost fp on fp.forumpost_parent_id = fpp.forumpost_parent_id where fp.forumpost_id = ?;`,
         [parent_post_id],
         function(err, forumpost_parent) {
@@ -115,6 +115,7 @@ const getForumPostParentInfo = (conn, parent_post_id) => new Promise((resolve, r
                                         forumpost_parent_id: forumpost_parent[0].forumpost_parent_id,
                                         left: forumpost_parent[0].left,
                                         right: forumpost_parent[0].right,
+                                        depth: forumpost_parent[0].depth,
                                         token_mint_address: pagetokenmint[0].token_mint_address
                                     })
                                 }
@@ -127,8 +128,46 @@ const getForumPostParentInfo = (conn, parent_post_id) => new Promise((resolve, r
     );
 })
 
+const getForumPost = (conn, user_id, page_id, depth, left, right, offset) => new Promise((resolve, reject) => {
+    let array = [user_id, page_id, depth]
+    if(left){
+        array.push(left)
+    }
+    if(right){
+        array.push(right)
+    }
+    array.push(offset?offset:0)
+    array.push(offset?(offset + 3):3)
+    conn.query(
+        `SELECT fp2.depth, fp2.left, fp2.right, fp2.forumpost_id, fp2.hex_color, fp2.message, fp2.created, if(count(fpl2.user_id = ?) > 0, true, false) as mylike, count(fpl2.forum_post_like_id) as likes, u.username, u.profilePicture from ForumPost fp2
+        join User u on u.user_id = fp2.user_id
+        join ForumPost_Like fpl2 on fpl2.forumpost_id = fp2.forumpost_id
+        join ForumPost_Parent fpp on fpp.forumpost_parent_id = fp2.forumpost_parent_id and fpp.parent_id = ? and fpp.parent_type = 'p'
+        where fp2.depth = ? ${left?'and fp2.left > ?':''} ${right?'and fp2.right < ?':''}
+        group by fp2.forumpost_id 
+        order by (SELECT count(fpl.forum_post_like_id) from ForumPost fp join ForumPost_Like fpl on fpl.forumpost_id = fp.forumpost_id 
+        where fp.left >= fp2.left and fp.right <= fp2.right group by fp2.forumpost_id) desc
+        limit ?,?`,
+        array,
+        function(err, query_content) {
+            if (err){
+                console.log(err)
+                reject({
+                    status: 500,
+                    message: 'An error occurred'
+                })
+            }else{
+                console.log(query_content)
+                //console.log(query_content)
+                resolve(query_content)
+            }
+        }
+    );
+})
+
 module.exports = {
     getPageByName,
     getMission_s,
-    getForumPostParentInfo
+    getForumPostParentInfo,
+    getForumPost
 }

@@ -34,7 +34,7 @@ var Panel = onClickOutside(({children}) => {
     };
 
     return(
-        <div className={styles.child}>
+        <div className={`hideScrollBar ${styles.child}`}>
             <div className={`${styles.menuContainer} ${menuStyle.container}`}>
                 <div className={styles.menu}>
                     <h1>Forum</h1>

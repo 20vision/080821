@@ -16,10 +16,10 @@ const forumpost_parent = (conn, id, type) => new Promise((resolve, reject) => {
     );
 })
 
-const forumpost = (conn, forumpost_parent_id, left, right, message, user_id, hex_color, user_token_impact_per_mission) => new Promise((resolve, reject) => {
+const forumpost = (conn, forumpost_parent_id, left, right, depth, message, user_id, hex_color, user_token_impact_per_mission) => new Promise((resolve, reject) => {
     conn.query(
-        `INSERT into ForumPost values(?,?,?,?,?,?,?,?,now());`,
-        [null,forumpost_parent_id, left, right, message, user_id, hex_color, user_token_impact_per_mission],
+        `INSERT into ForumPost values(?,?,?,?,?,?,?,?,?,now());`,
+        [null,forumpost_parent_id, left, right, depth, message, user_id, hex_color, user_token_impact_per_mission],
         function(err, insert) {
             if (err){
                 console.log(err)
