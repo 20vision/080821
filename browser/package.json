@@ -27,6 +27,7 @@
     "filepond-plugin-file-validate-type": "^1.2.6",
     "filepond-plugin-image-editor": "file:local_modules/filepond-plugin-image-editor",
     "framer-motion": "^5.5.5",
+    "luxon": "^2.3.0",
     "next": "^12.0.7",
     "pintura": "file:local_modules/pintura",
     "react": "17.0.2",

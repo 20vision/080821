@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import ForumLayout from '../../layouts/forum'
 import BubbleBasicLayout from '../../components/Forum/BubbleBasicLayout' 
 import dynamic from 'next/dynamic';
@@ -73,7 +73,8 @@ export default function index({root, content}) {
       {root.mission?<Square content={{mission:root.mission}}/>:null}
       {contentQuery && contentQuery.data && contentQuery.data.content.map((cont, index) => 
         <Bubble 
-        cont={cont} 
+        key={index}
+        content={cont} 
         index={index} 
         profile={profile} 
         setEditBubbleIndex={setEditBubbleIndex} 
@@ -88,114 +89,100 @@ export default function index({root, content}) {
         <BubbleEdit 
         sendPost={post => sendPost(post, editHexColor, content?content.length:0,)} 
         setEditHexColor={setEditHexColor}
-        setIsHighlight={setIsBottomHighlight}
+        isReplyActive={setIsBottomHighlight}
         />
       </BubbleBasicLayout>
     </ForumLayout>
   )
 }
 
-function Bubble({cont, index, profile, setEditBubbleIndex, edit_bubble_index, sendPost}) {
+function Bubble({content, index, profile, setEditBubbleIndex, edit_bubble_index, sendPost}) {
   const [editHexColor, setEditHexColor] = useState()
-  const [isHighlight, setIsHighlight] = useState(false)
+  const [isReplyActive, setIsReplyActive] = useState(false)
   const [frontIndex, setFrontIndex] = useState(0)
-  const controls = useAnimation()
+  const [frontHeight, setFrontHeight] = useState()
+
+  const variants = {
+    front: {
+      opacity: 1,      
+      scale: 1,
+      zIndex: 1,
+      y: '0%'
+    },
+    next: {
+      opacity: 0.3,
+      scale: 0.85,
+      zIndex: 0,
+      y: '20%'
+    },
+    back: {
+      opacity: 0.3,
+      scale: 0.85,
+      zIndex: 0,
+      y: '-10%'
+    }
+  }
 
   return(
-    <div style={{position: 'relative', marginBottom: '45px', left: '0', right: '0'}}>
-      <BubbleBasicLayout
-      mirror={(index % 2 == 0)?false:true} color={(frontIndex == null)?editHexColor:cont[frontIndex].hex_color}
-      profile={(frontIndex != null)?cont[frontIndex]:profile}
-      isHighlight={isHighlight}
-      makeScroll={() => controls.start({
-        scale: '1',
-        opacity: '1',
-        zIndex: '1',
-        top: '0%',
-        transition: {type: "ease", ease: 'easeOut', time: '2s'}
-      })}
-      >
-        
-        {frontIndex == null?
-          <BubbleEdit 
-          sendPost={post => sendPost(post, editHexColor, index)}  
-          setEditHexColor={setEditHexColor} 
-          setIsHighlight={setIsHighlight}/>
-        :
-          <BubbleView 
-          message={cont[frontIndex].message}
-          setEditBubbleIndex={() => setEditBubbleIndex(index)}
-          mylike={cont[frontIndex].mylike}
-          setLike={
-            () => new Promise((resolve, reject) => {
-              axios.post(`http://localhost:4000/update/like/forum-post`,
-              {forumpost_id: cont[frontIndex].forumpost_id}
-              ,{
-                withCredentials: true
-              }
-              ).then(async response => {
-                resolve()
-              })
-              .catch(error =>{
-                console.log(error)
-                if(error.response) toast.error(`${error.response.status}: An error occured`)
-                reject()
-              })
-            })
+    <div style={{marginBottom: 'calc(55px)', position: 'relative', height: frontHeight}}>
+      {content.map((cont, idx) => {
+        const motionRef = useRef(new Array())
+        useEffect(() => {
+          if(idx == frontIndex){
+            setFrontHeight(motionRef.current[idx]?motionRef.current[idx].clientHeight:100)
           }
-          />
-        }
-      </BubbleBasicLayout>
-
-      {(cont.length > (frontIndex + 1))?
-        <motion.div
-          animate={controls}
-          style={{
-          position:'absolute',
-          width: '100%',
-          scale: '0.85',
-          opacity: '0.3',
-          zIndex: '-1',
-          top: '15%'}}
-        >
-          <BubbleBasicLayout 
-          mirror={(index % 2 == 0)?false:true} color={cont[frontIndex + 1].hex_color}
-          profile={cont[frontIndex + 1]}
-          isHighlight={isHighlight}
+        }, [frontIndex, isReplyActive])
+        return(
+          <motion.div
+            key={idx}
+            initial={(idx == frontIndex) ? "front" : (idx > frontIndex)? "next" : "back"}
+            animate={(idx == frontIndex) ? "front" : (idx > frontIndex)? "next" : "back"}
+            transition={{type: 'spring', stiffness:'500', damping: '60', mass: '1'}}
+            variants={variants}
+            style={{position: 'absolute', left: 0, right: 0}}
+            ref={el => motionRef.current[idx] = el}
           >
-            {frontIndex == null?
-              <BubbleEdit 
-              sendPost={post => sendPost(post, editHexColor, index)}  
-              setEditHexColor={setEditHexColor} 
-              setIsHighlight={setIsHighlight}/>
-            :
-              <BubbleView 
-              message={cont[frontIndex].message}
-              setEditBubbleIndex={() => setEditBubbleIndex(index)}
-              mylike={cont[frontIndex].mylike}
-              setLike={
-                () => new Promise((resolve, reject) => {
-                  axios.post(`http://localhost:4000/update/like/forum-post`,
-                  {forumpost_id: cont[frontIndex].forumpost_id}
-                  ,{
-                    withCredentials: true
-                  }
-                  ).then(async response => {
-                    resolve()
+            <BubbleBasicLayout 
+            mirror={(index % 2 == 0)?false:true} color={isReplyActive?editHexColor:cont.hex_color}
+            profile={isReplyActive?profile:cont}
+            isReplyActive={setIsReplyActive}
+            makeScroll={scrollInfo => ((scrollInfo.deltaY > 0) && (frontIndex<content.length-1) && !isReplyActive)?setFrontIndex(frontIndex + 1):((scrollInfo.deltaY < 0) && (frontIndex>0) && !isReplyActive)?setFrontIndex(frontIndex - 1):null}
+            isInTheBackground={(idx != frontIndex)}
+            postDate={cont.created}
+            >
+              {(isReplyActive == true) && (idx == frontIndex)?
+                <BubbleEdit 
+                sendPost={post => sendPost(post, editHexColor, index)}  
+                setEditHexColor={setEditHexColor}
+                isReplyActive={setIsReplyActive}/>
+              :
+                <BubbleView 
+                message={cont.message}
+                setEditBubbleIndex={() => setEditBubbleIndex(index)}
+                mylike={cont.mylike}
+                setLike={
+                  () => new Promise((resolve, reject) => {
+                    axios.post(`http://localhost:4000/update/like/forum-post`,
+                    {forumpost_id: cont.forumpost_id}
+                    ,{
+                      withCredentials: true
+                    }
+                    ).then(async response => {
+                      resolve()
+                    })
+                    .catch(error =>{
+                      console.log(error)
+                      if(error.response) toast.error(`${error.response.status}: An error occured`)
+                      reject()
+                    })
                   })
-                  .catch(error =>{
-                    console.log(error)
-                    if(error.response) toast.error(`${error.response.status}: An error occured`)
-                    reject()
-                  })
-                })
+                }
+                />
               }
-              />
-            }
-          </BubbleBasicLayout>
-        </motion.div>
-      :
-        null}
+            </BubbleBasicLayout>
+          </motion.div>
+        )
+      })}
     </div>
   )
 }

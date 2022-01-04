@@ -41,7 +41,7 @@ var Panel = onClickOutside(({children}) => {
                     <Menu opened={true} setMenu={setMenu} pathname={menu}/>
                 </div>
             </div>
-            <div className={styles.previewContainer}>
+            <div>
                 <div className={styles.previewChild}>
                     {children}
                 </div>

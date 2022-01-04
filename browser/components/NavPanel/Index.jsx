@@ -91,7 +91,7 @@ function PageNavWithRole({router}){
                 <div>Trade</div>
             </a>
 
-            <Link href={`/forum/${router.query.page}`}>
+            <Link href={`/forum/${router.query.page}/p`}>
                 <a>
                     <MessageCircle color="#FAFAFA"/>
                     <div>Forum</div>
