@@ -2,14 +2,18 @@ import { useEffect, useState, useRef } from "react"
 import styles from '../../styles/forumLayout/edit_bubble.module.css'
 import TextareaAutosize from 'react-textarea-autosize';
 import {TwitterPicker} from "react-color"
+import { useForumStore } from "../../store/forum";
 
-export default function BubbleEdit({setEditHexColor, sendPost, isReplyActive}){
+export default function BubbleEdit({setEditHexColor, sendPost, indx}){
     const [post, setPost] = useState('')
     const [pickerVisible, setPickerVisible] = useState(false)
     const [hex, setHex] = useState()
     const bubbleEditRef = useRef()
     const [listening, setListening] = useState(false);
     let listeningRef = useRef(false);
+    const setReplyIndex = useForumStore(state => state.setReplyIndex)
+    const replyIndex = useForumStore(state => state.replyIndex)
+
     const hexArray = [
         '#fbe4a0', 
         '#fbcfa8', 
@@ -36,8 +40,8 @@ export default function BubbleEdit({setEditHexColor, sendPost, isReplyActive}){
     }, [post])
 
     function handleClickOutside(evt){
-        if(bubbleEditRef.current && !bubbleEditRef.current.contains(evt.target) && (listeningRef.current == true)){
-            isReplyActive()
+        if(bubbleEditRef.current && !bubbleEditRef.current.contains(evt.target) && (listeningRef.current == true) && (replyIndex==indx)){
+            setReplyIndex(null)
         }
     }
 

@@ -6,7 +6,7 @@ import { DateTime, Interval } from "luxon";
 export default function BubbleBasicLayout({children, mirror, color, profile, postDate, isReplyActive, makeScroll, isInTheBackground}){
     
     return(
-        <div onClick={() => isReplyActive(true)} style={{display:'flex'}} className={mirror?styles.mirror:null}>
+        <div style={{display:'flex'}} className={mirror?styles.mirror:null}>
             <div style={{margin: '5px 0px', opacity: isInTheBackground?'0':'1'}} className={mirror?styles.mirror:null}>
                 <ProfilePicture type={'small'} uri={profile.profilePicture}/>
             </div>

@@ -8,63 +8,24 @@ const BubbleEdit = dynamic(() => import('../../components/Forum/BubbleEdit'), {
 import BubbleView from '../../components/Forum/BubbleView'
 import Square from '../../components/Forum/Square' 
 import axios from 'axios'
-import {useQuery} from 'react-query'
 import useUserProfile from '../../hooks/User/useUserProfile'
 import { toast } from 'react-toastify';
 import { useRouter } from 'next/router'
 import { motion, useAnimation } from 'framer-motion';
-export default function index({root, content}) {
+import { useForumStore } from '../../store/forum';
+export default function index({root, ssrContent}) {
   const [profile, isLoading, setUser] = useUserProfile()
   const [editHexColor, setEditHexColor] = useState()
-  const [replyActiveIndex, setReplyActiveIndex] = useState(null)
   const router = useRouter()
-  let contentQuery = useQuery(`forum-post/${router.asPath}`, async () => {
-    const res = await axios.get(`http://localhost:4000/get${router.asPath}`, {
-      withCredentials: true
-    })
-    return res.data
-  },
-  {
-    initialData: root.content,
-    refetchOnWindowFocus: false,
-    refetchOnmount: false,
-    refetchOnReconnect: false,
-    retry: false,
-    staleTime: 1000 * 60 * 60 * 24,
-    onSuccess: data => {
-      console.log(data)
-    },
-    onError: (error) => {
-      console.error(error)
-    },
+  
+  const [contentArray, setContentArray] = useState(ssrContent)
+  const [selectionLeftRightArray, setSelectionLeftRightArray] = useState(() => {
+    let array = [];
+    for(var i = 0; i<ssrContent.length;i++){
+      array.push({left: ssrContent[i][0].left, right: ssrContent[i][0].right})
+    }
+    return array
   })
-
-  // useEffect(() => {
-  //   console.log(contentQuery.data && contentQuery.data.content?contentQuery.data.content[0]:null)
-  // }, [contentQuery])
-
-  const treeFromIndex = (post_index, new_front_sub_index) => {
-    contentQuery = useQuery(`forum-post/${router.asPath}`, async () => {
-      const res = await axios.get(`http://localhost:4000/get${router.asPath}`, {
-        withCredentials: true
-      })
-      return res.data
-    },
-    {
-      initialData: root.content,
-      refetchOnWindowFocus: false,
-      refetchOnmount: false,
-      refetchOnReconnect: false,
-      retry: false,
-      staleTime: 1000 * 60 * 60 * 24,
-      onSuccess: data => {
-        console.log(data)
-      },
-      onError: (error) => {
-        console.error(error)
-      },
-    })
-  }
 
   const sendPost = (post, hex, postIndex) => {
     axios.post(`http://localhost:4000/post/forum${(postIndex>0)?'-post':''}/${
@@ -74,7 +35,7 @@ export default function index({root, content}) {
         :
           root.page.unique_pagename
       :
-        (contentQuery.data && contentQuery.data.content)?contentQuery.data.content[postIndex - 1].forumpost_id:null
+        contentArray[postIndex - 1].forumpost_id
     }`,{forum_post: post, hex_color: hex},{
       withCredentials: true
     }
@@ -91,15 +52,14 @@ export default function index({root, content}) {
     <ForumLayout>
       <Square content={{page:root.page}}/>
       {root.mission?<Square content={{mission:root.mission}}/>:null}
-      {contentQuery && contentQuery.data && contentQuery.data.content.map((cont, index) => 
+      {contentArray && contentArray.slice(0,selectionLeftRightArray.length).map((cont, index) => 
         <Bubble 
         key={index}
-        content={cont} 
+        contArray={cont} 
         index={index} 
         profile={profile}
-        setReplyActiveIndex={setReplyActiveIndex}
-        replyActiveIndex={replyActiveIndex}
-        treeFromIndex={treeFromIndex}
+        setSelectionLeftRightArray={setSelectionLeftRightArray}
+        selectionLeftRightArray={selectionLeftRightArray}
         sendPost={(post, hex) => sendPost(post, hex, index)}/>
       )}
       <BubbleBasicLayout 
@@ -107,18 +67,35 @@ export default function index({root, content}) {
       color={editHexColor} 
       profile={profile}>
         <BubbleEdit 
-        sendPost={post => sendPost(post, editHexColor, content?content.length:0,)} 
+        sendPost={post => sendPost(post, editHexColor, content?content.length:0)} 
         setEditHexColor={setEditHexColor}
+        indx={content?content.length:0}
         />
       </BubbleBasicLayout>
     </ForumLayout>
   )
 }
 
-function Bubble({content, index, profile, sendPost, replyActiveIndex, setReplyActiveIndex, treeFromIndex}) {
+function Bubble({contArray, index, profile, sendPost, setSelectionLeftRightArray, selectionLeftRightArray}) {
   const [editHexColor, setEditHexColor] = useState()
   const [frontIndex, setFrontIndex] = useState(0)
   const [frontHeight, setFrontHeight] = useState()
+  const replyIndex = useForumStore(state => state.replyIndex)
+  const [content, setContent] = useState(() => {
+    if(index != 0){
+      if((selectionLeftRightArray[index - 1].left+1 == selectionLeftRightArray[index - 1].right)) return []
+      let filteredContent = []
+      for(var i = 0; i<contArray.length;i++){
+        if((contArray[i].left > selectionLeftRightArray[index - 1].left) && (contArray[i].right < selectionLeftRightArray[index - 1].right)){
+          filteredContent.push(contArray[i])
+        }
+      }
+      if(filteredContent.length == 0) return []
+      return filteredContent
+    }else{
+      return contArray
+    }
+  })
 
   const variants = {
     front: {
@@ -149,7 +126,7 @@ function Bubble({content, index, profile, sendPost, replyActiveIndex, setReplyAc
           if(idx == frontIndex){
             setFrontHeight(motionRef.current[idx]?motionRef.current[idx].clientHeight:100)
           }
-        }, [frontIndex, replyActiveIndex])
+        }, [frontIndex, replyIndex])
         return(
           <motion.div
             key={idx}
@@ -161,21 +138,19 @@ function Bubble({content, index, profile, sendPost, replyActiveIndex, setReplyAc
             ref={el => motionRef.current[idx] = el}
           >
             <BubbleBasicLayout 
-            mirror={(index % 2 == 0)?false:true} color={((replyActiveIndex == index) && (idx == frontIndex))?editHexColor:cont.hex_color}
-            profile={((replyActiveIndex == index) && (idx == frontIndex))?profile:cont}
+            mirror={(index % 2 == 0)?false:true} color={((replyIndex == index) && (idx == frontIndex))?editHexColor:cont.hex_color}
+            profile={((replyIndex == index) && (idx == frontIndex))?profile:cont}
             makeScroll={scrollInfo => {
               if((scrollInfo.deltaY > 0) &&
                 (frontIndex<content.length-1) &&
-                !((replyActiveIndex == index) && (idx == frontIndex))
+                !((replyIndex == index) && (idx == frontIndex))
               ){
                 setFrontIndex(frontIndex + 1)
-                treeFromIndex(index, (frontIndex + 1))
               }else if((scrollInfo.deltaY < 0) &&
                 (frontIndex>0) &&
-                !((replyActiveIndex == index) && (idx == frontIndex))
+                !((replyIndex == index) && (idx == frontIndex))
               ){
                 setFrontIndex(frontIndex - 1)
-                treeFromIndex(index, (frontIndex - 1))
               }else{
                 null
               }
@@ -183,16 +158,16 @@ function Bubble({content, index, profile, sendPost, replyActiveIndex, setReplyAc
             isInTheBackground={(idx != frontIndex)}
             postDate={cont.created}
             >
-              {(replyActiveIndex == index) && (idx == frontIndex)?
+              {(replyIndex == index) && (idx == frontIndex)?
                 <BubbleEdit 
                 sendPost={post => sendPost(post, editHexColor, index)}  
                 setEditHexColor={setEditHexColor}
-                isReplyActive={() => setReplyActiveIndex(null)}/>
+                indx={index}/>
               :
                 <BubbleView 
                 message={cont.message}
                 mylike={cont.mylike}
-                isReplyActive={() => setReplyActiveIndex(index)}
+                index={index}
                 setLike={
                   () => new Promise((resolve, reject) => {
                     axios.post(`http://localhost:4000/update/like/forum-post`,
@@ -233,7 +208,7 @@ export async function getServerSideProps(context) {
           page: res.data.page,
           mission: res.data.mission?res.data.mission:null
         },
-        content: res.data.content?res.data.content:null
+        ssrContent: res.data.content?res.data.content:null
       }
     }
   }catch(error){
@@ -243,3 +218,27 @@ export async function getServerSideProps(context) {
     }
   }
 }
+
+
+// const treeFromIndex = (post_index, new_front_sub_index) => {
+//   // contentQuery = useQueries(`forum-post/${router.asPath}`, async () => {
+//   //   const res = await axios.get(`http://localhost:4000/get${router.asPath}`, {
+//   //     withCredentials: true
+//   //   })
+//   //   return res.data
+//   // },
+//   // {
+//   //   initialData: root.content,
+//   //   refetchOnWindowFocus: false,
+//   //   refetchOnmount: false,
+//   //   refetchOnReconnect: false,
+//   //   retry: false,
+//   //   staleTime: 1000 * 60 * 60 * 24,
+//   //   onSuccess: data => {
+//   //     console.log(data)
+//   //   },
+//   //   onError: (error) => {
+//   //     console.error(error)
+//   //   },
+//   // })
+// }

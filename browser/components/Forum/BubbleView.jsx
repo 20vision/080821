@@ -1,10 +1,13 @@
 import styles from '../../styles/forumLayout/view_bubble.module.css'
 import Heart from '../../assets/Heart'
 import { useRef, useState, useEffect } from 'react'
+import { useForumStore } from '../../store/forum'
 
-export default function BubbleView({message, mylike, isReplyActive, setLike}){
+export default function BubbleView({message, index, mylike, setLike}){
     const bubbleRef = useRef()
     const [isMyLike, setIsMyLike] = useState(false)
+    const setReplyIndex = useForumStore(state => state.setReplyIndex)
+
     useEffect(() => {
         if(mylike){
             setIsMyLike(true)
@@ -13,7 +16,7 @@ export default function BubbleView({message, mylike, isReplyActive, setLike}){
     return(
         <div className={styles.container} onClick={async evt => {
             if (bubbleRef.current && !bubbleRef.current.contains(evt.target)){
-                isReplyActive()
+                setReplyIndex(index)
             }else{
                 try{
                     setIsMyLike(!isMyLike)
