@@ -9,17 +9,14 @@ import BubbleView from '../../components/Forum/BubbleView'
 import Square from '../../components/Forum/Square' 
 import axios from 'axios'
 import {useQuery} from 'react-query'
-import { useForumStore } from '../../store/forum'
 import useUserProfile from '../../hooks/User/useUserProfile'
 import { toast } from 'react-toastify';
 import { useRouter } from 'next/router'
 import { motion, useAnimation } from 'framer-motion';
 export default function index({root, content}) {
-  const edit_bubble_index = useForumStore(state => state.edit_bubble_index)
-  const setEditBubbleIndex = useForumStore(state => state.setEditBubbleIndex)
   const [profile, isLoading, setUser] = useUserProfile()
   const [editHexColor, setEditHexColor] = useState()
-  const [isBottomHighlight, setIsBottomHighlight] = useState()
+  const [replyActiveIndex, setReplyActiveIndex] = useState(null)
   const router = useRouter()
   let contentQuery = useQuery(`forum-post/${router.asPath}`, async () => {
     const res = await axios.get(`http://localhost:4000/get${router.asPath}`, {
@@ -45,6 +42,29 @@ export default function index({root, content}) {
   // useEffect(() => {
   //   console.log(contentQuery.data && contentQuery.data.content?contentQuery.data.content[0]:null)
   // }, [contentQuery])
+
+  const treeFromIndex = (post_index, new_front_sub_index) => {
+    contentQuery = useQuery(`forum-post/${router.asPath}`, async () => {
+      const res = await axios.get(`http://localhost:4000/get${router.asPath}`, {
+        withCredentials: true
+      })
+      return res.data
+    },
+    {
+      initialData: root.content,
+      refetchOnWindowFocus: false,
+      refetchOnmount: false,
+      refetchOnReconnect: false,
+      retry: false,
+      staleTime: 1000 * 60 * 60 * 24,
+      onSuccess: data => {
+        console.log(data)
+      },
+      onError: (error) => {
+        console.error(error)
+      },
+    })
+  }
 
   const sendPost = (post, hex, postIndex) => {
     axios.post(`http://localhost:4000/post/forum${(postIndex>0)?'-post':''}/${
@@ -76,29 +96,27 @@ export default function index({root, content}) {
         key={index}
         content={cont} 
         index={index} 
-        profile={profile} 
-        setEditBubbleIndex={setEditBubbleIndex} 
-        edit_bubble_index={edit_bubble_index}
+        profile={profile}
+        setReplyActiveIndex={setReplyActiveIndex}
+        replyActiveIndex={replyActiveIndex}
+        treeFromIndex={treeFromIndex}
         sendPost={(post, hex) => sendPost(post, hex, index)}/>
       )}
       <BubbleBasicLayout 
       mirror={(content.length % 2 == 0)?false:true}
       color={editHexColor} 
-      profile={profile}
-      isHighlight={isBottomHighlight}>
+      profile={profile}>
         <BubbleEdit 
         sendPost={post => sendPost(post, editHexColor, content?content.length:0,)} 
         setEditHexColor={setEditHexColor}
-        isReplyActive={setIsBottomHighlight}
         />
       </BubbleBasicLayout>
     </ForumLayout>
   )
 }
 
-function Bubble({content, index, profile, setEditBubbleIndex, edit_bubble_index, sendPost}) {
+function Bubble({content, index, profile, sendPost, replyActiveIndex, setReplyActiveIndex, treeFromIndex}) {
   const [editHexColor, setEditHexColor] = useState()
-  const [isReplyActive, setIsReplyActive] = useState(false)
   const [frontIndex, setFrontIndex] = useState(0)
   const [frontHeight, setFrontHeight] = useState()
 
@@ -124,14 +142,14 @@ function Bubble({content, index, profile, setEditBubbleIndex, edit_bubble_index,
   }
 
   return(
-    <div style={{marginBottom: 'calc(55px)', position: 'relative', height: frontHeight}}>
+    <div style={{marginBottom: '55px', position: 'relative', height: frontHeight}}>
       {content.map((cont, idx) => {
         const motionRef = useRef(new Array())
         useEffect(() => {
           if(idx == frontIndex){
             setFrontHeight(motionRef.current[idx]?motionRef.current[idx].clientHeight:100)
           }
-        }, [frontIndex, isReplyActive])
+        }, [frontIndex, replyActiveIndex])
         return(
           <motion.div
             key={idx}
@@ -143,23 +161,38 @@ function Bubble({content, index, profile, setEditBubbleIndex, edit_bubble_index,
             ref={el => motionRef.current[idx] = el}
           >
             <BubbleBasicLayout 
-            mirror={(index % 2 == 0)?false:true} color={isReplyActive?editHexColor:cont.hex_color}
-            profile={isReplyActive?profile:cont}
-            isReplyActive={setIsReplyActive}
-            makeScroll={scrollInfo => ((scrollInfo.deltaY > 0) && (frontIndex<content.length-1) && !isReplyActive)?setFrontIndex(frontIndex + 1):((scrollInfo.deltaY < 0) && (frontIndex>0) && !isReplyActive)?setFrontIndex(frontIndex - 1):null}
+            mirror={(index % 2 == 0)?false:true} color={((replyActiveIndex == index) && (idx == frontIndex))?editHexColor:cont.hex_color}
+            profile={((replyActiveIndex == index) && (idx == frontIndex))?profile:cont}
+            makeScroll={scrollInfo => {
+              if((scrollInfo.deltaY > 0) &&
+                (frontIndex<content.length-1) &&
+                !((replyActiveIndex == index) && (idx == frontIndex))
+              ){
+                setFrontIndex(frontIndex + 1)
+                treeFromIndex(index, (frontIndex + 1))
+              }else if((scrollInfo.deltaY < 0) &&
+                (frontIndex>0) &&
+                !((replyActiveIndex == index) && (idx == frontIndex))
+              ){
+                setFrontIndex(frontIndex - 1)
+                treeFromIndex(index, (frontIndex - 1))
+              }else{
+                null
+              }
+            }}
             isInTheBackground={(idx != frontIndex)}
             postDate={cont.created}
             >
-              {(isReplyActive == true) && (idx == frontIndex)?
+              {(replyActiveIndex == index) && (idx == frontIndex)?
                 <BubbleEdit 
                 sendPost={post => sendPost(post, editHexColor, index)}  
                 setEditHexColor={setEditHexColor}
-                isReplyActive={setIsReplyActive}/>
+                isReplyActive={() => setReplyActiveIndex(null)}/>
               :
                 <BubbleView 
                 message={cont.message}
-                setEditBubbleIndex={() => setEditBubbleIndex(index)}
                 mylike={cont.mylike}
+                isReplyActive={() => setReplyActiveIndex(index)}
                 setLike={
                   () => new Promise((resolve, reject) => {
                     axios.post(`http://localhost:4000/update/like/forum-post`,

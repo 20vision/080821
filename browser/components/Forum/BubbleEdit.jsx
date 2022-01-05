@@ -37,7 +37,7 @@ export default function BubbleEdit({setEditHexColor, sendPost, isReplyActive}){
 
     function handleClickOutside(evt){
         if(bubbleEditRef.current && !bubbleEditRef.current.contains(evt.target) && (listeningRef.current == true)){
-            isReplyActive(false)
+            isReplyActive()
         }
     }
 
