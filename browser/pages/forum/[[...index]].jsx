@@ -13,6 +13,7 @@ import { toast } from 'react-toastify';
 import { useRouter } from 'next/router'
 import { motion, useAnimation } from 'framer-motion';
 import { useForumStore } from '../../store/forum';
+import Loading from '../../assets/Loading/Loading';
 export default function index({root, ssrContent}) {
   const [profile, isLoading, setUser] = useUserProfile()
   const [editHexColor, setEditHexColor] = useState()
@@ -22,10 +23,45 @@ export default function index({root, ssrContent}) {
   const [selectionLeftRightArray, setSelectionLeftRightArray] = useState(() => {
     let array = [];
     for(var i = 0; i<ssrContent.length;i++){
-      array.push({left: ssrContent[i][0].left, right: ssrContent[i][0].right})
+      array.push({forumpost_parent_id: ssrContent[i][0].forumpost_parent_id, left: ssrContent[i][0].left, right: ssrContent[i][0].right})
     }
-    return array
+    return [...array]
   })
+
+  useEffect(() => {
+    console.log(selectionLeftRightArray)
+    //setSelectionLeftRightArray([{forumpost_parent_id: 14, left: 0, right: 9}])
+    console.log('CHANGE')
+  }, [selectionLeftRightArray])
+
+  // const fetchPosts = async() => new Promise((resolve, reject) => {
+  //   axios.get(`http://localhost:4000/get${router.asPath}`, {
+  //     withCredentials: true
+  //   }).then(response => {
+  //     resolve(response.data)
+  //   }).catch(err => {
+  //     reject({
+  //       status: err.response.status,
+  //       message: err.response.data
+  //     })
+  //   })
+  // })
+
+  // const setOrGetPosts = async(arg, maxNextFetchCount=100) => {
+  //   setSelectionLeftRightArray(arg)
+  //   setLoadingMore(true)
+  //   let array = [...selectionLeftRightArray]
+  //   for(var i=selectionLeftRightArray.length;((i<array.length+1) || ((i-selectionLeftRightArray.length)>=maxNextFetchCount));i++){
+  //     if(!array[i] && contentArray[i-1]){
+  //       for(var j=0;j<contentArray[i-1].length;j++){
+  //         if(contentArray[i][j].forumpost_parent_id == array[i-1].forumpost_parent_id){
+            
+  //         }
+  //       }
+  //       contentArray[i-1][0]
+  //     }
+  //   }
+  // }
 
   const sendPost = (post, hex, postIndex) => {
     axios.post(`http://localhost:4000/post/forum${(postIndex>0)?'-post':''}/${
@@ -52,16 +88,34 @@ export default function index({root, ssrContent}) {
     <ForumLayout>
       <Square content={{page:root.page}}/>
       {root.mission?<Square content={{mission:root.mission}}/>:null}
-      {contentArray && contentArray.slice(0,selectionLeftRightArray.length).map((cont, index) => 
-        <Bubble 
+      {contentArray && contentArray.slice(0,selectionLeftRightArray.length).map((cont, index) => {
+        let content;
+        if(index != 0){
+          if((selectionLeftRightArray[index - 1].left+1) == selectionLeftRightArray[index - 1].right){
+            content = null
+          }
+          let filteredContent = []
+          for(var i = 0; i<cont.length;i++){
+            if((cont[i].forumpost_parent_id == selectionLeftRightArray[index-1].forumpost_parent_id) &&
+              (cont[i].left > selectionLeftRightArray[index - 1].left) &&
+              (cont[i].right < selectionLeftRightArray[index - 1].right)){
+              filteredContent.push(cont[i])
+            }
+          }
+          if(filteredContent.length == 0) content = null
+          content = [...filteredContent]
+        }else{
+          content = [...cont]
+        }
+        return(<Bubble 
         key={index}
-        contArray={cont} 
+        content={content} 
         index={index} 
         profile={profile}
-        setSelectionLeftRightArray={setSelectionLeftRightArray}
+        setSelectionLeftRightArray={arg => {setSelectionLeftRightArray(arg);}}
         selectionLeftRightArray={selectionLeftRightArray}
-        sendPost={(post, hex) => sendPost(post, hex, index)}/>
-      )}
+        sendPost={(post, hex) => sendPost(post, hex, index)}/>)
+      })}
       <BubbleBasicLayout 
       mirror={(content.length % 2 == 0)?false:true}
       color={editHexColor} 
@@ -76,26 +130,11 @@ export default function index({root, ssrContent}) {
   )
 }
 
-function Bubble({contArray, index, profile, sendPost, setSelectionLeftRightArray, selectionLeftRightArray}) {
+function Bubble({content, index, profile, sendPost, setSelectionLeftRightArray, selectionLeftRightArray}) {
   const [editHexColor, setEditHexColor] = useState()
   const [frontIndex, setFrontIndex] = useState(0)
   const [frontHeight, setFrontHeight] = useState()
   const replyIndex = useForumStore(state => state.replyIndex)
-  const [content, setContent] = useState(() => {
-    if(index != 0){
-      if((selectionLeftRightArray[index - 1].left+1 == selectionLeftRightArray[index - 1].right)) return []
-      let filteredContent = []
-      for(var i = 0; i<contArray.length;i++){
-        if((contArray[i].left > selectionLeftRightArray[index - 1].left) && (contArray[i].right < selectionLeftRightArray[index - 1].right)){
-          filteredContent.push(contArray[i])
-        }
-      }
-      if(filteredContent.length == 0) return []
-      return filteredContent
-    }else{
-      return contArray
-    }
-  })
 
   const variants = {
     front: {
@@ -118,9 +157,13 @@ function Bubble({contArray, index, profile, sendPost, setSelectionLeftRightArray
     }
   }
 
+  useEffect(() => {
+    console.log(content)
+  }, [])
+
   return(
     <div style={{marginBottom: '55px', position: 'relative', height: frontHeight}}>
-      {content.map((cont, idx) => {
+      {(content.length != 0) && content.map((cont, idx) => {
         const motionRef = useRef(new Array())
         useEffect(() => {
           if(idx == frontIndex){
@@ -146,11 +189,19 @@ function Bubble({contArray, index, profile, sendPost, setSelectionLeftRightArray
                 !((replyIndex == index) && (idx == frontIndex))
               ){
                 setFrontIndex(frontIndex + 1)
+                let oldSelectionArray = [...selectionLeftRightArray]
+                oldSelectionArray.splice(index,(selectionLeftRightArray.length - index))
+                oldSelectionArray.push({forumpost_parent_id: content[frontIndex + 1].forumpost_parent_id, left: content[frontIndex + 1].left, right: content[frontIndex + 1].right})
+                setSelectionLeftRightArray(oldSelectionArray)
               }else if((scrollInfo.deltaY < 0) &&
                 (frontIndex>0) &&
                 !((replyIndex == index) && (idx == frontIndex))
               ){
                 setFrontIndex(frontIndex - 1)
+                let oldSelectionArray = [...selectionLeftRightArray]
+                oldSelectionArray.splice(index,(selectionLeftRightArray.length - index))
+                oldSelectionArray.push({forumpost_parent_id: content[frontIndex - 1].forumpost_parent_id, left: content[frontIndex - 1].left, right: content[frontIndex - 1].right})
+                setSelectionLeftRightArray(oldSelectionArray)
               }else{
                 null
               }
