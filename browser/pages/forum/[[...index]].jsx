@@ -19,59 +19,102 @@ export default function index({root, ssrContent}) {
   const [editHexColor, setEditHexColor] = useState()
   const router = useRouter()
   
-  const [contentArray, setContentArray] = useState(ssrContent)
-  const [selectionLeftRightArray, setSelectionLeftRightArray] = useState(() => {
-    let array = [];
-    for(var i = 0; i<ssrContent.length;i++){
-      array.push({forumpost_parent_id: ssrContent[i][0].forumpost_parent_id, left: ssrContent[i][0].left, right: ssrContent[i][0].right})
+  const [dataset, setDataset] = useState(ssrContent)
+  const [loading, setLoading] = useState(false)
+  const [filteredContent, setFilteredContent] = useState(() => {
+    let filtered = []
+    for(var i=0;i<ssrContent.length;i++){
+      filtered[i] = []
+      for(var j=0;j<ssrContent[i].length;j++){
+        filtered[i].push(j)
+      }
     }
-    return [...array]
+    return filtered
+  })
+  const [selectedContent, setSelectedContent] = useState(() => {
+    let selectedRoute = [];
+    for(var i=0;i<ssrContent.length;i++){
+      selectedRoute[i] = 0
+    }
+    return selectedRoute
   })
 
-  useEffect(() => {
-    console.log(selectionLeftRightArray)
-    //setSelectionLeftRightArray([{forumpost_parent_id: 14, left: 0, right: 9}])
-    console.log('CHANGE')
-  }, [selectionLeftRightArray])
+  const reorder = async({i, j}) => {
+    let new_filteredContent = JSON.parse(JSON.stringify(filteredContent)).slice(0,i+1)
+    let new_selectedContent = [...JSON.parse(JSON.stringify(selectedContent)).slice(0,i),j]
+    console.log(new_filteredContent)
+    console.log(new_selectedContent)
+    for(let x=i;x<new_selectedContent.length;x++){
+      for(let y=0;y<dataset[x+1].length;y++){
+        if(dataset[x+1][y].left + 1 == dataset[x+1][y].right) break
 
-  // const fetchPosts = async() => new Promise((resolve, reject) => {
-  //   axios.get(`http://localhost:4000/get${router.asPath}`, {
-  //     withCredentials: true
-  //   }).then(response => {
-  //     resolve(response.data)
-  //   }).catch(err => {
-  //     reject({
-  //       status: err.response.status,
-  //       message: err.response.data
-  //     })
-  //   })
-  // })
+        
+      }
+    }
+    // setLoading(true)
+    // let selectionArray = JSON.parse(JSON.stringify(filteredContent))
+    // let selectedRoute = JSON.parse(JSON.stringify(selectedContent))
+    // let new_dataset = JSON.parse(JSON.stringify(dataset))
+    // selectionArray.splice(index+1,)
+    // selectedRoute.splice(index,).push(parent_forumpost)
+    // for(var i = selectionArray.length;i<selectionArray.length+1;i++){
+    //   let variants = []
 
-  // const setOrGetPosts = async(arg, maxNextFetchCount=100) => {
-  //   setSelectionLeftRightArray(arg)
-  //   setLoadingMore(true)
-  //   let array = [...selectionLeftRightArray]
-  //   for(var i=selectionLeftRightArray.length;((i<array.length+1) || ((i-selectionLeftRightArray.length)>=maxNextFetchCount));i++){
-  //     if(!array[i] && contentArray[i-1]){
-  //       for(var j=0;j<contentArray[i-1].length;j++){
-  //         if(contentArray[i][j].forumpost_parent_id == array[i-1].forumpost_parent_id){
-            
-  //         }
-  //       }
-  //       contentArray[i-1][0]
-  //     }
-  //   }
-  // }
+    //   if(new_dataset[i] && (new_dataset[i].length > 0)){
+    //     for(var j=0;j<new_dataset[i].length;j++){
+    //       if(
+    //         (new_dataset[i][j].forumpost_parent_id == selectedRoute[i-1].forumpost_parent_id) && 
+    //         (new_dataset[i][j].left > selectedRoute[i-1].left) &&
+    //         (new_dataset[i][j].right < selectedRoute[i-1].right)
+    //         ){
+    //         variants.push(new_dataset[i][j])
+    //       }
+    //     }
+    //     console.log(JSON.parse(JSON.stringify(variants)))
+    //     if(variants.length > 0){
+    //       selectionArray.push(variants)
+    //       selectedRoute.push(variants[0])
+    //     }else{
+    //       try{
+    //         const getPosts = await axios.get(`http://localhost:4000/get/forum-post/${selectedRoute[i-1].forumpost_id}`,{
+    //           withCredentials: true
+    //         })
+    //         if(getPosts.data.length > 0){
+    //           for(var s=i-1;s<(i-1)+getPosts.data.length;s++){
+    //             new_dataset[s].push(getPosts.data[s])
+    //           }
+    //           selectionArray.push(getPosts.data[0])
+    //           selectedRoute.push(getPosts.data[0][0])
+    //         }else{
+    //           break
+    //         }
+    //       }catch(err){
+    //         console.log(err)
+    //         toast.error('Could not get posts')
+    //       }
+    //     }
+    //   }else{
+    //     //fetch new
+    //     console.log('FETCH')
+    //     break
+    //   }
+    //   if(variants[0] && (variants[0].left + 1 == variants[0].right)) break
+    // }
+    
+    // if(new_dataset != dataset) setDataset(new_dataset)
+    // setSelectedContent(selectedRoute)
+    // setFilteredContent(selectionArray)
+    // setLoading(false)
+  }
 
-  const sendPost = (post, hex, postIndex) => {
-    axios.post(`http://localhost:4000/post/forum${(postIndex>0)?'-post':''}/${
-      (postIndex == 0)?
+  const sendPost = (post, hex, index) => {
+    axios.post(`http://localhost:4000/post/forum${(index>0)?'-post':''}/${
+      (index == 0)?
         (root.mission)?
           root.page.unique_pagename+'/'+root.mission.title
         :
           root.page.unique_pagename
-      :
-        contentArray[postIndex - 1].forumpost_id
+      :selectedContent[index - 1].forumpost_id
     }`,{forum_post: post, hex_color: hex},{
       withCredentials: true
     }
@@ -88,49 +131,42 @@ export default function index({root, ssrContent}) {
     <ForumLayout>
       <Square content={{page:root.page}}/>
       {root.mission?<Square content={{mission:root.mission}}/>:null}
-      {contentArray && contentArray.slice(0,selectionLeftRightArray.length).map((cont, index) => {
-        let content;
-        if(index != 0){
-          if((selectionLeftRightArray[index - 1].left+1) == selectionLeftRightArray[index - 1].right){
-            content = null
-          }
-          let filteredContent = []
-          for(var i = 0; i<cont.length;i++){
-            if((cont[i].forumpost_parent_id == selectionLeftRightArray[index-1].forumpost_parent_id) &&
-              (cont[i].left > selectionLeftRightArray[index - 1].left) &&
-              (cont[i].right < selectionLeftRightArray[index - 1].right)){
-              filteredContent.push(cont[i])
-            }
-          }
-          if(filteredContent.length == 0) content = null
-          content = [...filteredContent]
-        }else{
-          content = [...cont]
-        }
-        return(<Bubble 
-        key={index}
-        content={content} 
-        index={index} 
-        profile={profile}
-        setSelectionLeftRightArray={arg => {setSelectionLeftRightArray(arg);}}
-        selectionLeftRightArray={selectionLeftRightArray}
-        sendPost={(post, hex) => sendPost(post, hex, index)}/>)
+      {/*.slice(0,selectionLeftRightArray.length)*/}
+      {dataset && dataset.slice(0,filteredContent.length).map((cont, index) => {
+
+        return(
+          <Bubble 
+          key={index}
+          content={cont} 
+          index={index} 
+          profile={profile}
+          reorder={reorder}
+          sendPost={sendPost}/>
+        )
+
       })}
-      <BubbleBasicLayout 
-      mirror={(content.length % 2 == 0)?false:true}
-      color={editHexColor} 
-      profile={profile}>
-        <BubbleEdit 
-        sendPost={post => sendPost(post, editHexColor, content?content.length:0)} 
-        setEditHexColor={setEditHexColor}
-        indx={content?content.length:0}
-        />
-      </BubbleBasicLayout>
+      {loading ?
+        <div key={index} style={{width: '100%', display: 'flex', justifyContent: 'center'}}>
+          <Loading/>
+        </div>
+      :
+        <BubbleBasicLayout 
+        mirror={(content.length % 2 == 0)?false:true}
+        color={editHexColor} 
+        profile={profile}>
+          <BubbleEdit 
+          sendPost={post => sendPost(post, editHexColor, selectedContent?selectedContent.length:0)} 
+          setEditHexColor={setEditHexColor}
+          indx={content?content.length:0}
+          />
+        </BubbleBasicLayout>
+      }
+      
     </ForumLayout>
   )
 }
 
-function Bubble({content, index, profile, sendPost, setSelectionLeftRightArray, selectionLeftRightArray}) {
+function Bubble({content, index, profile, sendPost, reorder}) {
   const [editHexColor, setEditHexColor] = useState()
   const [frontIndex, setFrontIndex] = useState(0)
   const [frontHeight, setFrontHeight] = useState()
@@ -156,10 +192,6 @@ function Bubble({content, index, profile, sendPost, setSelectionLeftRightArray, 
       y: '-10%'
     }
   }
-
-  useEffect(() => {
-    console.log(content)
-  }, [])
 
   return(
     <div style={{marginBottom: '55px', position: 'relative', height: frontHeight}}>
@@ -189,19 +221,13 @@ function Bubble({content, index, profile, sendPost, setSelectionLeftRightArray, 
                 !((replyIndex == index) && (idx == frontIndex))
               ){
                 setFrontIndex(frontIndex + 1)
-                let oldSelectionArray = [...selectionLeftRightArray]
-                oldSelectionArray.splice(index,(selectionLeftRightArray.length - index))
-                oldSelectionArray.push({forumpost_parent_id: content[frontIndex + 1].forumpost_parent_id, left: content[frontIndex + 1].left, right: content[frontIndex + 1].right})
-                setSelectionLeftRightArray(oldSelectionArray)
+                reorder({i: index,j: frontIndex + 1})
               }else if((scrollInfo.deltaY < 0) &&
                 (frontIndex>0) &&
                 !((replyIndex == index) && (idx == frontIndex))
               ){
                 setFrontIndex(frontIndex - 1)
-                let oldSelectionArray = [...selectionLeftRightArray]
-                oldSelectionArray.splice(index,(selectionLeftRightArray.length - index))
-                oldSelectionArray.push({forumpost_parent_id: content[frontIndex - 1].forumpost_parent_id, left: content[frontIndex - 1].left, right: content[frontIndex - 1].right})
-                setSelectionLeftRightArray(oldSelectionArray)
+                reorder({i: index,j: frontIndex - 1})
               }else{
                 null
               }
@@ -223,9 +249,7 @@ function Bubble({content, index, profile, sendPost, setSelectionLeftRightArray, 
                   () => new Promise((resolve, reject) => {
                     axios.post(`http://localhost:4000/update/like/forum-post`,
                     {forumpost_id: cont.forumpost_id}
-                    ,{
-                      withCredentials: true
-                    }
+                    ,{withCredentials: true}
                     ).then(async response => {
                       resolve()
                     })

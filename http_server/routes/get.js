@@ -151,12 +151,11 @@ router.get("/forum/:unique_pagename/p", check.AuthOptional, async (req, res) => 
                 const pageByName = await gets.getPageByName(conn, req.params.unique_pagename)
                 let content = [];
                 for(var i = 0; i <= 5; i++){
-                    console.log(i)
                     try{
-                        let new_content = await gets.getForumPost(conn, req.user_id, pageByName.page_id, 
-                            (content.length > 0)?(content[content.length-1][0].depth + 1):0, 
-                            (content.length > 0)?content[content.length-1][0].left:null,
-                            (content.length > 0)?content[content.length-1][0].right:null)
+                        let new_content = await gets.getForumPost({conn: conn, user_id: req.user_id, page_id: pageByName.page_id, 
+                            depth: ((content.length > 0)?(content[content.length-1][0].depth + 1):0), 
+                            left: ((content.length > 0)?content[content.length-1][0].left:null),
+                            right: ((content.length > 0)?content[content.length-1][0].right:null)})
                         if(new_content.length == 0){
                             break;
                         }else{
@@ -172,27 +171,6 @@ router.get("/forum/:unique_pagename/p", check.AuthOptional, async (req, res) => 
                     page: pageByName.page,
                     content: content
                 })
-                
-                // conn.query(
-                //     `SELECT IF(fpl.forum_post_like_id, true, false) as 'like', fp.forumpost_id, fp.hex_color, fp.message, fp.created, u.username, u.profilePicture FROM ForumPost fp
-                //     join User u on u.user_id = fp.user_id 
-                //     join ForumPost_Parent fpp on fp.forumpost_parent_id = fpp.forumpost_parent_id and fpp.parent_type = 'p' and fpp.parent_id = ?
-                //     left join ForumPost_Like fpl on fpl.forumpost_id = fp.forumpost_id and fpl.user_id = ?
-                //     group by fp.forumpost_id;`,
-                //     [pageByName.page_id, req.user_id],
-                //     function(err, content) {
-                //         if (err){
-                //             res.status(500).send('An error occurred')
-                //             console.log(err)
-                //         }else{
-                //             console.log(content)
-                //             res.json({
-                //                 page: pageByName.page,
-                //                 content: content
-                //             })
-                //         }
-                //     }
-                // );
             }catch(err){
                 console.log(err)
                 res.status(err.status).send(err.message)
@@ -201,6 +179,39 @@ router.get("/forum/:unique_pagename/p", check.AuthOptional, async (req, res) => 
         pool.releaseConnection(conn);
     })
 })
+
+// Only Topic related
+router.get("/forum-post/:post_id", check.AuthOptional, async (req, res) => {
+    pool.getConnection(async function(err, conn) {
+        let content = []
+        const post_parent_info = await gets.getForumPostParentInfo(conn, req.params.post_id)
+
+        for(var i = 0; i <= 5; i++){
+            try{
+                const new_content = await gets.getForumPost({
+                    conn: conn,
+                    user_id: req.user_id,
+                    forumpost_parent_id: post_parent_info.forumpost_parent_id,
+                    depth: post_parent_info.depth+i+1,
+                    left: ((content.length > 0)?content[content.length-1][0].left:post_parent_info.left),
+                    right: ((content.length > 0)?content[content.length-1][0].right:post_parent_info.right)
+                })
+                if(new_content.length == 0){
+                    break
+                }else{
+                    content.push(new_content)
+                }
+            }catch(err){
+                console.log(err)
+                res.status(err.status).send(err.message)
+                break
+            }
+        }
+        res.json(content)
+        pool.releaseConnection(conn);
+    })
+})
+
 // Only Mission related
 router.get("/forum/:unique_pagename/m/:mission_title", async (req, res) => {
     pool.getConnection(async function(err, conn) {
@@ -236,11 +247,6 @@ router.get("/forum/:unique_pagename/m/:mission_title", async (req, res) => {
         }
         pool.releaseConnection(conn);
     })
-})
-// Only Topic related
-router.get("/post/forum/:post_id", async (req, res) => {
-    console.log('route not ready yet')
-    res.status(404).send('not ready yet')
 })
 // Only Topic related
 router.get("/forum/:unique_pagename/t/:topic_name", async (req, res) => {
