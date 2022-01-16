@@ -142,6 +142,7 @@ router.get("/forum/:unique_pagename", async (req, res) => {
 })
 // Only Page related
 router.get("/forum/:unique_pagename/p", check.AuthOptional, async (req, res) => {
+    console.log(req.user_id)
     pool.getConnection(async function(err, conn) {
         if (err){
             res.status(500).send('An error occurred')
@@ -150,22 +151,31 @@ router.get("/forum/:unique_pagename/p", check.AuthOptional, async (req, res) => 
             try{
                 const pageByName = await gets.getPageByName(conn, req.params.unique_pagename)
                 let content = [];
-                for(var i = 0; i <= 5; i++){
-                    try{
-                        let new_content = await gets.getForumPost({conn: conn, user_id: req.user_id, page_id: pageByName.page_id, 
-                            depth: ((content.length > 0)?(content[content.length-1][0].depth + 1):0), 
-                            left: ((content.length > 0)?content[content.length-1][0].left:null),
-                            right: ((content.length > 0)?content[content.length-1][0].right:null)})
-                        if(new_content.length == 0){
-                            break;
-                        }else{
+                try{
+                    let new__main_content = await gets.getForumPost({conn: conn, user_id: req.user_id, page_id: pageByName.page_id, 
+                        depth: ((content.length > 0)?(content[content.length-1][0].depth + 1):0), 
+                        left: ((content.length > 0)?content[content.length-1][0].left:null),
+                        right: ((content.length > 0)?content[content.length-1][0].right:null)})
+                    if(new__main_content.length == 0){
+                        return;
+                    }else{
+                        content.push(new__main_content)
+                        for(var i = 0; i <= 5; i++){
+                            const new_content = await gets.getForumPost({
+                                conn: conn,
+                                user_id: req.user_id,
+                                forumpost_parent_id: new__main_content[0].forumpost_parent_id,
+                                depth: i+1,
+                                left: ((content.length > 0)?content[content.length-1][0].left:post_parent_info.left),
+                                right: ((content.length > 0)?content[content.length-1][0].right:post_parent_info.right)
+                            })
+                            if(new_content.length == 0) break
                             content.push(new_content)
                         }
-                    }catch{
-                        console.log(err)
-                        res.status(err.status).send(err.message)
-                        break;
                     }
+                }catch{
+                    console.log(err)
+                    res.status(err.status).send(err.message)
                 }
                 res.json({
                     page: pageByName.page,

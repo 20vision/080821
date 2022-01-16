@@ -9,8 +9,10 @@ export default function BubbleView({message, index, mylike, setLike}){
     const setReplyIndex = useForumStore(state => state.setReplyIndex)
 
     useEffect(() => {
-        if(mylike){
+        if(mylike == 1){
             setIsMyLike(true)
+        }else{
+            setIsMyLike(false)
         }
     }, [mylike])
     return(
@@ -29,7 +31,7 @@ export default function BubbleView({message, index, mylike, setLike}){
             <div>
                 {message}
             </div>
-            <a ref={bubbleRef}><Heart color={isMyLike?'#FF5B77':null}/></a>
+            <a ref={bubbleRef}><Heart color={(isMyLike == true)?'#FF5B77':null}/></a>
         </div>
     )
 }

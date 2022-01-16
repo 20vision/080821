@@ -157,8 +157,6 @@ const getForumPost = ({conn, user_id, forumpost_parent_id, page_id, depth, left,
                     message: 'An error occurred'
                 })
             }else{
-                console.log(query_content)
-                //console.log(query_content)
                 resolve(query_content)
             }
         }
