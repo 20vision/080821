@@ -46,7 +46,10 @@
     width: 600px;
     min-width: 1px;
     margin-top:35px;
-    margin-bottom: 33%;
+    height: max-content;
+    padding-bottom: 150px;
+    /* margin-bottom: 33%;
+    height:100%; */
 }
 
 .postSelectionContainer{

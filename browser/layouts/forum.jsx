@@ -4,6 +4,7 @@ import {Menu} from "../components/DefaultLayout/Menu"
 import onClickOutside from "react-onclickoutside";
 import { useRouter } from "next/router";
 import { useState, useEffect } from 'react'
+import ResizeObserver, { useResizeDetector } from 'react-resize-detector';
 
 export default function PageLayout( {children, page, missions} ) {
     return (
@@ -22,6 +23,8 @@ const clickOutsideConfig = {
 var Panel = onClickOutside(({children}) => {
     const router = useRouter()
     const [menu, setMenu] = useState()
+    const {width, height, ref} = useResizeDetector()
+    const [minHeight, setMinHeight] = useState(0)
 
     useEffect(() => {
         if(menu){
@@ -33,6 +36,12 @@ var Panel = onClickOutside(({children}) => {
         router.push(`/`)
     };
 
+    useEffect(() => {
+        if(height > minHeight){
+            setMinHeight(height)
+        }
+    }, [height])
+
     return(
         <div className={`hideScrollBar ${styles.child}`}>
             <div className={`${styles.menuContainer} ${menuStyle.container}`}>
@@ -41,10 +50,8 @@ var Panel = onClickOutside(({children}) => {
                     <Menu opened={true} setMenu={setMenu} pathname={menu}/>
                 </div>
             </div>
-            <div>
-                <div className={styles.previewChild}>
-                    {children}
-                </div>
+            <div className={styles.previewChild} ref={ref} style={{minHeight: minHeight}}>
+                {children}
             </div>
             <div className={styles.postSelectionContainer}>
                 <div className={styles.postSelection}>

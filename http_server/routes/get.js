@@ -196,8 +196,8 @@ router.get("/forum-post/:post_id", check.AuthOptional, async (req, res) => {
         let content = []
         const post_parent_info = await gets.getForumPostParentInfo(conn, req.params.post_id)
 
-        for(var i = 0; i <= 5; i++){
-            try{
+        try{
+            for(var i = 0; i <= 5; i++){
                 const new_content = await gets.getForumPost({
                     conn: conn,
                     user_id: req.user_id,
@@ -211,12 +211,12 @@ router.get("/forum-post/:post_id", check.AuthOptional, async (req, res) => {
                 }else{
                     content.push(new_content)
                 }
-            }catch(err){
-                console.log(err)
-                res.status(err.status).send(err.message)
-                break
             }
+        }catch(err){
+            console.log(err)
+            res.status(err.status).send(err.message)
         }
+
         res.json(content)
         pool.releaseConnection(conn);
     })

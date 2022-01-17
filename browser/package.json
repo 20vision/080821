@@ -41,6 +41,7 @@
     "react-onclickoutside": "^6.11.2",
     "react-pintura": "file:local_modules/react-pintura",
     "react-query": "^3.19.5",
+    "react-resize-detector": "^7.0.0",
     "react-spinners": "^0.11.0",
     "react-textarea-autosize": "^8.3.3",
     "react-toastify": "^8.0.3",

@@ -39,6 +39,8 @@ export default function index({root, ssrContent}) {
     }
     return selectedRoute
   })
+  const [animateNewBubblesFromIndex, setAnimateNewBubblesFromIndex] = useState()
+
   useEffect(async() => {
     if(profile.username != null){
       try{
@@ -51,7 +53,10 @@ export default function index({root, ssrContent}) {
     }
   }, [profile])
 
+
   const reorder = async({i, j}) => {
+    console.log(i)
+    setAnimateNewBubblesFromIndex(i)
     let new_filteredContent = JSON.parse(JSON.stringify(filteredContent)).slice(0,i+1)
     let new_selectedContent = [...JSON.parse(JSON.stringify(selectedContent)).slice(0,i),j]
     let new_dataset = JSON.parse(JSON.stringify(dataset))
@@ -94,6 +99,7 @@ export default function index({root, ssrContent}) {
         new_filteredContent.push(filtered)
       }
     }
+    
     setDataset(new_dataset)
     setFilteredContent(new_filteredContent)
     setSelectedContent(new_selectedContent)
@@ -119,22 +125,51 @@ export default function index({root, ssrContent}) {
     })
   }
 
+  const controls = useAnimation()
+
+  useEffect(async() => {
+    await controls.start(i => {
+      if(i <= animateNewBubblesFromIndex) return ({})
+      return({
+        opacity: 0,
+        y: 20,
+        transition: {type: "spring", duration: 0.3}
+      })
+    })
+    await controls.start(i => {
+      if(i <= animateNewBubblesFromIndex) return ({})
+      return({
+        opacity: 1,
+        y: 0,
+        transition: {type: "spring", delay: i * 0.1}
+      })
+    })
+  }, [selectedContent])
+
   return (
     <ForumLayout>
       <Square content={{page:root.page}}/>
       {root.mission?<Square content={{mission:root.mission}}/>:null}
       {/*.slice(0,selectionLeftRightArray.length)*/}
-      {dataset && filteredContent && filteredContent.map((js, i) => 
-        <Bubble 
-        key={i}
-        dataset={dataset[i]}
-        js={js}
-        index={i} 
-        profile={profile}
-        reorder={reorder}
-        sendPost={sendPost}
-        frontIndex={selectedContent[i]}/>
-      )
+      {dataset && filteredContent && filteredContent.map((js, i) => {
+
+        return(
+          <motion.div
+          custom={i}
+          animate={controls}
+          >
+            <Bubble 
+            key={i}
+            dataset={dataset[i]}
+            js={js}
+            index={i} 
+            profile={profile}
+            reorder={reorder}
+            sendPost={sendPost}
+            frontIndex={selectedContent[i]}/>
+          </motion.div>
+        )
+      })
       // && dataset.slice(0,filteredContent.length).map((cont, index) => 
       //   <Bubble 
       //   key={index}
@@ -153,7 +188,8 @@ export default function index({root, ssrContent}) {
         <BubbleBasicLayout 
         mirror={(content.length % 2 == 0)?false:true}
         color={editHexColor} 
-        profile={profile}>
+        profile={profile}
+        makeScroll={() => null}>
           <BubbleEdit 
           sendPost={post => sendPost(post, editHexColor, selectedContent?selectedContent.length:0)} 
           setEditHexColor={setEditHexColor}
