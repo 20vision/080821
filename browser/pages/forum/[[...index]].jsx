@@ -54,8 +54,7 @@ export default function index({root, ssrContent}) {
   }, [profile])
 
 
-  const reorder = async({i, j}) => {
-    console.log(i)
+  const reorder = ({i, j}) => new Promise(async(resolve, reject) => {
     setAnimateNewBubblesFromIndex(i)
     let new_filteredContent = JSON.parse(JSON.stringify(filteredContent)).slice(0,i+1)
     let new_selectedContent = [...JSON.parse(JSON.stringify(selectedContent)).slice(0,i),j]
@@ -103,7 +102,8 @@ export default function index({root, ssrContent}) {
     setDataset(new_dataset)
     setFilteredContent(new_filteredContent)
     setSelectedContent(new_selectedContent)
-  }
+    resolve()
+  })
 
   const sendPost = (post, hex, index) => {
     axios.post(`http://localhost:4000/post/forum${(index>0)?'-post':''}/${
@@ -131,20 +131,12 @@ export default function index({root, ssrContent}) {
     await controls.start(i => {
       if(i <= animateNewBubblesFromIndex) return ({})
       return({
-        opacity: 0,
-        y: 20,
-        transition: {type: "spring", duration: 0.3}
-      })
-    })
-    await controls.start(i => {
-      if(i <= animateNewBubblesFromIndex) return ({})
-      return({
         opacity: 1,
         y: 0,
         transition: {type: "spring", delay: i * 0.1}
       })
-    })
-  }, [selectedContent])
+    });
+  }, [])
 
   return (
     <ForumLayout>
@@ -157,6 +149,7 @@ export default function index({root, ssrContent}) {
           <motion.div
           custom={i}
           animate={controls}
+          initial={{opacity: 0,y: 20}}
           >
             <Bubble 
             key={i}
@@ -164,9 +157,27 @@ export default function index({root, ssrContent}) {
             js={js}
             index={i} 
             profile={profile}
-            reorder={reorder}
+            reorder={async arg => {
+              await controls.start(ic => {
+                if(ic <= animateNewBubblesFromIndex) return ({})
+                return({
+                  opacity: 0,
+                  y: 20,
+                  transition: {type: "spring", duration: 0.3}
+                })
+              });
+              await reorder(arg);
+              await controls.start(ic => {
+                if(ic <= animateNewBubblesFromIndex) return ({})
+                return({
+                  opacity: 1,
+                  y: 0,
+                  transition: {type: "spring", delay: ic * 0.1}
+                })
+              });
+            }}
             sendPost={sendPost}
-            frontIndex={selectedContent[i]}/>
+            frontIndexGlobal={selectedContent[i]}/>
           </motion.div>
         )
       })
@@ -202,11 +213,16 @@ export default function index({root, ssrContent}) {
   )
 }
 
-function Bubble({dataset, index, profile, sendPost, reorder, js, frontIndex}) {
+function Bubble({dataset, index, profile, sendPost, reorder, js, frontIndexGlobal}) {
   const [editHexColor, setEditHexColor] = useState()
   const [frontHeight, setFrontHeight] = useState()
   const replyIndex = useForumStore(state => state.replyIndex)
   const motionRef = useRef()
+  const [frontIndex, setFrontIndex] = useState(frontIndexGlobal)
+
+  useEffect(() => {
+    setFrontIndex(frontIndexGlobal)
+  }, [frontIndexGlobal])
 
   const variants = {
     front: {
@@ -255,11 +271,13 @@ function Bubble({dataset, index, profile, sendPost, reorder, js, frontIndex}) {
                 !((replyIndex == index) && (j == frontIndex))
               ){
                 reorder({i: index,j: js[idx+1]})
+                setFrontIndex(js[idx+1])
               }else if((scrollInfo.deltaY < 0) &&
               js[idx-1] != null &&
                 !((replyIndex == index) && (j == frontIndex))
               ){
                 reorder({i: index,j: js[idx-1]})
+                setFrontIndex(js[idx-1])
               }else{
                 null
               }
