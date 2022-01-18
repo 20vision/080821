@@ -124,7 +124,7 @@ router.post("/fundPageToken", check.AuthRequired, check.fundTransaction, async (
     }
 });
 
-router.post("/forum/:unique_pagename", check.AuthRequired, input_validation.missionBody_and_forumPost, input_validation.hex_color, async (req, res) => {
+router.post("/forum/page/:unique_pagename", check.AuthRequired, input_validation.missionBody_and_forumPost, input_validation.hex_color, async (req, res) => {
     pool.getConnection(async function(err, conn) {
         if (err){
             res.status(500).send('An error occurred')
@@ -147,7 +147,7 @@ router.post("/forum/:unique_pagename", check.AuthRequired, input_validation.miss
     })
 })
 
-router.post("/forum-post/:parent_forumpost_id", check.AuthRequired, input_validation.missionBody_and_forumPost, input_validation.hex_color, async (req, res) => {
+router.post("/forum/post/:parent_forumpost_id", check.AuthRequired, input_validation.missionBody_and_forumPost, input_validation.hex_color, async (req, res) => {
     pool.getConnection(async function(err, conn) {
         if (err){
             res.status(500).send('An error occurred')

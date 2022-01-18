@@ -45,16 +45,13 @@ export default function index({root, ssrContent}) {
       try{
         const user_dataset = (await axios.get(`http://localhost:4000/get${router.asPath}`,{withCredentials: true})).data.content
         setDataset(user_dataset)
+        console.log(user_dataset)
       }catch(err){
         console.log(err)
         toast.error('Could not fetch post info')
       }
     }
   }, [profile])
-
-  const add_bubble = () => {
-    // Seperate Axios request
-  }
 
   const reorder = ({i, j}) => new Promise(async(resolve, reject) => {
     let new_filteredContent = JSON.parse(JSON.stringify(filteredContent)).slice(0,i+1)
@@ -77,7 +74,7 @@ export default function index({root, ssrContent}) {
         
         if(filtered.length == 0){
           try{
-            const getPosts = await axios.get(`http://localhost:4000/get/forum-post/replies/${new_dataset[y][new_selectedContent[y]].forumpost_id}`,{
+            const getPosts = await axios.get(`http://localhost:4000/get/forum/replies/${new_dataset[y][new_selectedContent[y]].forumpost_id}`,{
               withCredentials: true
             })
             if(getPosts.data.length > 0){
@@ -107,7 +104,7 @@ export default function index({root, ssrContent}) {
   })
 
   const sendPost = (post, hex, index) => {
-    axios.post(`http://localhost:4000/post/forum${(index>0)?'-post':''}/${
+    axios.post(`http://localhost:4000/post/forum/${(index>0)?(root.mission)?'mission':'page':'post'}/${
       (index == 0)?
         (root.mission)?
           root.page.unique_pagename+'/'+root.mission.title
@@ -118,7 +115,7 @@ export default function index({root, ssrContent}) {
       withCredentials: true
     }
     ).then(async response => {
-      console.log('posted')
+      router.push(`/forum/post/${response.data.forumpost_id}`)    
     })
     .catch(error =>{
       console.log(error)
@@ -149,7 +146,7 @@ export default function index({root, ssrContent}) {
           <motion.div
           custom={i}
           animate={controls}
-          initial={{opacity: 0,y: 20}}
+          initial={typeof window === 'undefined'?null:{opacity: 0,y: 20}}
           >
             <Bubble 
             key={i}

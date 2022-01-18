@@ -132,16 +132,14 @@ router.get("/page/:page_name/trade_info", check.AuthOptional, check.role, async 
 
 // FORUM
 
-
+// Discover
 router.get("/forum", async (req, res) => {
     console.log('route not ready yet')
     res.status(404).send('not ready yet')
 })
-router.get("/forum/:unique_pagename", async (req, res) => {
-    
-})
+
 // Only Page related
-router.get("/forum/:unique_pagename/p", check.AuthOptional, async (req, res) => {
+router.get("/forum/page/:unique_pagename", check.AuthOptional, async (req, res) => {
     console.log(req.user_id)
     pool.getConnection(async function(err, conn) {
         if (err){
@@ -190,16 +188,21 @@ router.get("/forum/:unique_pagename/p", check.AuthOptional, async (req, res) => 
     })
 })
 
-// Responds back one depth reply, but multiple versions depending on offset (3)
-router.get("/forum-post/replies/:parent_post_id/:offset", check.AuthOptional, async (req, res) => {
-    pool.getConnection(async function (err, conn){
-        
-        pool.releaseConnection(conn);
-    })
+
+router.get("/forum/post/:forumpost_id", check.AuthOptional, async (req, res) => {
+    console.log('route not ready yet')
+    res.status(404).send('not ready yet')
 })
 
+// Responds back one depth reply, but multiple versions depending on offset (3)
+router.get("/forum/replies/:parent_post_id/:offset", check.AuthOptional, async (req, res) => {
+    console.log('route not ready yet')
+    res.status(404).send('not ready yet')
+})
+
+
 // Responds back multi depth replies (5) x (3)
-router.get("/forum-post/replies/:parent_post_id", check.AuthOptional, async (req, res) => {
+router.get("/forum/replies/:parent_post_id", check.AuthOptional, async (req, res) => {
     pool.getConnection(async function(err, conn) {
         let content = []
         const post_parent_info = await gets.getForumPostParentInfo(conn, req.params.parent_post_id)
@@ -231,7 +234,7 @@ router.get("/forum-post/replies/:parent_post_id", check.AuthOptional, async (req
 })
 
 // Only Mission related
-router.get("/forum/:unique_pagename/m/:mission_title", async (req, res) => {
+router.get("/forum/mission/:unique_pagename/:mission_title", async (req, res) => {
     pool.getConnection(async function(err, conn) {
         if (err){
             res.status(500).send('An error occurred')
@@ -267,12 +270,12 @@ router.get("/forum/:unique_pagename/m/:mission_title", async (req, res) => {
     })
 })
 // Only Topic related
-router.get("/forum/:unique_pagename/t/:topic_name", async (req, res) => {
+router.get("/forum/topic/:unique_pagename/:topic_name", async (req, res) => {
     console.log('route not ready yet')
     res.status(404).send('not ready yet')
 })
 // Only Paper related
-router.get("/forum/:unique_pagename/pa/:uid", async (req, res) => {
+router.get("/forum/paper/:unique_pagename/:uid", async (req, res) => {
     console.log('route not ready yet')
     res.status(404).send('not ready yet')
 })
