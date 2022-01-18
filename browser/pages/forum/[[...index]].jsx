@@ -39,7 +39,6 @@ export default function index({root, ssrContent}) {
     }
     return selectedRoute
   })
-  const [animateNewBubblesFromIndex, setAnimateNewBubblesFromIndex] = useState()
 
   useEffect(async() => {
     if(profile.username != null){
@@ -53,9 +52,11 @@ export default function index({root, ssrContent}) {
     }
   }, [profile])
 
+  const add_bubble = () => {
+    // Seperate Axios request
+  }
 
   const reorder = ({i, j}) => new Promise(async(resolve, reject) => {
-    setAnimateNewBubblesFromIndex(i)
     let new_filteredContent = JSON.parse(JSON.stringify(filteredContent)).slice(0,i+1)
     let new_selectedContent = [...JSON.parse(JSON.stringify(selectedContent)).slice(0,i),j]
     let new_dataset = JSON.parse(JSON.stringify(dataset))
@@ -76,7 +77,7 @@ export default function index({root, ssrContent}) {
         
         if(filtered.length == 0){
           try{
-            const getPosts = await axios.get(`http://localhost:4000/get/forum-post/${new_dataset[y][new_selectedContent[y]].forumpost_id}`,{
+            const getPosts = await axios.get(`http://localhost:4000/get/forum-post/replies/${new_dataset[y][new_selectedContent[y]].forumpost_id}`,{
               withCredentials: true
             })
             if(getPosts.data.length > 0){
@@ -98,7 +99,7 @@ export default function index({root, ssrContent}) {
         new_filteredContent.push(filtered)
       }
     }
-    
+
     setDataset(new_dataset)
     setFilteredContent(new_filteredContent)
     setSelectedContent(new_selectedContent)
@@ -129,7 +130,6 @@ export default function index({root, ssrContent}) {
 
   useEffect(async() => {
     await controls.start(i => {
-      if(i <= animateNewBubblesFromIndex) return ({})
       return({
         opacity: 1,
         y: 0,
@@ -159,7 +159,7 @@ export default function index({root, ssrContent}) {
             profile={profile}
             reorder={async arg => {
               await controls.start(ic => {
-                if(ic <= animateNewBubblesFromIndex) return ({})
+                if(ic <= arg.i) return ({})
                 return({
                   opacity: 0,
                   y: 20,
@@ -168,7 +168,7 @@ export default function index({root, ssrContent}) {
               });
               await reorder(arg);
               await controls.start(ic => {
-                if(ic <= animateNewBubblesFromIndex) return ({})
+                if(ic <= arg.i) return ({})
                 return({
                   opacity: 1,
                   y: 0,
@@ -181,15 +181,6 @@ export default function index({root, ssrContent}) {
           </motion.div>
         )
       })
-      // && dataset.slice(0,filteredContent.length).map((cont, index) => 
-      //   <Bubble 
-      //   key={index}
-      //   content={cont} 
-      //   index={index} 
-      //   profile={profile}
-      //   reorder={reorder}
-      //   sendPost={sendPost}/>
-      // )
       }
       {loading ?
         <div key={index} style={{width: '100%', display: 'flex', justifyContent: 'center'}}>

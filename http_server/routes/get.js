@@ -190,11 +190,19 @@ router.get("/forum/:unique_pagename/p", check.AuthOptional, async (req, res) => 
     })
 })
 
-// Only Topic related
-router.get("/forum-post/:post_id", check.AuthOptional, async (req, res) => {
+// Responds back one depth reply, but multiple versions depending on offset (3)
+router.get("/forum-post/replies/:parent_post_id/:offset", check.AuthOptional, async (req, res) => {
+    pool.getConnection(async function (err, conn){
+        
+        pool.releaseConnection(conn);
+    })
+})
+
+// Responds back multi depth replies (5) x (3)
+router.get("/forum-post/replies/:parent_post_id", check.AuthOptional, async (req, res) => {
     pool.getConnection(async function(err, conn) {
         let content = []
-        const post_parent_info = await gets.getForumPostParentInfo(conn, req.params.post_id)
+        const post_parent_info = await gets.getForumPostParentInfo(conn, req.params.parent_post_id)
 
         try{
             for(var i = 0; i <= 5; i++){
