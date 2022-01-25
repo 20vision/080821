@@ -46,6 +46,7 @@ export default function index({root, ssrContent, ssrTreeCount}) {
     if(profile.username != null){
       try{
         const query = (await axios.get(`http://localhost:4000/get${router.asPath}`,{withCredentials: true})).data
+        console.log(query.content)
         setTreeCount(query.tree_count)
         setDataset(query.content)
       }catch(err){
