@@ -62,7 +62,7 @@ function MissionNavWithRole({router}){
                 <div>Trade</div>
             </a>
 
-            <Link href={`/forum/${router.query.page}/m/${router.query.mission}`}>
+            <Link href={`/forum/${router.query.page}/mission/${router.query.mission}`}>
                 <a>
                     <MessageCircle color="#FAFAFA"/>
                     <div>Forum</div>
@@ -91,7 +91,7 @@ function PageNavWithRole({router}){
                 <div>Trade</div>
             </a>
 
-            <Link href={`/forum/${router.query.page}/p`}>
+            <Link href={`/forum/${router.query.page}/page`}>
                 <a>
                     <MessageCircle color="#FAFAFA"/>
                     <div>Forum</div>
@@ -119,7 +119,7 @@ function PageNav({router}){
                 <div>Trade</div>
             </a>
 
-            <Link href={`/forum/${router.query.page}/p`}>
+            <Link href={`/forum/${router.query.page}/page`}>
                 <a>
                     <MessageCircle color="#FAFAFA"/>
                     <div>Forum</div>

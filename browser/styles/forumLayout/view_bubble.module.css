@@ -1,15 +1,8 @@
 .container div{
     color: var(--lighter_black);
-    padding-bottom: 15px;
 }
 
 .container{
     cursor: pointer;
     padding: 25px;
-    padding-bottom: 25px;
-    min-height: 50px;
-}
-
-.container a{
-    float:right;
 }

@@ -34,7 +34,7 @@ router.post("/username", check.AuthRequired, input_validation.checkRegexUsername
 
 })
 
-router.post("/like/forum-post", check.AuthRequired, async (req, res) => {
+router.post("/forum/like", check.AuthRequired, async (req, res) => {
     if(!req.body.forumpost_id || !Number.isInteger(req.body.forumpost_id)){
         console.log(req.body.forumpost_id)
         res.status(422).send('invalid post id')

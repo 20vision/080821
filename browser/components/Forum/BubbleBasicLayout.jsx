@@ -6,18 +6,18 @@ import { DateTime, Interval } from "luxon";
 export default function BubbleBasicLayout({children, mirror, color, profile, postDate, isReplyActive, makeScroll, isInTheBackground}){
     
     return(
-        <div style={{display:'flex'}}>
-            <div style={{margin: '5px 0px', opacity: isInTheBackground?'0':'1'}}>
+        <div style={{display:'flex', minWidth: 0}}>
+            <div style={{marginRight: '10px', opacity: isInTheBackground?'0':'1'}}>
                 <ProfilePicture type={'small'} uri={profile.profilePicture}/>
             </div>
 
-            <div style={{width: '100%', marginLeft: '10px'}} className={mirror?styles.mirror:null}>
+            <div style={{flexGrow: 1, flexShrink: 1, minWidth: 0}} className={mirror?styles.mirror:null}>
                 <h3 style={{margin: '15px 0px', opacity: isInTheBackground?'0':'1'}} className={mirror?styles.mirror:null}>@{profile.username} · <span style={{fontSize: 14,fontWeight: '400'}}>{
                     DateTime.fromISO(postDate).toLocaleString(DateTime.DATE_MED)
                 }</span></h3>
                 <div style={{display:'flex'}}>
                     <div className={styles.triangle} style={{borderTop: `25px solid ${'#'+color}`}}/>
-                    <div className={styles.bubble} style={{backgroundColor: '#'+color}} onWheel={info => makeScroll(info)} onMouseEnter={e => disableScroll.on()} onMouseLeave={() => disableScroll.off()}>
+                    <div className={styles.bubble} style={{minWidth: 0,backgroundColor: '#'+color}} onWheel={info => makeScroll(info)} onMouseEnter={e => disableScroll.on()} onMouseLeave={() => disableScroll.off()}>
                         <div className={mirror?styles.mirror:null}>
                             {children}
                         </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback, createRef } from 'react'
 import ForumLayout from '../../layouts/forum'
 import BubbleBasicLayout from '../../components/Forum/BubbleBasicLayout' 
 import dynamic from 'next/dynamic';
@@ -12,16 +12,16 @@ import useUserProfile from '../../hooks/User/useUserProfile'
 import { toast } from 'react-toastify';
 import { useRouter } from 'next/router'
 import { motion, useAnimation } from 'framer-motion';
-import { useForumStore } from '../../store/forum';
 import Loading from '../../assets/Loading/Loading';
+import Link from 'next/link';
 
 export default function index({root, ssrContent}) {
   const [profile, isLoading, setUser] = useUserProfile()
   const [editHexColor, setEditHexColor] = useState()
   const router = useRouter()
-  
   const [dataset, setDataset] = useState(ssrContent)
   const [loading, setLoading] = useState(false)
+  const [filteredContentCache, setFilteredContentCache] = useState(false)
   const [filteredContent, setFilteredContent] = useState(() => {
     let filtered = []
     for(var i=0;i<ssrContent.length;i++){
@@ -53,10 +53,11 @@ export default function index({root, ssrContent}) {
     }
   }, [profile])
 
+
   const reorder = ({i, j}) => new Promise(async(resolve, reject) => {
     let new_filteredContent = JSON.parse(JSON.stringify(filteredContent)).slice(0,i+1)
     let new_selectedContent = [...JSON.parse(JSON.stringify(selectedContent)).slice(0,i),j]
-    let new_dataset = JSON.parse(JSON.stringify(dataset))
+    let new_dataset = dataset
 
     if(new_dataset[i][j].left + 1 != new_dataset[i][j].right){
       for(let y=i;y<new_selectedContent.length;y++){
@@ -74,10 +75,11 @@ export default function index({root, ssrContent}) {
         
         if(filtered.length == 0){
           try{
-            const getPosts = await axios.get(`http://localhost:4000/get/forum/replies/${new_dataset[y][new_selectedContent[y]].forumpost_id}`,{
+            const getPosts = await axios.get(`http://localhost:4000/get/forum/_/replies/${new_dataset[y][new_selectedContent[y]].forumpost_id}`,{
               withCredentials: true
             })
             if(getPosts.data.length > 0){
+              new_dataset = JSON.parse(JSON.stringify(dataset))
               for(var xs=0;xs<getPosts.data[0].length;xs++){
                 filtered.push(xs+((new_dataset[y+1] != null)?new_dataset[y+1].length:0))
               }
@@ -96,26 +98,33 @@ export default function index({root, ssrContent}) {
         new_filteredContent.push(filtered)
       }
     }
-
     setDataset(new_dataset)
     setFilteredContent(new_filteredContent)
     setSelectedContent(new_selectedContent)
+    
     resolve()
   })
 
   const sendPost = (post, hex, index) => {
-    axios.post(`http://localhost:4000/post/forum/${(index>0)?(root.mission)?'mission':'page':'post'}/${
+    axios.post(`http://localhost:4000/post/forum/${root.page.unique_pagename}/${
+      (index==0)?
+        (root.mission)?
+          'mission'
+        :
+          'page'
+      :'post'
+      }/${
       (index == 0)?
         (root.mission)?
           root.page.unique_pagename+'/'+root.mission.title
         :
-          root.page.unique_pagename
-      :dataset[index - 1][selectedContent[index - 1]].forumpost_id
+          ''
+      :dataset[filteredContent.length - 1][selectedContent[filteredContent.length - 1]].forumpost_id
     }`,{forum_post: post, hex_color: hex},{
       withCredentials: true
     }
     ).then(async response => {
-      router.push(`/forum/post/${response.data.forumpost_id}`)    
+      router.push(`/forum/${root.page.unique_pagename}/post/${response.data.forumpost_id}`)    
     })
     .catch(error =>{
       console.log(error)
@@ -133,7 +142,20 @@ export default function index({root, ssrContent}) {
         transition: {type: "spring", delay: i * 0.1}
       })
     });
-  }, [])
+  }, [filteredContent])
+
+  const onClickReply = (i) => {
+    if(!filteredContentCache){
+      setFilteredContentCache(JSON.parse(JSON.stringify(filteredContent)))
+    }
+    setFilteredContent(JSON.parse(JSON.stringify(filteredContent)).slice(0,i))
+  }
+  const clickOutsideBubbleEdit = () => {
+    if(filteredContentCache){
+      setFilteredContent(JSON.parse(JSON.stringify(filteredContentCache)));
+    }
+    setFilteredContentCache(null)
+  }
 
   return (
     <ForumLayout>
@@ -144,16 +166,15 @@ export default function index({root, ssrContent}) {
 
         return(
           <motion.div
+          key={i}
           custom={i}
           animate={controls}
           initial={typeof window === 'undefined'?null:{opacity: 0,y: 20}}
           >
-            <Bubble 
-            key={i}
+            <Bubble
             dataset={dataset[i]}
             js={js}
-            index={i} 
-            profile={profile}
+            index={i}
             reorder={async arg => {
               await controls.start(ic => {
                 if(ic <= arg.i) return ({})
@@ -173,8 +194,8 @@ export default function index({root, ssrContent}) {
                 })
               });
             }}
-            sendPost={sendPost}
-            frontIndexGlobal={selectedContent[i]}/>
+            onClickReply={() => onClickReply(i)}
+            sendPost={sendPost}/>
           </motion.div>
         )
       })
@@ -184,122 +205,169 @@ export default function index({root, ssrContent}) {
           <Loading/>
         </div>
       :
-        <BubbleBasicLayout 
-        mirror={(content.length % 2 == 0)?false:true}
-        color={editHexColor} 
-        profile={profile}
-        makeScroll={() => null}>
-          <BubbleEdit 
-          sendPost={post => sendPost(post, editHexColor, selectedContent?selectedContent.length:0)} 
-          setEditHexColor={setEditHexColor}
-          indx={content?content.length:0}
-          />
-        </BubbleBasicLayout>
+      <BubbleBasicLayout 
+      mirror={(filteredContent.length % 2 == 0)?false:true}
+      color={editHexColor} 
+      profile={profile}
+      makeScroll={() => null}>
+        <BubbleEdit 
+        sendPost={post => sendPost(post, editHexColor, filteredContent.length)} 
+        setEditHexColor={setEditHexColor}
+        clickOutsideBubbleEdit={clickOutsideBubbleEdit}
+        />
+      </BubbleBasicLayout>
       }
       
     </ForumLayout>
   )
 }
 
-function Bubble({dataset, index, profile, sendPost, reorder, js, frontIndexGlobal}) {
-  const [editHexColor, setEditHexColor] = useState()
+function Bubble({dataset, index, reorder, js, onClickReply}) {
   const [frontHeight, setFrontHeight] = useState()
-  const replyIndex = useForumStore(state => state.replyIndex)
-  const motionRef = useRef()
-  const [frontIndex, setFrontIndex] = useState(frontIndexGlobal)
+  const motionRef = useRef([])
+  const [frontIndex, setFrontIndex] = useState(0)
+  const router = useRouter()
+  const bubbleControls = useAnimation()
+  // const variants = () => {
+  //   return{
+  //     front: {
+  //       opacity: 1,      
+  //       scale: 1,
+  //       zIndex: 1,
+  //       y: 0
+  //     },
+  //     next: {
+  //       opacity: 0.3,
+  //       zIndex: 0,
+  //       scale: 0.85,
+  //       y: `calc(${frontHeight/2}px + 5%)`
+  //     },
+  //     back: {
+  //       opacity: 0.3,
+  //       scale: 0.85,
+  //       zIndex: 0,
+  //       y: `-${frontHeight*0.1}px`
+  //     }
+  //   }
+  // }
 
-  useEffect(() => {
-    setFrontIndex(frontIndexGlobal)
-  }, [frontIndexGlobal])
-
-  const variants = {
-    front: {
-      opacity: 1,      
-      scale: 1,
-      zIndex: 1,
-      y: '0%'
-    },
-    next: {
-      opacity: 0.3,
-      scale: 0.85,
-      zIndex: 0,
-      y: '20%'
-    },
-    back: {
-      opacity: 0.3,
-      scale: 0.85,
-      zIndex: 0,
-      y: '-10%'
+  const getFramer = (idx, height) => {
+    if(idx < frontIndex){
+      return{
+        opacity: 0.3,
+        width: '80%',
+        zIndex: 0,
+        x: '10%',
+        y: `-10%`
+      }
+    }else if(idx > frontIndex){
+      return{
+        opacity: 0,
+        zIndex: 0,
+        width: '80%',
+        x: '10%',
+        y: 0
+      }
+    }else{
+      return{
+        opacity: 1,
+        width: '100%',
+        zIndex: 1,
+        x:0,
+        y: 0
+      }
     }
   }
 
-  useEffect(() => {
-    setFrontHeight(motionRef.clientHeight)
-  }, [motionRef])
+  useEffect(async () => {
+    if(frontIndex == null) return
+    let height = motionRef.current[frontIndex].clientHeight
+    await bubbleControls.start(idx => {
+      return getFramer(idx, height)
+    });
+    height = motionRef.current[frontIndex].clientHeight
+    setFrontHeight(height)
+    //adjust height as width, thus content rows of bubble changes after animation
+    bubbleControls.start(idx => {
+      if(idx < frontIndex){
+        return{
+          x: '10%',
+          y: `-10%`
+        }
+      }else if(idx > frontIndex){
+        return{
+          x: '10%',
+          opacity: 0.3,
+          y: `calc(${height}px - 85%)`
+        }
+      }else{
+        return{
+          x:0,
+          y:0
+        }
+      }
+    })
+  }, [frontIndex])
 
   return(
     <div style={{marginBottom: '55px', position: 'relative', height: frontHeight}}>
       {(js.length != 0) && js.map((j, idx) => {
+        if((idx != frontIndex) && (idx != frontIndex+1) && (idx != frontIndex - 1)) return
         let cont = dataset[j]
         return(
           <motion.div
             key={idx}
-            initial={(j == frontIndex) ? "front" : (j > frontIndex)? "next" : "back"}
-            animate={(j == frontIndex) ? "front" : (j > frontIndex)? "next" : "back"}
+            // animate={(j == js[frontIndex]) ? "front" : (j > js[frontIndex])? "next" : "back"}
             transition={{type: 'spring', stiffness:'500', damping: '60', mass: '1'}}
-            variants={variants}
+            custom={idx}
+            // variants={variants}
+            animate={bubbleControls}
             style={{position: 'absolute', left: 0, right: 0}}
-            ref={el => (frontIndex != null)?(j == frontIndex)?motionRef = el:null:idx==0?motionRef = el:null}
+            ref={el => motionRef.current[idx] = el}
           >
             <BubbleBasicLayout 
-            mirror={(index % 2 == 0)?false:true} color={((replyIndex == index) && (j == frontIndex))?editHexColor:cont.hex_color}
-            profile={((replyIndex == index) && (j == frontIndex))?profile:cont}
+            mirror={(index % 2 == 0)?false:true} color={cont.hex_color}
+            profile={cont}
             makeScroll={scrollInfo => {
-              if((scrollInfo.deltaY > 0) && js[idx+1] != null &&
-                !((replyIndex == index) && (j == frontIndex))
-              ){
+              if((scrollInfo.deltaY > 0) && js[idx+1] != null){
                 reorder({i: index,j: js[idx+1]})
-                setFrontIndex(js[idx+1])
+                setFrontIndex(idx+1)
               }else if((scrollInfo.deltaY < 0) &&
-              js[idx-1] != null &&
-                !((replyIndex == index) && (j == frontIndex))
-              ){
+              js[idx-1] != null){
                 reorder({i: index,j: js[idx-1]})
-                setFrontIndex(js[idx-1])
+                setFrontIndex(idx-1)
               }else{
                 null
               }
             }}
-            isInTheBackground={(j != frontIndex)}
+            isInTheBackground={(j != js[frontIndex])}
             postDate={cont.created}
             >
-              {(replyIndex == index) && (j == frontIndex)?
-                <BubbleEdit 
-                sendPost={post => sendPost(post, editHexColor, index)}  
-                setEditHexColor={setEditHexColor}
-                indx={index}/>
-              :
-                <BubbleView 
-                message={cont.message}
-                mylike={cont.mylike}
-                index={index}
-                setLike={
-                  () => new Promise((resolve, reject) => {
-                    axios.post(`http://localhost:4000/update/like/forum-post`,
-                    {forumpost_id: cont.forumpost_id}
-                    ,{withCredentials: true}
-                    ).then(async response => {
-                      resolve()
+              <ConditionalLink condition={idx!=frontIndex} href={`/forum/${router.query.index[0]}/post/${cont.forumpost_id}`}>
+                <a>
+                  <BubbleView
+                  message={cont.message}
+                  mylike={cont.mylike}
+                  inFront={idx==frontIndex}
+                  setLike={
+                    () => new Promise((resolve, reject) => {
+                      axios.post(`http://localhost:4000/update/forum/like`,
+                      {forumpost_id: cont.forumpost_id}
+                      ,{withCredentials: true}
+                      ).then(async response => {
+                        resolve()
+                      })
+                      .catch(error =>{
+                        console.log(error)
+                        if(error.response) toast.error(`${error.response.status}: An error occured`)
+                        reject()
+                      })
                     })
-                    .catch(error =>{
-                      console.log(error)
-                      if(error.response) toast.error(`${error.response.status}: An error occured`)
-                      reject()
-                    })
-                  })
-                }
-                />
-              }
+                  }
+                  onClickReply={onClickReply}
+                  />
+                </a>
+              </ConditionalLink>
             </BubbleBasicLayout>
           </motion.div>
         )
@@ -308,11 +376,9 @@ function Bubble({dataset, index, profile, sendPost, reorder, js, frontIndexGloba
   )
 }
 
+const ConditionalLink = ({children, condition, href}) => (condition == true)?<Link href={href}>{children}</Link>:<>{children}</>
+
 export async function getServerSideProps(context) {
-  /*
-  Route design
-    /forum/unique_pagename[/t_or_m(topic or mission)/mission_title_OR_topic_name/paper(only if subject is mission)] ?tree(get exact post tree)
-  */
   try{
     const res = await axios.get(`http://localhost:4000/get/${context.resolvedUrl}`)
     return{
@@ -331,27 +397,3 @@ export async function getServerSideProps(context) {
     }
   }
 }
-
-
-// const treeFromIndex = (post_index, new_front_sub_index) => {
-//   // contentQuery = useQueries(`forum-post/${router.asPath}`, async () => {
-//   //   const res = await axios.get(`http://localhost:4000/get${router.asPath}`, {
-//   //     withCredentials: true
-//   //   })
-//   //   return res.data
-//   // },
-//   // {
-//   //   initialData: root.content,
-//   //   refetchOnWindowFocus: false,
-//   //   refetchOnmount: false,
-//   //   refetchOnReconnect: false,
-//   //   retry: false,
-//   //   staleTime: 1000 * 60 * 60 * 24,
-//   //   onSuccess: data => {
-//   //     console.log(data)
-//   //   },
-//   //   onError: (error) => {
-//   //     console.error(error)
-//   //   },
-//   // })
-// }
