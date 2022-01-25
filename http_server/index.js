@@ -22,7 +22,6 @@ const cors = require("cors");
 
 app.disable('x-powered-by');
 
-console.log('okk')
 //Routes
 const wallet = require("./routes/wallet");
     app.use('/wallet', wallet)

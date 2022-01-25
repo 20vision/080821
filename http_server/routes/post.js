@@ -114,7 +114,6 @@ router.post("/fundPageToken", check.AuthRequired, check.fundTransaction, async (
                 }else{
                     console.log(results)
                     res.status(200).send()
-                    console.log('Okk2')
                 }
             }
         );

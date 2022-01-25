@@ -15,12 +15,14 @@ import { motion, useAnimation } from 'framer-motion';
 import Loading from '../../assets/Loading/Loading';
 import Link from 'next/link';
 
-export default function index({root, ssrContent}) {
+export default function index({root, ssrContent, ssrTreeCount}) {
   const [profile, isLoading, setUser] = useUserProfile()
   const [editHexColor, setEditHexColor] = useState()
   const router = useRouter()
   const [dataset, setDataset] = useState(ssrContent)
   const [loading, setLoading] = useState(false)
+  const [treeCount, setTreeCount] = useState(ssrTreeCount)
+  const [loadingCarouselIndexArray, setLoadingCarouselIndexArray] = useState([])
   const [filteredContentCache, setFilteredContentCache] = useState(false)
   const [filteredContent, setFilteredContent] = useState(() => {
     let filtered = []
@@ -43,9 +45,9 @@ export default function index({root, ssrContent}) {
   useEffect(async() => {
     if(profile.username != null){
       try{
-        const user_dataset = (await axios.get(`http://localhost:4000/get${router.asPath}`,{withCredentials: true})).data.content
-        setDataset(user_dataset)
-        console.log(user_dataset)
+        const query = (await axios.get(`http://localhost:4000/get${router.asPath}`,{withCredentials: true})).data
+        setTreeCount(query.tree_count)
+        setDataset(query.content)
       }catch(err){
         console.log(err)
         toast.error('Could not fetch post info')
@@ -98,9 +100,16 @@ export default function index({root, ssrContent}) {
         new_filteredContent.push(filtered)
       }
     }
+    
     setDataset(new_dataset)
     setFilteredContent(new_filteredContent)
     setSelectedContent(new_selectedContent)
+
+    let next_count = 0
+    new_filteredContent[i].forEach(y => y>j?next_count+=1:null)
+    if((next_count < 2) && (i==0?filteredContent[i].length<treeCount:new_dataset[new_filteredContent[i][new_filteredContent[i].length-1]].next)){
+      console.log('FETCH NEW CAROUSEL POST')
+    }
     
     resolve()
   })
@@ -228,28 +237,6 @@ function Bubble({dataset, index, reorder, js, onClickReply}) {
   const [frontIndex, setFrontIndex] = useState(0)
   const router = useRouter()
   const bubbleControls = useAnimation()
-  // const variants = () => {
-  //   return{
-  //     front: {
-  //       opacity: 1,      
-  //       scale: 1,
-  //       zIndex: 1,
-  //       y: 0
-  //     },
-  //     next: {
-  //       opacity: 0.3,
-  //       zIndex: 0,
-  //       scale: 0.85,
-  //       y: `calc(${frontHeight/2}px + 5%)`
-  //     },
-  //     back: {
-  //       opacity: 0.3,
-  //       scale: 0.85,
-  //       zIndex: 0,
-  //       y: `-${frontHeight*0.1}px`
-  //     }
-  //   }
-  // }
 
   const getFramer = (idx, height) => {
     if(idx < frontIndex){
@@ -387,7 +374,8 @@ export async function getServerSideProps(context) {
           page: res.data.page,
           mission: res.data.mission?res.data.mission:null
         },
-        ssrContent: res.data.content?res.data.content:null
+        ssrContent: res.data.content?res.data.content:null,
+        ssrTreeCount: res.data.tree_count?res.data.tree_count:null
       }
     }
   }catch(error){

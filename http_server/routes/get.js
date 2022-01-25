@@ -140,7 +140,6 @@ router.get("/forum", async (req, res) => {
 
 // Only Page related
 router.get("/forum/:unique_pagename/page", check.AuthOptional, async (req, res) => {
-    console.log(req.user_id)
     pool.getConnection(async function(err, conn) {
         if (err){
             res.status(500).send('An error occurred')
@@ -148,37 +147,55 @@ router.get("/forum/:unique_pagename/page", check.AuthOptional, async (req, res) 
         }else{
             try{
                 const pageByName = await gets.getPageByName(conn, req.params.unique_pagename)
-                let content = [];
-                try{
-                    let new__main_content = await gets.getForumPost({conn: conn, user_id: req.user_id, page_id: pageByName.page_id, 
-                        depth: ((content.length > 0)?(content[content.length-1][0].depth + 1):0), 
-                        left: ((content.length > 0)?content[content.length-1][0].left:null),
-                        right: ((content.length > 0)?content[content.length-1][0].right:null)})
-                    if(new__main_content.length == 0){
-                        return;
-                    }else{
-                        content.push(new__main_content)
-                        for(var i = 0; i <= 5; i++){
-                            const new_content = await gets.getForumPost({
-                                conn: conn,
-                                user_id: req.user_id,
-                                forumpost_parent_id: new__main_content[0].forumpost_parent_id,
-                                depth: i+1,
-                                left: ((content.length > 0)?content[content.length-1][0].left:post_parent_info.left),
-                                right: ((content.length > 0)?content[content.length-1][0].right:post_parent_info.right)
+                let tree_count = 0
+                let content = []
+                conn.query(`SELECT count(forumpost_parent_id) as tree_count from ForumPost_Parent where parent_id = ? and parent_type = 'p'`,
+                    [pageByName.page_id],
+                    async function(err, query_tree_count) {
+                        if (err){
+                            console.log(err)
+                            res.status(400).send('An error occurred')
+                        }else{
+                            console.log(query_tree_count)
+                            tree_count = query_tree_count[0].tree_count
+                            console.log(tree_count)
+                            if(!tree_count) return
+                            try{
+                                let new__main_content = await gets.getForumPost({conn: conn, user_id: req.user_id, page_id: pageByName.page_id, 
+                                    depth: 0, 
+                                    left: null,
+                                    right: null})
+                                if(new__main_content.length == 0){
+                                    return;
+                                }else{
+                                    content.push(new__main_content)
+                                    for(var i = 0; i <= 5; i++){
+                                        const new_content = await gets.getForumPost({
+                                            conn: conn,
+                                            user_id: req.user_id,
+                                            forumpost_parent_id: new__main_content[0].forumpost_parent_id,
+                                            depth: i+1,
+                                            left: content[content.length-1][0].left,
+                                            right: content[content.length-1][0].right
+                                        })
+                                        if(new_content.length == 0) break
+                                        new_content.next = true
+                                        if(new_content.right + 1 == content[content.length-1][0].right) new_content.next = false
+                                        content.push(new_content)
+                                    }
+                                }
+                            }catch{
+                                console.log(err)
+                                res.status(err.status).send(err.message)
+                            }
+                            res.json({
+                                page: pageByName.page,
+                                tree_count: tree_count?tree_count:0,
+                                content: content
                             })
-                            if(new_content.length == 0) break
-                            content.push(new_content)
                         }
                     }
-                }catch{
-                    console.log(err)
-                    res.status(err.status).send(err.message)
-                }
-                res.json({
-                    page: pageByName.page,
-                    content: content
-                })
+                );
             }catch(err){
                 console.log(err)
                 res.status(err.status).send(err.message)
