@@ -136,8 +136,8 @@ const getForumPost = ({conn, user_id, forumpost_parent_id, page_id, depth, left,
     if(right){
         array.push(right)
     }
-    array.push(offset?offset:0)
-    array.push(offset?(offset + 3):3)
+    array.push(offset?offset*3:0)
+    array.push(offset?(offset*3 + 3):3)
     conn.query(
         `SELECT fp2.depth, fp2.left, fp2.right, fp2.forumpost_id, fpp.forumpost_parent_id, fp2.hex_color, fp2.message, fp2.created, if(count(fpl2.user_id = ?) > 0, true, false) as mylike, if(count(fpl2.forum_post_like_id)>0, true, false) as multipleLikes, u.username, u.profilePicture from ForumPost fp2
         join User u on u.user_id = fp2.user_id

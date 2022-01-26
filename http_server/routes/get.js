@@ -156,9 +156,7 @@ router.get("/forum/:unique_pagename/page", check.AuthOptional, async (req, res) 
                             console.log(err)
                             res.status(400).send('An error occurred')
                         }else{
-                            console.log(query_tree_count)
                             tree_count = query_tree_count[0].tree_count
-                            console.log(tree_count)
                             if(!tree_count) return
                             try{
                                 let new__main_content = await gets.getForumPost({conn: conn, user_id: req.user_id, page_id: pageByName.page_id, 
@@ -170,7 +168,7 @@ router.get("/forum/:unique_pagename/page", check.AuthOptional, async (req, res) 
                                 }else{
                                     content.push(new__main_content)
                                     for(var i = 0; i <= 5; i++){
-                                        const new_content = await gets.getForumPost({
+                                        const new_content_array = await gets.getForumPost({
                                             conn: conn,
                                             user_id: req.user_id,
                                             forumpost_parent_id: new__main_content[0].forumpost_parent_id,
@@ -178,10 +176,15 @@ router.get("/forum/:unique_pagename/page", check.AuthOptional, async (req, res) 
                                             left: content[content.length-1][0].left,
                                             right: content[content.length-1][0].right
                                         })
-                                        if(new_content.length == 0) break
-                                        new_content.next = true
-                                        if(new_content.right + 1 == content[content.length-1][0].right) new_content.next = false
-                                        content.push(new_content)
+                                        if(new_content_array.length == 0) break
+                                        new_content_array.forEach(function (new_content){
+                                            if(new_content.right + 1 == content[i][0].right){
+                                                new_content.next = false
+                                            }else{
+                                                new_content.next = true
+                                            }
+                                        })
+                                        content.push(new_content_array)
                                     }
                                 }
                             }catch{
@@ -206,9 +209,33 @@ router.get("/forum/:unique_pagename/page", check.AuthOptional, async (req, res) 
 })
 
 // Responds back one depth reply, but multiple versions depending on offset (3)
-router.get("/forum/:unique_pagename/replies/:parent_post_id/:offset", check.AuthOptional, async (req, res) => {
+router.get("/forum/:unique_pagename/posts/:forumpost_parent_id", check.AuthOptional, async (req, res) => {
+    // queries -> depth, offset
+    console.log(req.params.forumpost_parent_id,req.query.depth,req.query.offset)
+    if(((req.query.depth == null) || isNaN(req.query.depth)) ||
+        (req.query.offset && isNaN(req.query.offset))){
+        res.status(422).send('Invalid query parameter')
+        return
+    }
+
+    pool.getConnection(async function(err, conn) {
+        try{
+            const new_content = await gets.getForumPost({
+                conn: conn,
+                user_id: req.user_id,
+                forumpost_parent_id: req.params.forumpost_parent_id,
+                depth: req.query.depth,
+                offset: req.query.offset?req.query.offset:null
+            })
+            console.log(new_content)
+        }catch(err){
+            console.log(err)
+            res.status(err.status).send(err.message)
+        }
+        pool.releaseConnection(conn);
+    })
     console.log('route not ready yet')
-    res.status(404).send('not ready yet')
+    res.status(200).send('not ready yet')
 })
 
 

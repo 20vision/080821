@@ -108,8 +108,16 @@ export default function index({root, ssrContent, ssrTreeCount}) {
 
     let next_count = 0
     new_filteredContent[i].forEach(y => y>j?next_count+=1:null)
-    if((next_count < 2) && (i==0?filteredContent[i].length<treeCount:new_dataset[new_filteredContent[i][new_filteredContent[i].length-1]].next)){
-      console.log('FETCH NEW CAROUSEL POST')
+    if((next_count < 2) && (i==0?(filteredContent[i].length<treeCount):(new_dataset[i][new_filteredContent[i].length - 1].next))){
+      axios.get(`http://localhost:4000/get/forum/_/posts/${new_dataset[i][new_selectedContent[i]].forumpost_parent_id}?depth=${i}${
+        filteredContent[i]?'&offset='+(filteredContent[i].length/3+1):''
+      }`,{
+        withCredentials: true
+      }).then(response => {
+        console.log(response)
+      }).catch(err => {
+        console.error(err)
+      })
     }
     
     resolve()
