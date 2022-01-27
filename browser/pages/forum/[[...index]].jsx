@@ -24,6 +24,7 @@ export default function index({root, ssrContent, ssrTreeCount}) {
   const [treeCount, setTreeCount] = useState(ssrTreeCount)
   const [loadingCarouselIndexArray, setLoadingCarouselIndexArray] = useState([])
   const [filteredContentCache, setFilteredContentCache] = useState(false)
+  const [changeFilteredIndex, setChangeFilteredIndex] = useState(0)
   const [filteredContent, setFilteredContent] = useState(() => {
     let filtered = []
     for(var i=0;i<ssrContent.length;i++){
@@ -46,7 +47,6 @@ export default function index({root, ssrContent, ssrTreeCount}) {
     if(profile.username != null){
       try{
         const query = (await axios.get(`http://localhost:4000/get${router.asPath}`,{withCredentials: true})).data
-        console.log(query.content)
         setTreeCount(query.tree_count)
         setDataset(query.content)
       }catch(err){
@@ -58,6 +58,7 @@ export default function index({root, ssrContent, ssrTreeCount}) {
 
 
   const reorder = ({i, j}) => new Promise(async(resolve, reject) => {
+    setChangeFilteredIndex(i)
     let new_filteredContent = JSON.parse(JSON.stringify(filteredContent)).slice(0,i+1)
     let new_selectedContent = [...JSON.parse(JSON.stringify(selectedContent)).slice(0,i),j]
     let new_dataset = dataset
@@ -193,6 +194,7 @@ export default function index({root, ssrContent, ssrTreeCount}) {
             dataset={dataset[i]}
             js={js}
             index={i}
+            changeFilteredIndex={changeFilteredIndex}
             reorder={async arg => {
               await controls.start(ic => {
                 if(ic <= arg.i) return ({})
@@ -240,7 +242,7 @@ export default function index({root, ssrContent, ssrTreeCount}) {
   )
 }
 
-function Bubble({dataset, index, reorder, js, onClickReply}) {
+function Bubble({dataset, index, reorder, js, onClickReply, changeFilteredIndex}) {
   const [frontHeight, setFrontHeight] = useState()
   const motionRef = useRef([])
   const [frontIndex, setFrontIndex] = useState(0)
@@ -276,7 +278,8 @@ function Bubble({dataset, index, reorder, js, onClickReply}) {
   }
 
   useEffect(async () => {
-    if(frontIndex == null) return
+    if(changeFilteredIndex > index) return
+    if((frontIndex == null) || (motionRef.current[frontIndex] == null)) return
     let height = motionRef.current[frontIndex].clientHeight
     await bubbleControls.start(idx => {
       return getFramer(idx, height)
@@ -287,12 +290,12 @@ function Bubble({dataset, index, reorder, js, onClickReply}) {
     bubbleControls.start(idx => {
       if(idx < frontIndex){
         return{
-          x: '10%',
+          x: '12%',
           y: `-10%`
         }
       }else if(idx > frontIndex){
         return{
-          x: '10%',
+          x: '12%',
           opacity: 0.3,
           y: `calc(${height}px - 85%)`
         }
@@ -303,7 +306,7 @@ function Bubble({dataset, index, reorder, js, onClickReply}) {
         }
       }
     })
-  }, [frontIndex])
+  }, [frontIndex, js])
 
   return(
     <div style={{marginBottom: '55px', position: 'relative', height: frontHeight}}>

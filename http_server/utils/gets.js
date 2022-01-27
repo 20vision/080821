@@ -129,26 +129,65 @@ const getForumPostParentInfo = (conn, parent_post_id) => new Promise((resolve, r
 })
 
 const getForumPost = ({conn, user_id, forumpost_parent_id, page_id, depth, left, right, offset}) => new Promise((resolve, reject) => {
-    let array = [user_id, forumpost_parent_id?forumpost_parent_id:page_id, depth]
-    if(left){
-        array.push(left)
+    let base_parameters = []
+
+    // Rows
+    if(user_id != null){
+        base_parameters.push(user_id)
     }
-    if(right){
-        array.push(right)
+
+    // Joins
+    if((forumpost_parent_id == null) && (page_id != null)){
+        base_parameters.push(page_id)
     }
-    array.push(offset?offset*3:0)
-    array.push(offset?(offset*3 + 3):3)
-    conn.query(
-        `SELECT fp2.depth, fp2.left, fp2.right, fp2.forumpost_id, fpp.forumpost_parent_id, fp2.hex_color, fp2.message, fp2.created, if(count(fpl2.user_id = ?) > 0, true, false) as mylike, if(count(fpl2.forum_post_like_id)>0, true, false) as multipleLikes, u.username, u.profilePicture from ForumPost fp2
+
+    // Where
+    base_parameters.push(depth)
+    if(forumpost_parent_id != null){
+        base_parameters.push(forumpost_parent_id)
+    }
+    if(left != null){
+        base_parameters.push(left)
+    }
+    if(right != null){
+        base_parameters.push(right)
+    }
+
+    const base_query = `
+        SELECT
+            fp2.depth
+            ,fp2.left
+            ,fp2.right
+            ,fp2.forumpost_id
+            ,fp2.forumpost_parent_id
+            ,fp2.hex_color
+            ,fp2.message
+            ,fp2.created
+            ,if(count(fpl2.forum_post_like_id)>0, true, false) as multipleLikes
+            ,u.username
+            ,u.profilePicture
+            ${user_id != null?',if(count(fpl2.user_id = ?) > 0, true, false) as mylike':''}
+        from ForumPost fp2
         join User u on u.user_id = fp2.user_id
         left join ForumPost_Like fpl2 on fpl2.forumpost_id = fp2.forumpost_id
-        join ForumPost_Parent fpp on fpp.forumpost_parent_id = ${forumpost_parent_id?'?':'fp2.forumpost_parent_id and fpp.parent_id = ? and fpp.parent_type = \'p\''}
-        where fp2.depth = ? ${left?'and fp2.left > ?':''} ${right?'and fp2.right < ?':''}
-        group by fp2.forumpost_id 
-        order by (SELECT count(fpl.forum_post_like_id) from ForumPost fp join ForumPost_Like fpl on fpl.forumpost_id = fp.forumpost_id 
-        where fp.left >= fp2.left and fp.right <= fp2.right group by fp2.forumpost_id) desc
-        limit ?,?`,
-        array,
+        ${((forumpost_parent_id == null) && (page_id != null))?'join ForumPost_Parent fpp on fpp.forumpost_parent_id = fp2.forumpost_parent_id and fpp.parent_id = ? and fpp.parent_type = \'p\'':''}
+        where fp2.depth = ?
+        ${forumpost_parent_id != null?' and fp2.forumpost_parent_id = ?':''}
+        ${left != null?' and fp2.left > ?':''}
+        ${right != null?' and fp2.right < ?':''}
+        group by fp2.forumpost_id
+        order by (
+            SELECT count(fpl.forum_post_like_id) from ForumPost fp 
+            join ForumPost_Like fpl on fpl.forumpost_id = fp.forumpost_id 
+            where fp.left >= fp2.left and fp.right <= fp2.right group by fp2.forumpost_id
+        ) desc limit ?,?`
+    
+    base_parameters.push((offset?offset*3:0))
+    base_parameters.push((offset?offset*3+3:3))    
+
+    conn.query(
+        base_query,
+        base_parameters,
         function(err, query_content) {
             if (err){
                 console.log(err)

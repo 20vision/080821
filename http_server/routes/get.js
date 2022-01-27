@@ -211,7 +211,6 @@ router.get("/forum/:unique_pagename/page", check.AuthOptional, async (req, res) 
 // Responds back one depth reply, but multiple versions depending on offset (3)
 router.get("/forum/:unique_pagename/posts/:forumpost_parent_id", check.AuthOptional, async (req, res) => {
     // queries -> depth, offset
-    console.log(req.params.forumpost_parent_id,req.query.depth,req.query.offset)
     if(((req.query.depth == null) || isNaN(req.query.depth)) ||
         (req.query.offset && isNaN(req.query.offset))){
         res.status(422).send('Invalid query parameter')
@@ -227,7 +226,6 @@ router.get("/forum/:unique_pagename/posts/:forumpost_parent_id", check.AuthOptio
                 depth: req.query.depth,
                 offset: req.query.offset?req.query.offset:null
             })
-            console.log(new_content)
         }catch(err){
             console.log(err)
             res.status(err.status).send(err.message)
