@@ -22,7 +22,6 @@ export default function index({root, ssrContent, ssrTreeCount}) {
   const [dataset, setDataset] = useState(ssrContent)
   const [loading, setLoading] = useState(false)
   const [treeCount, setTreeCount] = useState(ssrTreeCount)
-  const [loadingCarouselIndexArray, setLoadingCarouselIndexArray] = useState([])
   const [filteredContentCache, setFilteredContentCache] = useState(false)
   const [changeFilteredIndex, setChangeFilteredIndex] = useState(0)
   const [filteredContent, setFilteredContent] = useState(() => {
@@ -118,7 +117,6 @@ export default function index({root, ssrContent, ssrTreeCount}) {
         withCredentials: true
       }).then(response => {
         if((response.data) && (response.data.length != 0)){
-          console.log(response.data)
           new_dataset[i] = [...new_dataset[i], ...response.data]
           response.data.forEach((resData, idx) => {
             new_filteredContent[i] = [...new_filteredContent[i], ...[new_dataset[i].length - response.data.length + idx]]
@@ -205,7 +203,9 @@ export default function index({root, ssrContent, ssrTreeCount}) {
             js={js}
             index={i}
             changeFilteredIndex={changeFilteredIndex}
+            setLoading={setLoading}
             reorder={async arg => {
+              setLoading(true)
               await controls.start(ic => {
                 if(ic <= arg.i) return ({})
                 return({
@@ -223,6 +223,7 @@ export default function index({root, ssrContent, ssrTreeCount}) {
                   transition: {type: "spring", delay: ic * 0.1}
                 })
               });
+              setLoading(false)
             }}
             onClickReply={() => onClickReply(i)}
             sendPost={sendPost}/>
@@ -230,22 +231,35 @@ export default function index({root, ssrContent, ssrTreeCount}) {
         )
       })
       }
-      {loading ?
+      {(loading == true) ?
         <div key={index} style={{width: '100%', display: 'flex', justifyContent: 'center'}}>
           <Loading/>
         </div>
       :
-      <BubbleBasicLayout 
-      mirror={(filteredContent.length % 2 == 0)?false:true}
-      color={editHexColor} 
-      profile={profile}
-      makeScroll={() => null}>
-        <BubbleEdit 
-        sendPost={post => sendPost(post, editHexColor, filteredContent.length)} 
-        setEditHexColor={setEditHexColor}
-        clickOutsideBubbleEdit={clickOutsideBubbleEdit}
-        />
-      </BubbleBasicLayout>
+      <motion.div
+        initial={{
+          opacity: 0,
+          y: 20,
+          transition: {type: "spring", duration: 0.3}
+        }}
+        animate={{
+          opacity: 1,
+          y: 0,
+          transition: {type: "spring", delay: (filteredContent.length-1) * 0.1}
+        }}
+      >
+        <BubbleBasicLayout 
+        mirror={(filteredContent.length % 2 == 0)?false:true}
+        color={editHexColor} 
+        profile={profile}
+        makeScroll={() => null}>
+          <BubbleEdit 
+          sendPost={post => sendPost(post, editHexColor, filteredContent.length)} 
+          setEditHexColor={setEditHexColor}
+          clickOutsideBubbleEdit={clickOutsideBubbleEdit}
+          />
+        </BubbleBasicLayout>
+      </motion.div>
       }
       
     </ForumLayout>
@@ -258,6 +272,12 @@ function Bubble({dataset, index, reorder, js, onClickReply, changeFilteredIndex}
   const [frontIndex, setFrontIndex] = useState(0)
   const router = useRouter()
   const bubbleControls = useAnimation()
+
+  useEffect(() => {
+    if(changeFilteredIndex < index){
+      setFrontIndex(0)
+    }
+  }, [changeFilteredIndex])
 
   const getFramer = (idx, height) => {
     if(idx < frontIndex){
@@ -297,7 +317,7 @@ function Bubble({dataset, index, reorder, js, onClickReply, changeFilteredIndex}
     height = motionRef.current[frontIndex].clientHeight
     setFrontHeight(height)
     //adjust height as width, thus content rows of bubble changes after animation
-    bubbleControls.start(idx => {
+    await bubbleControls.start(idx => {
       if(idx < frontIndex){
         return{
           x: '12%',
