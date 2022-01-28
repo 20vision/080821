@@ -128,7 +128,7 @@ const getForumPostParentInfo = (conn, parent_post_id) => new Promise((resolve, r
     );
 })
 
-const getForumPost = ({conn, user_id, forumpost_parent_id, page_id, depth, left, right, offset}) => new Promise((resolve, reject) => {
+const getForumPost = ({conn, user_id, forumpost_parent_id, page_id, depth, left, right, offset, parent_id}) => new Promise((resolve, reject) => {
     let base_parameters = []
 
     // Rows
@@ -137,6 +137,9 @@ const getForumPost = ({conn, user_id, forumpost_parent_id, page_id, depth, left,
     }
 
     // Joins
+    if(parent_id != null){
+        base_parameters.push(parent_id)
+    }
     if((forumpost_parent_id == null) && (page_id != null)){
         base_parameters.push(page_id)
     }
@@ -170,6 +173,7 @@ const getForumPost = ({conn, user_id, forumpost_parent_id, page_id, depth, left,
         from ForumPost fp2
         join User u on u.user_id = fp2.user_id
         left join ForumPost_Like fpl2 on fpl2.forumpost_id = fp2.forumpost_id
+        ${(parent_id != null)?'join ForumPost fp3 on fp3.forumpost_id = ? and fp3.forumpost_parent_id = fp2.forumpost_parent_id and fp3.left < fp2.left and fp3.right > fp2.right':''}
         ${((forumpost_parent_id == null) && (page_id != null))?'join ForumPost_Parent fpp on fpp.forumpost_parent_id = fp2.forumpost_parent_id and fpp.parent_id = ? and fpp.parent_type = \'p\'':''}
         where fp2.depth = ?
         ${forumpost_parent_id != null?' and fp2.forumpost_parent_id = ?':''}
@@ -180,10 +184,8 @@ const getForumPost = ({conn, user_id, forumpost_parent_id, page_id, depth, left,
             SELECT count(fpl.forum_post_like_id) from ForumPost fp 
             join ForumPost_Like fpl on fpl.forumpost_id = fp.forumpost_id 
             where fp.left >= fp2.left and fp.right <= fp2.right group by fp2.forumpost_id
-        ) desc limit ?,?`
-    
-    base_parameters.push((offset?offset*3:0))
-    base_parameters.push((offset?offset*3+3:3))    
+        ) desc limit ?,3`
+    base_parameters.push((offset?offset*3:0))  
 
     conn.query(
         base_query,

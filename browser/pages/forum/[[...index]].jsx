@@ -47,6 +47,7 @@ export default function index({root, ssrContent, ssrTreeCount}) {
     if(profile.username != null){
       try{
         const query = (await axios.get(`http://localhost:4000/get${router.asPath}`,{withCredentials: true})).data
+        console.log(query.content)
         setTreeCount(query.tree_count)
         setDataset(query.content)
       }catch(err){
@@ -109,13 +110,22 @@ export default function index({root, ssrContent, ssrTreeCount}) {
 
     let next_count = 0
     new_filteredContent[i].forEach(y => y>j?next_count+=1:null)
-    if((next_count < 2) && (i==0?(filteredContent[i].length<treeCount):(new_dataset[i][new_filteredContent[i].length - 1].next))){
+    if((next_count < 2) &&
+      (i==0?(filteredContent[i].length<treeCount):(new_dataset[i][new_filteredContent[i].length - 1].next)) &&
+      (filteredContent[i].length % 3 == 0)){
       axios.get(`http://localhost:4000/get/forum/_/posts/${new_dataset[i][new_selectedContent[i]].forumpost_parent_id}?depth=${i}${
-        filteredContent[i]?'&offset='+(filteredContent[i].length/3+1):''
-      }`,{
+        filteredContent[i]?'&offset='+(filteredContent[i].length/3):''}${(i!=0)?'&parent_id='+new_dataset[i-1][new_selectedContent[i-1]].forumpost_id:''}`,{
         withCredentials: true
       }).then(response => {
-        console.log(response)
+        if((response.data) && (response.data.length != 0)){
+          console.log(response.data)
+          new_dataset[i] = [...new_dataset[i], ...response.data]
+          response.data.forEach((resData, idx) => {
+            new_filteredContent[i] = [...new_filteredContent[i], ...[new_dataset[i].length - response.data.length + idx]]
+          })
+          setFilteredContent(new_filteredContent)
+          setDataset(new_dataset)
+        }
       }).catch(err => {
         console.error(err)
       })

@@ -212,28 +212,32 @@ router.get("/forum/:unique_pagename/page", check.AuthOptional, async (req, res) 
 router.get("/forum/:unique_pagename/posts/:forumpost_parent_id", check.AuthOptional, async (req, res) => {
     // queries -> depth, offset
     if(((req.query.depth == null) || isNaN(req.query.depth)) ||
-        (req.query.offset && isNaN(req.query.offset))){
+    (req.query.offset && isNaN(req.query.offset)) ||
+    ((parseInt(req.query.depth) == 0 && req.query.parent_id == null) || req.query.parent_id && isNaN(req.query.parent_id))
+    ){
         res.status(422).send('Invalid query parameter')
         return
     }
 
+    console.log(req.query)
+
     pool.getConnection(async function(err, conn) {
         try{
-            const new_content = await gets.getForumPost({
+            new_content = await gets.getForumPost({
                 conn: conn,
                 user_id: req.user_id,
-                forumpost_parent_id: req.params.forumpost_parent_id,
-                depth: req.query.depth,
-                offset: req.query.offset?req.query.offset:null
+                forumpost_parent_id: parseInt(req.params.forumpost_parent_id),
+                depth: parseInt(req.query.depth),
+                offset: req.query.offset?parseInt(req.query.offset):null,
+                parent_id: req.query.parent_id?parseInt(req.query.parent_id):null
             })
+            res.json(new_content)
         }catch(err){
             console.log(err)
             res.status(err.status).send(err.message)
         }
         pool.releaseConnection(conn);
     })
-    console.log('route not ready yet')
-    res.status(200).send('not ready yet')
 })
 
 
