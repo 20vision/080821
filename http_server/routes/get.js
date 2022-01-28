@@ -274,7 +274,7 @@ router.get("/forum/:unique_pagename/replies/:parent_post_id", check.AuthOptional
 })
 
 // Only Mission related
-router.get("/forum/:unique_pagename/mission/:mission_title", async (req, res) => {
+router.get("/forum/:unique_pagename/missions/:mission_title", async (req, res) => {
     pool.getConnection(async function(err, conn) {
         if (err){
             res.status(500).send('An error occurred')
@@ -310,12 +310,12 @@ router.get("/forum/:unique_pagename/mission/:mission_title", async (req, res) =>
     })
 })
 // Only Topic related
-router.get("/forum/:unique_pagename/topic/:topic_name", async (req, res) => {
+router.get("/forum/:unique_pagename/topics/:topic_name", async (req, res) => {
     console.log('route not ready yet')
     res.status(404).send('not ready yet')
 })
 // Only Paper related
-router.get("/forum/:unique_pagename/paper/:uid", async (req, res) => {
+router.get("/forum/:unique_pagename/papers/:uid", async (req, res) => {
     console.log('route not ready yet')
     res.status(404).send('not ready yet')
 })

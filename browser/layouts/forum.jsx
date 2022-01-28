@@ -5,6 +5,7 @@ import onClickOutside from "react-onclickoutside";
 import { useRouter } from "next/router";
 import { useState, useEffect } from 'react'
 import ResizeObserver, { useResizeDetector } from 'react-resize-detector';
+import Plus from "../assets/Plus";
 
 export default function PageLayout( {children, page, missions} ) {
     return (
@@ -27,6 +28,7 @@ var Panel = onClickOutside(({children}) => {
     const [minHeight, setMinHeight] = useState(0)
 
     useEffect(() => {
+        console.log(router)
         if(menu){
             router.push(`/forum${menu}`)
         }
@@ -55,7 +57,37 @@ var Panel = onClickOutside(({children}) => {
             </div>
             <div className={styles.postSelectionContainer}>
                 <div className={styles.postSelection}>
-                -post selection-
+                    <a>
+                        <div className={`${styles.button} ${(router.query.index[1] == null)?styles.selected:null}`}>
+                            <div className={styles.highlight}/>
+                            <h2>All</h2>
+                        </div>
+                    </a>
+                    <a>
+                        <div className={`${styles.button} ${router.query.index[1]=="missions"?styles.selected:null}`}>
+                            <div className={styles.highlight}/>
+                            <h2>Missions</h2>
+                        </div>
+                    </a>
+                    <a>
+                        <div className={`${styles.button} ${router.query.index[1]=="topics"?styles.selected:null}`}>
+                            <div className={styles.highlight}/>
+                            <h2>Topics</h2>
+                            <Plus color={router.query.index[1]=="topics"?'#FF5B77':'#FAFAFA4D'}/>
+                        </div>
+                    </a>
+                    <a>
+                        <div className={`${styles.button} ${router.query.index[1]=="papers"?styles.selected:null}`}>
+                            <div className={styles.highlight}/>
+                            <h2>Papers</h2>
+                        </div>
+                    </a>
+                    <a>
+                        <div className={`${styles.button} ${router.query.index[1]=="page"?styles.selected:null}`}>
+                            <div className={styles.highlight}/>
+                            <h2>Page</h2>
+                        </div>
+                    </a>
                 </div>
             </div>
 

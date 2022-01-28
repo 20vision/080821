@@ -59,8 +59,42 @@
     top: 35px;
     margin-top:35px;
     margin-bottom:35px;
+    display: flex;
+    justify-content: center;
 }
 
 .postSelection{
     width: 300px;
+}
+
+.postSelection .button{
+    border-radius: 3px;
+    display:flex;
+    align-items: center;
+}
+
+.postSelection .highlight{
+    height: 60px;
+    width: 2px;
+    border-radius: 1px;
+    background-color: var(--dark_grey);
+}
+
+.postSelection .selected .highlight{
+    background-color: var(--red);
+}
+
+.postSelection h2{
+    margin-left: 15px;
+    opacity: 0.3;
+}
+
+.postSelection .selected h2{
+    color: var(--red);
+    opacity: 1;
+}
+
+.button svg{
+    margin-left:auto;
+    margin-right:17px;
 }
