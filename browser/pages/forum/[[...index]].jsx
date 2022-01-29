@@ -14,6 +14,7 @@ import { useRouter } from 'next/router'
 import { motion, useAnimation } from 'framer-motion';
 import Loading from '../../assets/Loading/Loading';
 import Link from 'next/link';
+import { usePageSelectedStore } from '../../store/pageSelected';
 
 export default function index({root, ssrContent, ssrTreeCount}) {
   const [profile, isLoading, setUser] = useUserProfile()
@@ -24,6 +25,7 @@ export default function index({root, ssrContent, ssrTreeCount}) {
   const [treeCount, setTreeCount] = useState(ssrTreeCount)
   const [filteredContentCache, setFilteredContentCache] = useState(false)
   const [changeFilteredIndex, setChangeFilteredIndex] = useState(0)
+  const setPageSelection = usePageSelectedStore(state => state.setPageSelection)
   const [filteredContent, setFilteredContent] = useState(() => {
     let filtered = []
     for(var i=0;i<ssrContent.length;i++){
@@ -43,6 +45,7 @@ export default function index({root, ssrContent, ssrTreeCount}) {
   })
 
   useEffect(async() => {
+    setPageSelection(root.page)
     if(profile.username != null){
       try{
         const query = (await axios.get(`http://localhost:4000/get${router.asPath}`,{withCredentials: true})).data

@@ -16,7 +16,7 @@ import Loading from '../../assets/Loading/Loading'
 import usePaperSocket from '../../hooks/Socket/usePaperSocket'
 import Link from 'next/link'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 export default function Index() {
     const [profile, isLoading, setUser] = useUserProfile()
@@ -32,7 +32,9 @@ export default function Index() {
                     {profile.username?
                         <>
                             {router.pathname.split('/')[4] == 'edit'?
-                                <PaperEdit/>             
+                                <PaperEdit router={router}/>  
+                            :router.pathname.split('/')[1] == 'forum'?     
+                                <ForumNav router={router}/>
                             :router.query.mission?
                                 <MissionNavWithRole router={router}/>
                             :
@@ -50,6 +52,7 @@ export default function Index() {
 }
 
 function MissionNavWithRole({router}){
+    const setModal = useModalStore(state => state.setModal)
     return(
         <>  
             <a onClick={() => router.push(`/${router.query.page}/${router.query.mission}/new-paper/edit`)}>
@@ -57,9 +60,9 @@ function MissionNavWithRole({router}){
                 <div>Paper</div>
             </a>
 
-            <a>
+            <a onClick={() => setModal(5)}>
                 <DollarSign color="#FAFAFA"/>
-                <div>Trade</div>
+                <div>Token</div>
             </a>
 
             <Link href={`/forum/${router.query.page}/mission/${router.query.mission}`}>
@@ -88,7 +91,7 @@ function PageNavWithRole({router}){
 
             <a onClick={() => setModal(5)}>
                 <DollarSign color="#FAFAFA"/>
-                <div>Trade</div>
+                <div>Token</div>
             </a>
 
             <Link href={`/forum/${router.query.page}/page`}>
@@ -107,6 +110,7 @@ function PageNavWithRole({router}){
 }
 
 function PageNav({router}){
+    const setModal = useModalStore(state => state.setModal)
     return(
         <>
             <a>
@@ -135,7 +139,7 @@ function PageNav({router}){
 }
 
 
-function PaperEdit(){
+function PaperEdit({router}){
     const socket = usePaperSocket()
     const [saved, setSaved] = useState()
 
@@ -171,6 +175,23 @@ function PaperEdit(){
                 </a>
 
             }
+        </>
+    )
+}
+
+function ForumNav({router}){
+    const setModal = useModalStore(state => state.setModal)
+    return(
+        <>  
+            <a onClick={() => setModal(6)}>
+                <Plus color="#FAFAFA"/>
+                <div>Topic</div>
+            </a>
+
+            <a onClick={() => setModal(5)}>
+                <DollarSign color="#FAFAFA"/>
+                <div>Token</div>
+            </a>
         </>
     )
 }

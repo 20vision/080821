@@ -54,6 +54,13 @@ export default function Trade() {
   const [loading, setLoading] = useState(false)
   const router = useRouter()
   const solPrice = useSolPrice()
+  const [queryRoute, setQueryRoute] = useState(() => {
+    if(router.query && router.query.page){
+      return(router.query.page)
+    }else if(router.query.index[0]){
+      return(router.query.index[0])
+    }
+  })
 
   const connectThisWallet = async() => {
     try{
@@ -222,9 +229,9 @@ export default function Trade() {
   }
 
   useEffect(async() => {
-    if(router.query.page){
+    if(queryRoute){
       try{
-        await axios.get(`http://localhost:4000/get/page/${router.query.page}/trade_info`,{
+        await axios.get(`http://localhost:4000/get/page/${queryRoute}/trade_info`,{
           withCredentials: true
         }
         ).then(async response => {
@@ -244,7 +251,7 @@ export default function Trade() {
         return
       }
     }
-  }, [router.query.page])
+  }, [queryRoute])
 
   const getAmmInfo = (info) => {
     //const info = await connection.getAccountInfo(pubKey, commitment)
@@ -324,7 +331,7 @@ export default function Trade() {
       tx.feePayer = publicKey
       tx.partialSign(new_mint_keypair);
       const signedTx = await signTransaction(tx)
-      axios.post('http://localhost:4000/post/fundPageToken',{tx: signedTx.serialize(), unique_pagename: router.query.page},{
+      axios.post('http://localhost:4000/post/fundPageToken',{tx: signedTx.serialize(), unique_pagename: queryRoute},{
         withCredentials: true
       }
       ).then(async response => {
@@ -703,17 +710,19 @@ export default function Trade() {
         <>
           <span>
             Voice Tokens at it's core are a Feedback-loop. They help holders to shape the future of a Page. 
-            Tokens act as "tickets" to private forum topics and influence the reach of page related discussion posts.
+            Tokens influence the reach of page related <a 
+            style={{textDecoration: 'underline'}}
+            href={`/forum/${queryRoute}`}>Forum</a> posts. Also Forum topics can have a certain Threshold to be able to post to.
             Holders have stake, thus will try their best to make the Page succeed in their goals and add valueable input.
             As the Page gains attention - more buyers, the token value goes up.
-            Page Owners receive a custom Royalty fee on every token being bought. 20Vision charges a 1% fee on each transaction.
+            Page Owners receive a custom Page fee on every token being bought. 20Vision charges a 1% fee on each transaction.
             <a style={{textDecoration: 'underline'}}>(see more)</a>
             <br/>
             <br/>
             <br/>
             <b>Supply:</b>&nbsp;{tokenSupply?Math.floor((tokenSupply - 1000000000)/1000000000):0}
             <br/>
-            <b>Royalty Fee:</b>&nbsp;{pageFee?pageFee/1000:2.5}%
+            <b>Page Fee:</b>&nbsp;{pageFee?pageFee/1000:2.5}%
             <br/>
             <div style={{display: 'flex', justifyContent: 'center', minWidth: '1px'}}>
               <div><b>Mint:</b></div>&nbsp;

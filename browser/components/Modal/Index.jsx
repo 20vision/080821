@@ -4,11 +4,10 @@ import { useModalStore } from '../../store/modal'
 import { motion } from "framer-motion"
 import { useRouter } from 'next/router'
 import {useUserStore} from '../../store/user'
-
 import UserPages from './UserPages'
 import ConnectWallet from './ConnectWallet'
 import User from "./User"
-import CreateMission from './CreateMission'
+import CreateTopicOrMission from './CreateTopicOrMission'
 import Trade from './Trade'
 import { useEffect } from 'react'
 
@@ -45,7 +44,8 @@ const ClickOutside = onClickOutside(() =>{
     ClickOutside.handleClickOutside = () => setModal(0);
 
     useEffect(() => {
-        if(modal == 5 && !router.query.page){
+        if((modal == 5 && (!router.query.page && !router.query.index[0])) ||
+          ((modal == 6) && (profile.username == null))){
             setModal(0)
         }
 
@@ -70,10 +70,13 @@ const ClickOutside = onClickOutside(() =>{
                 :modal == 3 ?
                     <UserPages/>
                 :modal == 4 ?
-                    <CreateMission/>
+                    <CreateTopicOrMission type='mission'/>
                 :modal == 5 ?
                     <Trade/>
-                :null}
+                :modal == 6 ?
+                    <CreateTopicOrMission type='topic'/>
+                :
+                    null}
 
             </motion.div>
         </div>
