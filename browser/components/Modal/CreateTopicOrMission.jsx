@@ -70,7 +70,7 @@ export default function CreateMission({type}) {
         axios.post(`http://localhost:4000/post/mission`,{pagename: router.query.page, missionTitle: Title, missionBody: Body},{
         withCredentials: true
         }).then(response => {
-            router.push(`/forum/${router.query.page}/mission/${Title.replace(' ', '_').toLowerCase()}`)
+            router.push(`/forum/${router.query.page}/mission/${Title.replace(/ /g, '_').toLowerCase()}`)
             setModal(0)
         })
         .catch(error =>{
@@ -87,7 +87,7 @@ export default function CreateMission({type}) {
         axios.post(`http://localhost:4000/post/topic`,{pagename: router.query.index[0], topicTitle: Title, topicBody: Body, topicThreshold: topicTokenThreshold},{
         withCredentials: true
         }).then(response => {
-            router.push(`/forum/${router.query.index[0]}/topic/${Title.replace(' ', '_').toLowerCase()}`)
+            router.push(`/forum/${router.query.index[0]}/topic/${Title.replace(/ /g, '_').toLowerCase()}`)
             setModal(0)
         })
         .catch(error =>{
@@ -105,7 +105,7 @@ export default function CreateMission({type}) {
             </h1>
 
             <div className='areaLine'>
-                <input maxLength="100" ref={TitleRef} placeholder={type.charAt(0).toUpperCase() + type.slice(1)+" Title"} onChange={e => {e.target.value = e.target.value.replace('_', ' '); setTitle(e.target.value);}}/>
+                <input maxLength="100" ref={TitleRef} placeholder={type.charAt(0).toUpperCase() + type.slice(1)+" Title"} onChange={e => {e.target.value = e.target.value.replace(/_/g, ' '); setTitle(e.target.value);}}/>
                 <div className={styles.body}>
                     <TextareaAutosize 
                         minRows={6}
@@ -148,7 +148,7 @@ export default function CreateMission({type}) {
                                 return true
                             }}
                             value={topicTokenThreshold} 
-                            onValueChange={value => {setTopicTokenThreshold(value.floatValue)}} 
+                            onValueChange={value => {setTopicTokenThreshold(value.floatValue);console.log(value);}} 
                             allowedDecimalSeparators={','} 
                             placeholder="0" 
                             thousandSeparator=" " 

@@ -111,7 +111,7 @@ exports.checkUniqueMissionTitle = function(req, res, next) {
         req.pagename = req.body.pagename
     }
 
-    req.mission_title = req.mission_title.replace(' ', '_')
+    req.mission_title = req.mission_title.replace(/ /g, '_');
     pool.query("SELECT if(count(m.mission_id)>0,false,true) as uniqueMission from Mission m join Page p on p.page_id = m.page_id where m.title = ? and p.unique_pagename = ?", 
     [req.mission_title, req.pagename], 
     function(err, rows, fields) {

@@ -6,7 +6,7 @@ import Link from 'next/link'
 
 export default function Missions({missions}) {
     const router = useRouter()
-    var missions = missions.sort(a => a.title.replace(' ', '_').toLowerCase() == router.query.mission ? -1 : 1)
+    var missions = missions.sort(a => a.title.replace(/ /g, '_').toLowerCase() == router.query.mission ? -1 : 1)
     return(
         <div className={styles.container}>
             <div className={styles.missions}>
@@ -14,15 +14,15 @@ export default function Missions({missions}) {
                     return (
                         <a key={index}><Link 
                                 href={
-                                    (router.query.mission && (mission.title.replace(' ', '_').toLowerCase() == router.query.mission.toLowerCase()))?
+                                    (router.query.mission && (mission.title.replace(/ /g, '_').toLowerCase() == router.query.mission.toLowerCase()))?
                                     `/${router.query.page}`
                                     :
-                                    `/${router.query.page}/${mission.title.replace(' ', '_').toLowerCase()}`
+                                    `/${router.query.page}/${mission.title.replace(/ /g, '_').toLowerCase()}`
                                 }
                             >
-                            <div className={(router.query.mission && (mission.title.replace(' ', '_').toLowerCase() == router.query.mission.toLowerCase()))?styles.selected:styles.mission}>
+                            <div className={(router.query.mission && (mission.title.replace(/ /g, '_').toLowerCase() == router.query.mission.toLowerCase()))?styles.selected:styles.mission}>
                                 <h3>
-                                    {mission.title.replace('_', ' ')}
+                                    {mission.title.replace(/_/g, ' ')}
                                 </h3>
                                 <div>
                                     {mission.description}

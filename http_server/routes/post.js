@@ -63,7 +63,7 @@ router.post("/mission", check.AuthRequired, check.role_any, input_validation.che
                             res.status(500).send('An error occurred')
                             console.log(err)
                         }else if(results.length > 0){
-                            const missionTitle = req.body.missionTitle.replace(' ', '_')
+                            const missionTitle = req.body.missionTitle.replace(/ /g, '_');
                             conn.query(
                                 'INSERT INTO Mission values (?,?,?,?,now());',
                                 [null, results[0].page_id, missionTitle, req.body.missionBody, null],
@@ -103,7 +103,7 @@ router.post("/topic", check.AuthRequired, check.role_any, input_validation.check
                                 res.status(500).send('An error occurred')
                                 console.log(err)
                             }else if(results.length > 0){
-                                const topicTitle = req.body.topicTitle.replace(' ', '_')
+                                const topicTitle = req.body.topicTitle.replace(/ /g, '_')
                                 conn.query(
                                     'INSERT INTO Topic values (?,?,?,?,?,now());',
                                     [null, results[0].page_id, topicTitle, req.body.topicBody, req.body.topicThreshold?req.body.topicThreshold:'0', null],

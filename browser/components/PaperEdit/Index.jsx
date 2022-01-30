@@ -133,7 +133,7 @@ export default function Edit(){
             />
 
             <div className={`areaLine ${styles.text}`}>
-                <input className={styles.header} maxLength="100" placeholder="Header" onChange={e => {e.target.value = e.target.value.replace('_', ' '); setHeader(e.target.value);}}/>
+                <input className={styles.header} maxLength="100" placeholder="Header" onChange={e => {e.target.value = e.target.value.replace(/_/g, ' ');; setHeader(e.target.value);}}/>
                 <div className={styles.body}>
                     <TextareaAutosize 
                         minRows={6}
