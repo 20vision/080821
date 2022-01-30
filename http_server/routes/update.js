@@ -37,8 +37,7 @@ router.post("/username", check.AuthRequired, input_validation.checkRegexUsername
 router.post("/forum/like", check.AuthRequired, async (req, res) => {
     if(!req.body.forumpost_id || !Number.isInteger(req.body.forumpost_id)){
         console.log(req.body.forumpost_id)
-        res.status(422).send('invalid post id')
-        return
+        return res.status(422).send('invalid post id')
     }
     pool.getConnection(async function(err, conn) {
         if (err){

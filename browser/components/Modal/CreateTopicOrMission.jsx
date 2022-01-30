@@ -83,7 +83,6 @@ export default function CreateMission({type}) {
 
     function addTopic(){
         setLoading(true)
-        console.log(router)
         axios.post(`http://localhost:4000/post/topic`,{pagename: router.query.index[0], topicTitle: Title, topicBody: Body, topicThreshold: topicTokenThreshold},{
         withCredentials: true
         }).then(response => {
@@ -148,7 +147,7 @@ export default function CreateMission({type}) {
                                 return true
                             }}
                             value={topicTokenThreshold} 
-                            onValueChange={value => {setTopicTokenThreshold(value.floatValue);console.log(value);}} 
+                            onValueChange={value => {setTopicTokenThreshold(value.floatValue)}} 
                             allowedDecimalSeparators={','} 
                             placeholder="0" 
                             thousandSeparator=" " 

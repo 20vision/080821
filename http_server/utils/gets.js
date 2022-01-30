@@ -61,6 +61,33 @@ const getMission_s = (conn, unique_pagename, title) => new Promise((resolve, rej
     );
 })
 
+const getTopic_s = ({conn, unique_pagename}) => new Promise((resolve, reject) => {
+    conn.query(
+        `SELECT t.topic_id, t.name, t.description, t.threshold from Topic t 
+        join Page p on t.page_id = p.page_id and p.unique_pagename = ?
+        group by t.topic_id
+        order by (
+            SELECT count(fp2.forumpost_id)* 1 + count(fpl.forum_post_like_id) from ForumPost fp2
+            join ForumPost_Parent fpp on fpp.forumpost_parent_id = fp2.forumpost_parent_id and fpp.parent_type = 't'
+            join Topic t2 on t2.topic_id = fpp.parent_id
+            left join ForumPost_Like fpl on fpl.forumpost_id = fp2.forumpost_id
+            group by fp2.forumpost_id
+        ) desc limit 0,3`,
+        [unique_pagename],
+        function(err, topic_s) {
+            if (err){
+                reject({
+                    status: 500,
+                    message: 'An error occurred'
+                })
+                console.log(err)
+            }else{
+                resolve(topic_s)
+            }
+        }
+    );
+})
+
 const getForumPostParentInfo = (conn, parent_post_id) => new Promise((resolve, reject) => {
     conn.query(
         `SELECT fpp.parent_id, fpp.parent_type, fpp.forumpost_parent_id, fp.left, fp.right, fp.depth from ForumPost_Parent fpp
@@ -128,7 +155,18 @@ const getForumPostParentInfo = (conn, parent_post_id) => new Promise((resolve, r
     );
 })
 
-const getForumPost = ({conn, user_id, forumpost_parent_id, page_id, depth, left, right, offset, parent_id}) => new Promise((resolve, reject) => {
+const getForumPost = ({
+    conn, 
+    user_id, 
+    forumpost_parent_id, 
+    page_id,
+    topic_id, 
+    depth, 
+    left, 
+    right, 
+    offset, 
+    parent_id
+}) => new Promise((resolve, reject) => {
     let base_parameters = []
 
     // Rows
@@ -143,6 +181,7 @@ const getForumPost = ({conn, user_id, forumpost_parent_id, page_id, depth, left,
     if((forumpost_parent_id == null) && (page_id != null)){
         base_parameters.push(page_id)
     }
+    if(topic_id != null) base_parameters.push(topic_id)
 
     // Where
     base_parameters.push(depth)
@@ -175,6 +214,7 @@ const getForumPost = ({conn, user_id, forumpost_parent_id, page_id, depth, left,
         left join ForumPost_Like fpl2 on fpl2.forumpost_id = fp2.forumpost_id
         ${(parent_id != null)?'join ForumPost fp3 on fp3.forumpost_id = ? and fp3.forumpost_parent_id = fp2.forumpost_parent_id and fp3.left < fp2.left and fp3.right > fp2.right':''}
         ${((forumpost_parent_id == null) && (page_id != null))?'join ForumPost_Parent fpp on fpp.forumpost_parent_id = fp2.forumpost_parent_id and fpp.parent_id = ? and fpp.parent_type = \'p\'':''}
+        ${(topic_id != null)?'join ForumPost_Parent fpp on fpp.forumpost_parent_id = fp2.forumpost_parent_id and fpp.parent_id = ? and fpp.parent_type = \'t\'':''}
         where fp2.depth = ?
         ${forumpost_parent_id != null?' and fp2.forumpost_parent_id = ?':''}
         ${left != null?' and fp2.left > ?':''}
@@ -207,6 +247,7 @@ const getForumPost = ({conn, user_id, forumpost_parent_id, page_id, depth, left,
 module.exports = {
     getPageByName,
     getMission_s,
+    getTopic_s,
     getForumPostParentInfo,
     getForumPost
 }

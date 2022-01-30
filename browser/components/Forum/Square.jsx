@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 
 export default function Square({content}){
     return(
-        <div className={styles.container} style={{backgroundColor: `${content.page?'#444':content.mission?'#696969ce':null}`}}>
+        <div className={styles.container} style={{backgroundColor: `${content.page?'#444':content.mission?'#696969ce':content.topic?'#696969ce':null}`}}>
             {content.page?
                 <div className={styles.header} style={{display: 'flex'}}>
                     {(content.page.page_icon.length < 7) ?
@@ -25,6 +25,10 @@ export default function Square({content}){
                 <div style={{display: 'flex'}} className={`${styles.header} ${!content.page?styles.fontColor:null}`}>
                     <h2>Mission · {content.mission.title}</h2>
                 </div>
+            :content.topic?
+                <div style={{display: 'flex'}} className={`${styles.header} ${!content.page?styles.fontColor:null}`}>
+                    <h2>Topic · {content.topic.name}</h2>
+                </div>
             :
                 null
             }
@@ -33,6 +37,8 @@ export default function Square({content}){
                     content.page.vision
                 :content.mission?
                     content.mission.description
+                :content.topic?
+                    content.topic.description
                 :
                     null
                 }

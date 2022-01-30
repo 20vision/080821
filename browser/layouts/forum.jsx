@@ -6,6 +6,7 @@ import { useRouter } from "next/router";
 import NavPanel from "../components/NavPanel/Index"
 import { useState, useEffect } from 'react'
 import ResizeObserver, { useResizeDetector } from 'react-resize-detector';
+import Link from "next/link";
 
 export default function PageLayout( {children, page, missions} ) {
     return (
@@ -42,7 +43,6 @@ var Panel = onClickOutside(({children}) => {
             setMinHeight(height)
         }
     }, [height])
-
     return(
         <div className={`hideScrollBar ${styles.child}`}>
             <div className={`${styles.menuContainer} ${menuStyle.container}`}>
@@ -68,7 +68,7 @@ var Panel = onClickOutside(({children}) => {
                             <h2>Missions</h2>
                         </div>
                     </a>
-                    <a>
+                    <a href={`/forum/${router.query.index[0]}/topics`}>
                         <div className={`${styles.button} ${router.query.index[1]=="topics"?styles.selected:null}`}>
                             <div className={styles.highlight}/>
                             <h2>Topics</h2>

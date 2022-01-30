@@ -161,14 +161,14 @@ router.get("/forum/:unique_pagename/page", check.AuthOptional, async (req, res) 
                             res.status(400).send('An error occurred')
                         }else{
                             tree_count = query_tree_count[0].tree_count
-                            if(!tree_count) return
+                            if(!tree_count) return res.json({page: pageByName.page,tree_count: 0,content: []})
                             try{
                                 let new__main_content = await gets.getForumPost({conn: conn, user_id: req.user_id, page_id: pageByName.page_id, 
                                     depth: 0, 
                                     left: null,
                                     right: null})
                                 if(new__main_content.length == 0){
-                                    return;
+                                    return res.json({page: pageByName.page,tree_count: tree_count?tree_count:0,content: []});
                                 }else{
                                     content.push(new__main_content)
                                     for(var i = 0; i <= 5; i++){
@@ -219,8 +219,7 @@ router.get("/forum/:unique_pagename/posts/:forumpost_parent_id", check.AuthOptio
     (req.query.offset && isNaN(req.query.offset)) ||
     ((parseInt(req.query.depth) == 0 && req.query.parent_id == null) || req.query.parent_id && isNaN(req.query.parent_id))
     ){
-        res.status(422).send('Invalid query parameter')
-        return
+        return res.status(422).send('Invalid query parameter')
     }
 
     console.log(req.query)
@@ -314,9 +313,80 @@ router.get("/forum/:unique_pagename/mission/:mission_title", async (req, res) =>
     })
 })
 // Only Topic related
-router.get("/forum/:unique_pagename/topics/:topic_name", async (req, res) => {
-    console.log('route not ready yet')
-    res.status(404).send('not ready yet')
+router.get("/forum/:unique_pagename/topics", async (req, res) => {
+    pool.getConnection(async function(err, conn) {
+        if (err){
+            res.status(500).send('An error occurred')
+            console.log(err)
+        }else{
+            try{
+                const pageByName = await gets.getPageByName(conn, req.params.unique_pagename)
+                let topics = await gets.getTopic_s({conn: conn, unique_pagename: req.params.unique_pagename});
+                if(topics.length == 0) return res.json({page: pageByName.page,tree_count: 0, topics: [],content: []})
+                let tree_count = 0
+                let content = []
+                conn.query(`SELECT count(fpp.forumpost_parent_id) as tree_count from ForumPost_Parent fpp 
+                join Topic t on fpp.parent_type = 't' and fpp.parent_id = t.topic_id and t.page_id = ?`,
+                    [req.params.unique_pagename],
+                    async function(err, query_tree_count) {
+                        if (err){
+                            console.log(err)
+                            res.status(400).send('An error occurred')
+                        }else{
+                            tree_count = query_tree_count[0].tree_count
+                            if(!tree_count){
+                                return res.json({page: pageByName.page,tree_count: 0, topics: topics,content: []})
+                            }
+                            try{
+                                let new__main_content = await gets.getForumPost({
+                                    conn: conn, 
+                                    user_id: req.user_id, 
+                                    topic_id: topics[0].topic_id, 
+                                    depth: 0})
+                                if(new__main_content.length == 0){
+                                    return res.json({page: pageByName.page,tree_count: tree_count?tree_count:0,content: []});
+                                }else{
+                                    content.push(new__main_content)
+                                    for(var i = 0; i <= 5; i++){
+                                        const new_content_array = await gets.getForumPost({
+                                            conn: conn,
+                                            user_id: req.user_id,
+                                            forumpost_parent_id: new__main_content[0].forumpost_parent_id,
+                                            depth: i+1,
+                                            left: content[content.length-1][0].left,
+                                            right: content[content.length-1][0].right
+                                        })
+                                        if(new_content_array.length == 0) break
+                                        new_content_array.forEach(function (new_content){
+                                            if(new_content.right + 1 == content[i][0].right){
+                                                new_content.next = false
+                                            }else{
+                                                new_content.next = true
+                                            }
+                                        })
+                                        content.push(new_content_array)
+                                    }
+                                }
+                            }catch{
+                                console.log(err)
+                                res.status(err.status).send(err.message)
+                            }
+                            res.json({
+                                page: pageByName.page,
+                                topics: topics,
+                                tree_count: tree_count?tree_count:0,
+                                content: content
+                            })
+                        }
+                    }
+                );
+            }catch(err){
+                console.log(err)
+                res.status(err.status).send(err.message)
+            }
+        }
+        pool.releaseConnection(conn);
+    })
 })
 // Only Paper related
 router.get("/forum/:unique_pagename/papers/:uid", async (req, res) => {

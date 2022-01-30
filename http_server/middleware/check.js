@@ -73,8 +73,7 @@ exports.AuthRequired = function(req, res, next) {
 
 exports.role_any = function(req, res, next) {
     if((req.params.page_name == null) && (req.body.pagename == null)) {
-        res.status(422).send('Pagename missing')
-        return
+        return res.status(422).send('Pagename missing')
     }
     req.pagename = req.params.page_name?req.params.page_name:req.body.pagename?req.body.pagename:null
     pool.query(
@@ -149,12 +148,10 @@ exports.fundTransaction = function(req, res, next) {
     let txInstructionProgramId = tx.instructions[0].programId
 
     if(txInstructionData[0] != 0){
-        res.status(422).send('Invalid Instruction Data');
-        return
+        return res.status(422).send('Invalid Instruction Data');
     }
     if (txInstructionProgramId.toString() != '969cdvMTsXAs2QfCFvGb2TmaR9gbFvMjRfG8u5v1if3d'){
-        res.status(422).send('Invalid Program Id');
-        return
+        return res.status(422).send('Invalid Program Id');
     }
 
 
@@ -172,24 +169,19 @@ exports.fundTransaction = function(req, res, next) {
     let mintSignature = txSignatures[1].publicKey.toString()
 
     if((tx.feePayer.toString() != payerSignature) && (payerSignature != payer)){
-        res.status(422).send('Invalid Payer Info')
-        return
+        return res.status(422).send('Invalid Payer Info')
     }
     if(mintSignature != new_mint){
-        res.status(422).send('Invalid Mint Info')
-        return
+        return res.status(422).send('Invalid Mint Info')
     }
     if(system_program.toString()!= '11111111111111111111111111111111'){
-        res.status(422).send('Invalid System Program Id')
-        return
+        return res.status(422).send('Invalid System Program Id')
     }
     if(token_program.toString()!= 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'){
-        res.status(422).send('Invalid Token Program Id')
-        return
+        return res.status(422).send('Invalid Token Program Id')
     }
     if(rent_sysvar.toString()!= 'SysvarRent111111111111111111111111111111111'){
-        res.status(422).send('Invalid Rent Sysvar Id')
-        return
+        return res.status(422).send('Invalid Rent Sysvar Id')
     }
 
     pool.query(
@@ -197,22 +189,18 @@ exports.fundTransaction = function(req, res, next) {
         [req.body.unique_pagename, fee_collector],
         function(err, results) {
             if (err){
-                res.status(500).send('An Error Occurred')
                 console.log(err)
-                return
+                return res.status(500).send('An Error Occurred')
             }else{
                 console.log(results)
                 if(!results || !results[0]){
-                    res.status(404).send('Page Not Found')
-                    return
+                    return res.status(404).send('Page Not Found')
                 }
                 if(results[0].role != 1){
-                    res.status(422).send('Invalid Fee Collector')
-                    return
+                    return res.status(422).send('Invalid Fee Collector')
                 }
                 if(results[0].token_mint_address != null){
-                    res.status(422).send('Token has already been funded')
-                    return
+                    return res.status(422).send('Token has already been funded')
                 }
                 req.mint = new_mint;
                 next()

@@ -149,9 +149,8 @@ router.post("/fundPageToken", check.AuthRequired, check.fundTransaction, async (
             [req.mint, req.body.unique_pagename],
             function(err, results) {
                 if (err){
-                    res.status(500).send('An error occurred')
                     console.log(err)
-                    return
+                    return res.status(500).send('An error occurred')
                 }else{
                     console.log(results)
                     res.status(200).send()
@@ -159,8 +158,7 @@ router.post("/fundPageToken", check.AuthRequired, check.fundTransaction, async (
             }
         );
     }catch(err){
-        res.status(422).send('Transaction Error')
-        return
+        return res.status(422).send('Transaction Error')
     }
 });
 

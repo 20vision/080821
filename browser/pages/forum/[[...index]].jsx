@@ -49,7 +49,6 @@ export default function index({root, ssrContent, ssrTreeCount}) {
     if(profile.username != null){
       try{
         const query = (await axios.get(`http://localhost:4000/get${router.asPath}`,{withCredentials: true})).data
-        console.log(query.content)
         setTreeCount(query.tree_count)
         setDataset(query.content)
       }catch(err){
@@ -191,6 +190,7 @@ export default function index({root, ssrContent, ssrTreeCount}) {
     <ForumLayout>
       <Square content={{page:root.page}}/>
       {root.mission?<Square content={{mission:root.mission}}/>:null}
+      {root.topics?<Square content={{topic:root.topics[0]}}/>:null}
       {/*.slice(0,selectionLeftRightArray.length)*/}
       {dataset && filteredContent && filteredContent.map((js, i) => {
 
@@ -417,6 +417,7 @@ export async function getServerSideProps(context) {
       props: {
         root:{
           page: res.data.page,
+          topics: res.data.topics?res.data.topics:null,
           mission: res.data.mission?res.data.mission:null
         },
         ssrContent: res.data.content?res.data.content:null,
