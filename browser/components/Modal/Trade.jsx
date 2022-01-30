@@ -235,8 +235,8 @@ export default function Trade() {
           withCredentials: true
         }
         ).then(async response => {
-          if(response.data.public_key){
-            setFeeCollector(new PublicKey(response.data.public_key))
+          if(response.data.fee_collector){
+            setFeeCollector(new PublicKey(response.data.fee_collector))
           }
           if(response.data.token_mint_address){
             setMint(new PublicKey(response.data.token_mint_address))
@@ -709,7 +709,7 @@ export default function Trade() {
         :
         <>
           <span>
-            Voice Tokens at it's core are a Feedback-loop. They help holders to shape the future of a Page. 
+            Page Tokens at it's core are a Feedback-loop. They help holders to shape the future of a Page. 
             Tokens influence the reach of page related <a 
             style={{textDecoration: 'underline'}}
             href={`/forum/${queryRoute}`}>Forum</a> posts. Also Forum topics can have a certain Threshold to be able to post to.

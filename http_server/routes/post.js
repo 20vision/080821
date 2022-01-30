@@ -48,7 +48,7 @@ router.post("/create_page", check.AuthRequired, input_validation.checkRegexPagen
     }
 });
 
-router.post("/mission", check.AuthRequired, check.role, input_validation.checkUniqueMissionTitle, input_validation.missionBody_and_forumPost, async (req, res) => {
+router.post("/mission", check.AuthRequired, check.role_any, input_validation.checkUniqueMissionTitle, input_validation.missionBody_topicBody_forumPost, async (req, res) => {
     if(req.user_id){
         pool.getConnection(function(err, conn) {
             if (err){
@@ -80,6 +80,47 @@ router.post("/mission", check.AuthRequired, check.role, input_validation.checkUn
             }
             pool.releaseConnection(conn);
         })
+    }else{
+        res.status(401).send('Not authenticated')
+    }
+});
+
+router.post("/topic", check.AuthRequired, check.role_any, input_validation.checkUniqueTopicTitle, input_validation.missionBody_topicBody_forumPost, async (req, res) => {
+    if(req.user_id){
+        if((req.body.topicThreshold != null) && (isNaN(req.body.topicThreshold) || (req.body.topicThreshold.length > 25))){
+            res.status(422).send('Invalid Token Entry')
+        }else{
+            pool.getConnection(function(err, conn) {
+                if (err){
+                    res.status(500).send('An error occurred')
+                    console.log(err)
+                }else{
+                    conn.query(
+                        'SELECT p.page_id from Page p join PageUser pu on pu.page_id = p.page_id and pu.user_id = ? and p.unique_pagename = ?;',
+                        [req.user_id, req.body.pagename],
+                        function(err, results) {
+                            if (err){
+                                res.status(500).send('An error occurred')
+                                console.log(err)
+                            }else if(results.length > 0){
+                                const topicTitle = req.body.topicTitle.replace(' ', '_')
+                                conn.query(
+                                    'INSERT INTO Topic values (?,?,?,?,?,now());',
+                                    [null, results[0].page_id, topicTitle, req.body.topicBody, req.body.topicThreshold?req.body.topicThreshold:'0', null],
+                                    function(err, results) {
+                                        if (err) throw err
+                                        res.status(200).send()
+                                    }
+                                );
+                            }else{
+                                res.status(403).send('Permission denied')
+                            }
+                        }
+                    );
+                }
+                pool.releaseConnection(conn);
+            })
+        }
     }else{
         res.status(401).send('Not authenticated')
     }
@@ -123,7 +164,7 @@ router.post("/fundPageToken", check.AuthRequired, check.fundTransaction, async (
     }
 });
 
-router.post("/forum/:unique_pagename/page", check.AuthRequired, input_validation.missionBody_and_forumPost, input_validation.hex_color, async (req, res) => {
+router.post("/forum/:unique_pagename/page", check.AuthRequired, input_validation.missionBody_topicBody_forumPost, input_validation.hex_color, async (req, res) => {
     pool.getConnection(async function(err, conn) {
         if (err){
             res.status(500).send('An error occurred')
@@ -146,7 +187,7 @@ router.post("/forum/:unique_pagename/page", check.AuthRequired, input_validation
     })
 })
 
-router.post("/forum/:unique_pagename/post/:parent_forumpost_id", check.AuthRequired, input_validation.missionBody_and_forumPost, input_validation.hex_color, async (req, res) => {
+router.post("/forum/:unique_pagename/post/:parent_forumpost_id", check.AuthRequired, input_validation.missionBody_topicBody_forumPost, input_validation.hex_color, async (req, res) => {
     pool.getConnection(async function(err, conn) {
         if (err){
             res.status(500).send('An error occurred')
@@ -170,7 +211,7 @@ router.post("/forum/:unique_pagename/post/:parent_forumpost_id", check.AuthRequi
     })
 })
 
-// router.post("/forum", check.AuthRequired, input_validation.missionBody_and_forumPost, async (req, res) => {
+// router.post("/forum", check.AuthRequired, input_validation.missionBody_topicBody_forumPost, async (req, res) => {
 //     // // Main_Forum_Post_Adjacency_List -> parent_type -> 0=page, 1=mission, 2=topics, 3=paper
 //     // console.log(req)
 //     // pool.getConnection(async function(err, conn) {

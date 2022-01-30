@@ -71,6 +71,34 @@ exports.vision = function(req, res, next) {
     }
 };
 
+exports.checkUniqueTopicTitle = function(req, res, next) {
+    if(req.params.topic_title){
+        req.topic_title = req.params.topic_title
+    }else if(req.body.topicTitle){
+        req.topic_title = req.body.topicTitle
+    }
+    if(req.params.pagename){
+        req.pagename = req.params.pagename
+    }else if(req.body.pagename){
+        req.pagename = req.body.pagename
+    }
+
+    pool.query("SELECT if(count(t.topic_id)>0,false,true) as uniqueTopic from Topic t join Page p on p.page_id = t.page_id where t.name = ? and p.unique_pagename = ?", 
+    [req.topic_title, req.pagename], 
+    function(err, rows, fields) {
+        try{
+            if(rows[0].uniqueTopic == true){
+                next();
+            }else{
+                res.status(422).send("Mission Title already taken")
+            }
+        }catch(err){
+            res.status(500).send()
+            throw err;
+        }
+    });
+}
+
 exports.checkUniqueMissionTitle = function(req, res, next) {
     if(req.params.mission_title){
         req.mission_title = req.params.mission_title
@@ -100,12 +128,14 @@ exports.checkUniqueMissionTitle = function(req, res, next) {
     });
 };
 
-exports.missionBody_and_forumPost = function(req, res, next) {
+exports.missionBody_topicBody_forumPost = function(req, res, next) {
     let content = 
     req.body.missionBody?
         req.body.missionBody
     :req.body.forum_post?
         req.body.forum_post
+    :req.body.topicBody?
+        req.body.topicBody
     :
         null
 

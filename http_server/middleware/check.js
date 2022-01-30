@@ -71,27 +71,29 @@ exports.AuthRequired = function(req, res, next) {
 }
 
 
-exports.role = function(req, res, next) {
-    if(req.query.role){
-        pool.query(
-            'SELECT pu.role FROM PageUser pu join Page p on p.page_id = pu.page_id and pu.user_id = ? and p.unique_pagename = ?;',
-            [req.user_id, req.params.page_name],
-            function(err, results) {
-                if (err){
-                    res.status(500).send('An error occurred')
-                    console.log(err)
+exports.role_any = function(req, res, next) {
+    if((req.params.page_name == null) && (req.body.pagename == null)) {
+        res.status(422).send('Pagename missing')
+        return
+    }
+    req.pagename = req.params.page_name?req.params.page_name:req.body.pagename?req.body.pagename:null
+    pool.query(
+        'SELECT pu.role FROM PageUser pu join Page p on p.page_id = pu.page_id and pu.user_id = ? and p.unique_pagename = ?;',
+        [req.user_id, req.pagename],
+        function(err, results) {
+            if (err){
+                res.status(500).send('An error occurred')
+                console.log(err)
+            }else{
+                console.log(results)
+                if(results[0] && (results[0].role != null)){
+                    next();
                 }else{
-                    if(results[0] && results[0].role && (results[0].role >= parseInt(req.query.role))){
-                        next();
-                    }else{
-                        res.status(403).send('Permission denied')
-                    }
+                    res.status(403).send('Permission denied')
                 }
             }
-        );
-    }else{
-        next();
-    }
+        }
+    );
 }
 
 exports.paperAuth = function(req, res, next) {

@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import TextareaAutosize from 'react-textarea-autosize';
-import styles from '../../styles/modal/createMission.module.css'
+import styles from '../../styles/modal/createTopicOrMission.module.css'
 import Loading from '../../assets/Loading/Loading'
 import axios from 'axios'
 import { useModalStore } from '../../store/modal'
@@ -19,6 +19,7 @@ export default function CreateMission({type}) {
     const [validBody, setValidBody] = useState(false)
     const [errorMsg, setErrorMsg] = useState('')
     const [timer, setTimer] = useState(null)
+    const [topicTokenThreshold, setTopicTokenThreshold] = useState()
     const router = useRouter()
     const setModal = useModalStore(state => state.setModal)
     const page = usePageSelectedStore(state => state.page)
@@ -40,7 +41,7 @@ export default function CreateMission({type}) {
                     setErrorMsg(Title+' is not a valid mission')
                     setLoading(false)
                 }else{
-                    axios.get(`http://localhost:4000/get/mission_title_unique/${router.query.page}/${Title}`,{
+                    axios.get(`http://localhost:4000/get/${type=='mission'?'mission_title_unique':type=='topic'?'topic_title_unique':null}/${router.query.page}/${Title}`,{
                     withCredentials: true
                     }).then(response => {
                         setValidTitle(true)
@@ -69,7 +70,7 @@ export default function CreateMission({type}) {
         axios.post(`http://localhost:4000/post/mission`,{pagename: router.query.page, missionTitle: Title, missionBody: Body},{
         withCredentials: true
         }).then(response => {
-            router.push(`${router.query.page}/${Title.replace(' ', '_').toLowerCase()}`)
+            router.push(`/forum/${router.query.page}/mission/${Title.replace(' ', '_').toLowerCase()}`)
             setModal(0)
         })
         .catch(error =>{
@@ -83,10 +84,10 @@ export default function CreateMission({type}) {
     function addTopic(){
         setLoading(true)
         console.log(router)
-        axios.post(`http://localhost:4000/post/topic`,{pagename: router.query.index[0], topicTitle: Title, topicBody: Body},{
+        axios.post(`http://localhost:4000/post/topic`,{pagename: router.query.index[0], topicTitle: Title, topicBody: Body, topicThreshold: topicTokenThreshold},{
         withCredentials: true
         }).then(response => {
-            router.push(`${router.query.index[0]}/${Title.replace(' ', '_').toLowerCase()}`)
+            router.push(`/forum/${router.query.index[0]}/topic/${Title.replace(' ', '_').toLowerCase()}`)
             setModal(0)
         })
         .catch(error =>{
@@ -102,6 +103,7 @@ export default function CreateMission({type}) {
             <h1 style={{marginBottom: '35px', textAlign: 'center'}}>
                 {type.charAt(0).toUpperCase() + type.slice(1)}
             </h1>
+
             <div className='areaLine'>
                 <input maxLength="100" ref={TitleRef} placeholder={type.charAt(0).toUpperCase() + type.slice(1)+" Title"} onChange={e => {e.target.value = e.target.value.replace('_', ' '); setTitle(e.target.value);}}/>
                 <div className={styles.body}>
@@ -112,43 +114,54 @@ export default function CreateMission({type}) {
                             type == 'mission'?
                                 "Missions seperate your Vision into executable actions and explain how you are working towards your Vision."
                             :
-                                "Create Topics where users can post related content. Topics can have a Voice Token threshold to be able to post."
+                                "Create Topics where users can post related content if their token balance is above the threshold."
                             }
                         onChange={e => {setBody(e.target.value);}}
                     />
                 </div>
             </div>
             <div className={`${(Body.length > 280)?styles.invalidVision:null} ${styles.visionCount}`}>{280 - Body.length}</div>
-
+            
+                            
             {type=='topic'?
-                <div style={{display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: '30px'}}>
-                    <div style={{transform: 'scale(0.8)'}}>
-                        {page.page_icon.length > 6 ?
-                            <img src={page.page_icon}/>
-                        :
-                            <PageIcon color={'#'+page.page_icon}/>
-                        }
+                <div className={styles.topicContainer}>
+                    <div style={{fontSize: 12, fontWeight: 'bold', color: '#696969ce', marginLeft: '5px'}}>Token Threshold</div>
+                    <div className={styles.topicChild}>
+                        <div style={{transform: 'scale(0.8)'}}>
+                            {page.page_icon.length > 6 ?
+                                <img src={page.page_icon}/>
+                            :
+                                <PageIcon color={'#'+page.page_icon}/>
+                            }
+                        </div>
+                        <NumberFormat style={{
+                                fontSize:'20px',
+                                lineHeight: '20px',
+                                fontWeight: '400',
+                                marginRight: '15px',
+                                textAlign: 'end',
+                                width: 250
+                            }}
+                            isAllowed={value=> {
+                                let count = value.value.split('.')
+                                if((count[0] && count[0].length > 15) || (count[1] && count[1].length > 9)) return false
+                                return true
+                            }}
+                            value={topicTokenThreshold} 
+                            onValueChange={value => {setTopicTokenThreshold(value.floatValue)}} 
+                            allowedDecimalSeparators={','} 
+                            placeholder="0" 
+                            thousandSeparator=" " 
+                            allowNegative={false} 
+                            decimalSeparator="."
+                        />
                     </div>
-                    <NumberFormat style={{
-                            fontSize:'20px',
-                            lineHeight: '20px',
-                            fontWeight: '400',
-                            marginRight: '15px',
-                            textAlign: 'end',
-                            width: 250
-                        }} value={0} 
-                        onValueChange={value => {}} 
-                        allowedDecimalSeparators={','} 
-                        placeholder="0" 
-                        thousandSeparator=" " 
-                        allowNegative={false} 
-                        decimalSeparator="."
-                    />
                 </div>
             :
                 null
             }
-            
+
+
             <div className={styles.errorMsg}>
                 {errorMsg}
             </div>

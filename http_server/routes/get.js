@@ -20,6 +20,10 @@ router.get("/mission_title_unique/:pagename/:mission_title", input_validation.ch
     res.status(200).send()
 });
 
+router.get("/topic_title_unique/:pagename/:topic_title", input_validation.checkUniqueTopicTitle, async (req, res) => {
+    res.status(200).send()
+});
+
 router.get("/my_pages/:page", check.AuthRequired, async (req, res) => {
     if(req.user_id){
         pool.query(
@@ -77,7 +81,7 @@ router.get("/user_profile", check.AuthOptional, async (req, res) => {
 
 // PUBLIC //////////////////////////////////////////////////
 
-router.get("/page/:page_name", check.AuthOptional, check.role, async (req, res) => {
+router.get("/page/:page_name", check.AuthOptional, check.role_any, async (req, res) => {
     pool.getConnection(async function(err, conn) {
         if (err){
             res.status(500).send('An error occurred')
@@ -99,7 +103,7 @@ router.get("/page/:page_name", check.AuthOptional, check.role, async (req, res) 
     })
 })
 
-router.get("/page/:page_name/trade_info", check.AuthOptional, check.role, async (req, res) => {
+router.get("/page/:page_name/trade_info", check.AuthOptional, async (req, res) => {
     pool.getConnection(async function(err, conn) {
         if (err){
             res.status(500).send('An error occurred')
@@ -115,7 +119,7 @@ router.get("/page/:page_name/trade_info", check.AuthOptional, check.role, async 
                     }else{
                         if(result && result[0] && result[0].public_key){
                             res.json({
-                                public_key: result[0].public_key,
+                                fee_collector: result[0].public_key,
                                 token_mint_address: result[0].token_mint_address,
                             })
                         }else{
@@ -274,7 +278,7 @@ router.get("/forum/:unique_pagename/replies/:parent_post_id", check.AuthOptional
 })
 
 // Only Mission related
-router.get("/forum/:unique_pagename/missions/:mission_title", async (req, res) => {
+router.get("/forum/:unique_pagename/mission/:mission_title", async (req, res) => {
     pool.getConnection(async function(err, conn) {
         if (err){
             res.status(500).send('An error occurred')
