@@ -17,10 +17,14 @@ import usePaperSocket from '../../hooks/Socket/usePaperSocket'
 import Link from 'next/link'
 
 import { useEffect, useState } from 'react'
+import { usePageSelectedStore } from '../../store/pageSelected'
 
 export default function Index() {
     const [profile, isLoading, setUser] = useUserProfile()
     const router = useRouter()
+    const page = usePageSelectedStore(state => state.page)
+
+    if(!page && (router.pathname.split('/')[1] == 'forum')) return(<></>)
 
     return (
         <>

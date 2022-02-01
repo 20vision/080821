@@ -8,7 +8,7 @@ import { Token, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/sp
 import { getBigNumber, connection, MINT_LAYOUT, ACCOUNT_LAYOUT, VISION_PROGRAM_ID } from '../../hooks/web3/useContract';
 import millify from "millify";
 
-export default function Square({content}){
+export default function Square({content, makeScroll, isInTheBackground}){
     const [mint, setMint] = useState(content.page?content.page.token_mint_address:null)
     const [tokenBalance, setTokenBalance] = useState(null)
     const [tokenBalanceSocketId, setTokenBalanceSocketId] = useState()
@@ -51,7 +51,7 @@ export default function Square({content}){
 
 
     return(
-        <div className={styles.container} style={{backgroundColor: `${content.page?'#FAFAFA':content.mission?'#696969ce':content.topic?'#CECECE':null}`}}>
+        <div onWheel={info => makeScroll(info)} className={styles.container} style={{backgroundColor: `${content.page?'#FAFAFA':content.mission?'#696969ce':content.topic?'#CECECE':null}`}}>
             {content.page?
                 <div className={styles.header} style={{display: 'flex'}}>
                     {(content.page.page_icon.length < 7) ?
@@ -60,13 +60,13 @@ export default function Square({content}){
                         <img src={content.page.page_icon}/>
                     }
                     <div className={styles.pageNameDiv} style={{fontWeight: 'bold', fontSize: 12}}>
-                        <h3 style={{color: '#444', marginTop: '5px', marginBottom: 2}}>
+                        <h3 style={{color: '#444', marginTop: 4, marginBottom: 4}}>
                             /{content.page.unique_pagename}
                         </h3>
-                        <span style={{color: '#444'}}>
+                        <span style={{color: '#444', opacity: 0.6}}>
                             Balance: &nbsp;
                         </span>
-                        <span style={{color: '#FF5B77'}}>
+                        <span style={{color: '#444', opacity: 0.6}}>
                             {tokenBalance?tokenBalance:'?'}
                         </span>
                     </div>
@@ -76,20 +76,19 @@ export default function Square({content}){
                     <h2>Mission · {content.mission.title}</h2>
                 </div>
             :content.topic?
-                <div style={{display: 'flex', alignItems: 'center'}} className={`${styles.header}`}>
-                    <div style={{display: 'flex', alignItems: 'center'}}>
-                        <div style={{transform: 'scale(0.72)', display: 'flex', justifyContent: 'center', alignItems: 'center'}}>
-                            <Lock stroke='4' color='#FF5B77'/>
-                        </div>
-                        <h2 style={{color: '#FF5B77', marginTop: 3}}>{content.topic.threshold}</h2>
-                        <h2 style={{color: '#444'}}>&nbsp;·&nbsp;{content.topic.name}</h2>
+                <div className={`${styles.header}`}>
+                    <h2 style={{color: '#444'}}>{content.topic.name}</h2>
+                    <div style={{display: 'flex', alignItems: 'center', marginTop: '5px'}}>
+                        <Lock size='16' stroke='3' color='#696969ce'/>&nbsp;<span style={{color: '#696969ce', fontWeight: 'bold', marginTop: '2px'}}>{content.topic.threshold} Token</span>
                     </div>
                 </div>
             :
                 null
             }
-            <div style={{color: '#444'}}>
-                {content.page?
+            <div style={{color: '#444', wordWrap: 'break-word'}}>
+                {isInTheBackground?
+                    null
+                :content.page?
                     content.page.vision
                 :content.mission?
                     content.mission.description

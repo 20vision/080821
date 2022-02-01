@@ -14,18 +14,19 @@ import { useRouter } from 'next/router'
 import { motion, useAnimation } from 'framer-motion';
 import Loading from '../../assets/Loading/Loading';
 import Link from 'next/link';
+import { usePageSelectedStore } from '../../store/pageSelected';
 
 export default function index({ssrContent, ssrTreeCount}) {
   const [profile, isLoading, setUser] = useUserProfile()
   const [editHexColor, setEditHexColor] = useState()
   const router = useRouter()
-  const [dataset, setDataset] = useState([ssrContent])
+  const [dataset, setDataset] = useState(ssrContent)
   const [loading, setLoading] = useState(false)
   const [treeCount, setTreeCount] = useState(ssrTreeCount)
   const [filteredContentCache, setFilteredContentCache] = useState(false)
   const [changeFilteredIndex, setChangeFilteredIndex] = useState(0)
+  const setPageSelection = usePageSelectedStore(state => state.setPageSelection)
   const [filteredContent, setFilteredContent] = useState(() => {
-    console.log(ssrContent)
     let filtered = []
     for(var i=0;i<ssrContent.length;i++){
       filtered[i] = []
@@ -40,10 +41,12 @@ export default function index({ssrContent, ssrTreeCount}) {
     for(var i=0;i<ssrContent.length;i++){
       selectedRoute[i] = 0
     }
+    if(ssrContent.length > 0) setPageSelection(ssrContent[0][selectedRoute[0]])
     return selectedRoute
   })
 
   useEffect(async() => {
+    console.log(dataset)
     if(profile.username != null){
       try{
         const query = (await axios.get(`http://localhost:4000/get${router.asPath}`,{withCredentials: true})).data
@@ -63,7 +66,7 @@ export default function index({ssrContent, ssrTreeCount}) {
     let new_selectedContent = [...JSON.parse(JSON.stringify(selectedContent)).slice(0,i),j]
     let new_dataset = dataset
 
-    if(new_dataset[i][j].left + 1 != new_dataset[i][j].right){
+    if((new_dataset[i][j].left != null) && (new_dataset[i][j].right != null) && (new_dataset[i][j].left + 1 != new_dataset[i][j].right)){
       for(let y=i;y<new_selectedContent.length;y++){
         if((new_dataset[y][new_selectedContent[y]].left + 1 == new_dataset[y][new_selectedContent[y]].right)) break
         let filtered = [];
@@ -83,7 +86,7 @@ export default function index({ssrContent, ssrTreeCount}) {
               withCredentials: true
             })
             if(getPosts.data.length > 0){
-              new_dataset = JSON.parse(JSON.stringify(dataset))
+              new_dataset = JSON.parse(JSON.stringify(new_dataset))
               for(var xs=0;xs<getPosts.data[0].length;xs++){
                 filtered.push(xs+((new_dataset[y+1] != null)?new_dataset[y+1].length:0))
               }
@@ -106,7 +109,7 @@ export default function index({ssrContent, ssrTreeCount}) {
     setDataset(new_dataset)
     setFilteredContent(new_filteredContent)
     setSelectedContent(new_selectedContent)
-
+    setPageSelection(new_dataset[0][new_selectedContent[0]])
     let next_count = 0
     new_filteredContent[i].forEach(y => y>j?next_count+=1:null)
     if((next_count < 2) &&
@@ -132,8 +135,8 @@ export default function index({ssrContent, ssrTreeCount}) {
     resolve()
   })
 
-  const sendPost = (post, hex, index) => {
-    axios.post(`http://localhost:4000/post/forum/${root.page.unique_pagename}/${
+  const sendPost = (post, hex, xurl) => {
+    axios.post(`http://localhost:4000/post/forum/${dataset[0][selectedContent[0]].unique_pagename}/${
       (index==0)?
         (root.mission)?
           'mission'
@@ -143,7 +146,7 @@ export default function index({ssrContent, ssrTreeCount}) {
       }/${
       (index == 0)?
         (root.mission)?
-          root.page.unique_pagename+'/'+root.mission.title
+          content[0][selectedContent[0]].unique_pagename+'/'+content[1][selectedContent[1]].title
         :
           ''
       :dataset[filteredContent.length - 1][selectedContent[filteredContent.length - 1]].forumpost_id
@@ -202,7 +205,6 @@ export default function index({ssrContent, ssrTreeCount}) {
             js={js}
             index={i}
             changeFilteredIndex={changeFilteredIndex}
-            setLoading={setLoading}
             reorder={async arg => {
               setLoading(true)
               await controls.start(ic => {
@@ -234,31 +236,36 @@ export default function index({ssrContent, ssrTreeCount}) {
         <div key={index} style={{width: '100%', display: 'flex', justifyContent: 'center'}}>
           <Loading/>
         </div>
+      :filteredContent.length>0?
+        <motion.div
+          initial={{
+            opacity: 0,
+            y: 20,
+            transition: {type: "spring", duration: 0.3}
+          }}
+          animate={{
+            opacity: 1,
+            y: 0,
+            transition: {type: "spring", delay: (filteredContent.length-1) * 0.1}
+          }}
+        >
+          <BubbleBasicLayout 
+          mirror={(filteredContent.length % 2 == 0)?false:true}
+          color={editHexColor} 
+          profile={profile}
+          makeScroll={() => null}>
+            <BubbleEdit 
+            sendPost={post => sendPost(post, editHexColor, filteredContent.length)} 
+            setEditHexColor={setEditHexColor}
+            clickOutsideBubbleEdit={clickOutsideBubbleEdit}
+            />
+          </BubbleBasicLayout>
+        </motion.div>
       :
-      <motion.div
-        initial={{
-          opacity: 0,
-          y: 20,
-          transition: {type: "spring", duration: 0.3}
-        }}
-        animate={{
-          opacity: 1,
-          y: 0,
-          transition: {type: "spring", delay: (filteredContent.length-1) * 0.1}
-        }}
-      >
-        <BubbleBasicLayout 
-        mirror={(filteredContent.length % 2 == 0)?false:true}
-        color={editHexColor} 
-        profile={profile}
-        makeScroll={() => null}>
-          <BubbleEdit 
-          sendPost={post => sendPost(post, editHexColor, filteredContent.length)} 
-          setEditHexColor={setEditHexColor}
-          clickOutsideBubbleEdit={clickOutsideBubbleEdit}
-          />
-        </BubbleBasicLayout>
-      </motion.div>
+        <div style={{height: 'calc(90vh - 70px)',display:'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center'}}>
+          <h1>&#x1F928;</h1>&nbsp;<h3>Couldn't find the Page you were looking for </h3>
+          
+        </div>
       }
       
     </ForumLayout>
@@ -284,7 +291,7 @@ function Bubble({dataset, index, reorder, js, onClickReply, changeFilteredIndex}
         opacity: 0.3,
         width: '80%',
         zIndex: 0,
-        x: '10%',
+        x: '12%',
         y: `-10%`
       }
     }else if(idx > frontIndex){
@@ -292,7 +299,7 @@ function Bubble({dataset, index, reorder, js, onClickReply, changeFilteredIndex}
         opacity: 0,
         zIndex: 0,
         width: '80%',
-        x: '10%',
+        x: '12%',
         y: 0
       }
     }else{
@@ -341,7 +348,6 @@ function Bubble({dataset, index, reorder, js, onClickReply, changeFilteredIndex}
     <div style={{marginBottom: '55px', position: 'relative', height: frontHeight}}>
       {(js.length != 0) && js.map((j, idx) => {
         if((idx != frontIndex) && (idx != frontIndex+1) && (idx != frontIndex - 1)) return
-        console.log(dataset)
         let cont = dataset[j]
         return(
           <motion.div
@@ -399,8 +405,26 @@ function Bubble({dataset, index, reorder, js, onClickReply, changeFilteredIndex}
                   </a>
                 </ConditionalLink>
               </BubbleBasicLayout>
-              :
-              'other content'
+            :cont.pagename?
+              <Square content={{page: cont}}/>
+            :cont.topic_id?
+              <Square 
+              isInTheBackground={(j != js[frontIndex])}
+              content={{topic: cont}} 
+              makeScroll={scrollInfo => {
+                if((scrollInfo.deltaY > 0) && js[idx+1] != null){
+                  reorder({i: index,j: js[idx+1]})
+                  setFrontIndex(idx+1)
+                }else if((scrollInfo.deltaY < 0) &&
+                js[idx-1] != null){
+                  reorder({i: index,j: js[idx-1]})
+                  setFrontIndex(idx-1)
+                }else{
+                  null
+                }
+              }}/>
+            :
+              null
             }
           </motion.div>
         )

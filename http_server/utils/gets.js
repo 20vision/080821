@@ -201,6 +201,8 @@ const getForumPost = ({
             ,fp2.left
             ,fp2.right
             ,fp2.forumpost_id
+            ,fpp.parent_id
+            ,fpp.parent_type
             ,fp2.forumpost_parent_id
             ,fp2.hex_color
             ,fp2.message
@@ -213,8 +215,9 @@ const getForumPost = ({
         join User u on u.user_id = fp2.user_id
         left join ForumPost_Like fpl2 on fpl2.forumpost_id = fp2.forumpost_id
         ${(parent_id != null)?'join ForumPost fp3 on fp3.forumpost_id = ? and fp3.forumpost_parent_id = fp2.forumpost_parent_id and fp3.left < fp2.left and fp3.right > fp2.right':''}
-        ${((forumpost_parent_id == null) && (page_id != null))?'join ForumPost_Parent fpp on fpp.forumpost_parent_id = fp2.forumpost_parent_id and fpp.parent_id = ? and fpp.parent_type = \'p\'':''}
-        ${(topic_id != null)?'join ForumPost_Parent fpp on fpp.forumpost_parent_id = fp2.forumpost_parent_id and fpp.parent_id = ? and fpp.parent_type = \'t\'':''}
+        ${((forumpost_parent_id == null) && (page_id != null))?'join ForumPost_Parent fpp on fpp.forumpost_parent_id = fp2.forumpost_parent_id and fpp.parent_id = ? and fpp.parent_type = \'p\'':
+        (topic_id != null)?'join ForumPost_Parent fpp on fpp.forumpost_parent_id = fp2.forumpost_parent_id and fpp.parent_id = ? and fpp.parent_type = \'t\'':
+        'join ForumPost_Parent fpp on fpp.forumpost_parent_id = fp2.forumpost_parent_id'}
         where fp2.depth = ?
         ${forumpost_parent_id != null?' and fp2.forumpost_parent_id = ?':''}
         ${left != null?' and fp2.left > ?':''}

@@ -162,14 +162,14 @@ router.get("/forum/:unique_pagename/page", check.AuthOptional, async (req, res) 
                             res.status(400).send('An error occurred')
                         }else{
                             tree_count = query_tree_count[0].tree_count
-                            if(!tree_count) return res.json({page: pageByName.page,tree_count: 0,content: []})
+                            if(!tree_count) return res.json({content: [[pageByName.page]],tree_count: 0})
                             try{
                                 let new__main_content = await gets.getForumPost({conn: conn, user_id: req.user_id, page_id: pageByName.page_id, 
                                     depth: 0, 
                                     left: null,
                                     right: null})
                                 if(new__main_content.length == 0){
-                                    return res.json({page: pageByName.page,tree_count: tree_count?tree_count:0,content: []});
+                                    return res.json({content: [[pageByName.page]],tree_count: tree_count?tree_count:0})
                                 }else{
                                     content.push(new__main_content)
                                     for(var i = 0; i <= 5; i++){
@@ -281,39 +281,41 @@ router.get("/forum/:unique_pagename/replies/:parent_post_id", check.AuthOptional
 
 // Only Mission related
 router.get("/forum/:unique_pagename/mission/:mission_title", async (req, res) => {
-    pool.getConnection(async function(err, conn) {
-        if (err){
-            res.status(500).send('An error occurred')
-            console.log(err)
-        }else{
-            try{
-                const pageByName = await gets.getPageByName(conn, req.params.unique_pagename)
-                const mission_s = await gets.getMission_s(conn, req.params.unique_pagename, req.params.mission_title)
-                conn.query(
-                    `SELECT fp.forumpost_id, fp.message, u.username, u.profilePicture FROM ForumPost fp 
-                    join User u on u.user_id = fp.user_id 
-                    join ForumPost_Parent fpp on fp.forumpost_parent_id = fpp.forumpost_parent_id and fpp.parent_type = 'm' and fpp.parent_id = ?;`,
-                    [mission_s.mission_id],
-                    function(err, content) {
-                        if (err){
-                            res.status(500).send('An error occurred')
-                            console.log(err)
-                        }else{
-                            res.json({
-                                page: pageByName.page,
-                                mission: mission_s.mission,
-                                content: content
-                            })
-                        }
-                    }
-                );
-            }catch(err){
-                console.log(err)
-                res.status(err.status).send(err.message)
-            }
-        }
-        pool.releaseConnection(conn);
-    })
+    res.status(404).send('Not finished yet')
+    console.log('Route not finished')
+    // pool.getConnection(async function(err, conn) {
+    //     if (err){
+    //         res.status(500).send('An error occurred')
+    //         console.log(err)
+    //     }else{
+    //         try{
+    //             const pageByName = await gets.getPageByName(conn, req.params.unique_pagename)
+    //             const mission_s = await gets.getMission_s(conn, req.params.unique_pagename, req.params.mission_title)
+    //             conn.query(
+    //                 `SELECT fp.forumpost_id, fp.message, u.username, u.profilePicture FROM ForumPost fp 
+    //                 join User u on u.user_id = fp.user_id 
+    //                 join ForumPost_Parent fpp on fp.forumpost_parent_id = fpp.forumpost_parent_id and fpp.parent_type = 'm' and fpp.parent_id = ?;`,
+    //                 [mission_s.mission_id],
+    //                 function(err, content) {
+    //                     if (err){
+    //                         res.status(500).send('An error occurred')
+    //                         console.log(err)
+    //                     }else{
+    //                         res.json({
+    //                             page: pageByName.page,
+    //                             mission: mission_s.mission,
+    //                             content: content
+    //                         })
+    //                     }
+    //                 }
+    //             );
+    //         }catch(err){
+    //             console.log(err)
+    //             res.status(err.status).send(err.message)
+    //         }
+    //     }
+    //     pool.releaseConnection(conn);
+    // })
 })
 // Only Topic related
 router.get("/forum/:unique_pagename/topics", async (req, res) => {
@@ -325,7 +327,7 @@ router.get("/forum/:unique_pagename/topics", async (req, res) => {
             try{
                 const pageByName = await gets.getPageByName(conn, req.params.unique_pagename)
                 let topics = await gets.getTopic_s({conn: conn, unique_pagename: req.params.unique_pagename});
-                if(topics.length == 0) return res.json({page: pageByName.page,tree_count: 0, topics: [],content: []})
+                if(topics.length == 0) return(res.json({content: [[pageByName.page]],tree_count: tree_count?tree_count:0}))
                 let tree_count = 0
                 let content = []
                 conn.query(`SELECT count(fpp.forumpost_parent_id) as tree_count from ForumPost_Parent fpp 
@@ -338,7 +340,10 @@ router.get("/forum/:unique_pagename/topics", async (req, res) => {
                         }else{
                             tree_count = query_tree_count[0].tree_count
                             if(!tree_count){
-                                return res.json({page: pageByName.page,tree_count: 0, topics: topics,content: []})
+                                return res.json({
+                                    content: [[pageByName.page],topics],
+                                    tree_count: 0
+                                })
                             }
                             try{
                                 let new__main_content = await gets.getForumPost({
@@ -347,7 +352,10 @@ router.get("/forum/:unique_pagename/topics", async (req, res) => {
                                     topic_id: topics[0].topic_id, 
                                     depth: 0})
                                 if(new__main_content.length == 0){
-                                    return res.json({page: pageByName.page,tree_count: tree_count?tree_count:0,content: []});
+                                    return res.json({
+                                        content: [[pageByName.page]],
+                                        tree_count: tree_count?tree_count:0,
+                                    });
                                 }else{
                                     content.push(new__main_content)
                                     for(var i = 0; i <= 5; i++){
@@ -375,10 +383,12 @@ router.get("/forum/:unique_pagename/topics", async (req, res) => {
                                 res.status(err.status).send(err.message)
                             }
                             res.json({
-                                page: pageByName.page,
-                                topics: topics,
+                                content: [
+                                    pageByName.page,
+                                    topics,
+                                    ...content
+                                ],
                                 tree_count: tree_count?tree_count:0,
-                                content: content
                             })
                         }
                     }
