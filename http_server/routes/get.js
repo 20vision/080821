@@ -55,7 +55,7 @@ router.get("/my_pages/:page", check.AuthRequired, async (req, res) => {
 router.get("/user_profile", check.AuthOptional, async (req, res) => {
     if(req.user_id){
         pool.query(
-            'SELECT u.username, u.profilePicture FROM User u where u.user_id = ?;',
+            'SELECT u.username, u.profilePicture, u.public_key FROM User u where u.user_id = ?;',
             [req.user_id],
             function(err, results) {
                 if (err){
@@ -64,7 +64,8 @@ router.get("/user_profile", check.AuthOptional, async (req, res) => {
                 }else{
                     res.json({
                         username: results[0].username,
-                        profilePicture: results[0].profilePicture
+                        profilePicture: results[0].profilePicture,
+                        public_key: results[0].public_key
                     })
                 }
             }
@@ -196,9 +197,11 @@ router.get("/forum/:unique_pagename/page", check.AuthOptional, async (req, res) 
                                 res.status(err.status).send(err.message)
                             }
                             res.json({
-                                page: pageByName.page,
-                                tree_count: tree_count?tree_count:0,
-                                content: content
+                                content: [
+                                    [pageByName.page],
+                                    ...content
+                                ],
+                                tree_count: tree_count?tree_count:0
                             })
                         }
                     }

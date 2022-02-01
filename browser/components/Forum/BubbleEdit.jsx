@@ -42,14 +42,14 @@ export default function BubbleEdit({setEditHexColor, sendPost, clickOutsideBubbl
         <OutsideClickHandler onOutsideClick={() => clickOutsideBubbleEdit()}>
             <div ref={bubbleEditRef} className={styles.container}>
                 <TextareaAutosize
-                    style={{width: '100%'}}
+                    style={{width: '100%', color: '#444', opacity: ((post.length > 280) || (post.length == 0))?'0.5':'1'}}
                     minRows={2}
                     placeholder="Everybody is to a certain extend wrong. Try to make them less wrong."
                     onChange={e => {setPost(e.target.value);}}
                 />
 
                 <div className={styles.footer}>
-                    <div style={{fontSize: '16px', color: (post.length > 280)?'#FF5B77':'#444'}}>
+                    <div style={{fontSize: '16px', color: (post.length > 280)?'#FF5B77':'#444', opacity: (post.length == 0)?'0.5':'1'}}>
                         {280-post.length}
                     </div>
                     <div className={`${((post.length > 280) || (post.length == 0))?'no_shadow_transition':'shadow_small_transition'} ${styles.button}`}>

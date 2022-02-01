@@ -1,12 +1,57 @@
 import styles from '../../styles/forumLayout/square.module.css'
 import PageIcon from '../../assets/PageIcon/PageIcon'
 import Lock from '../../assets/Lock'
-import { useEffect } from 'react'
-import HelpCircle16 from '../../assets/HelpCircle16'
+import { useEffect, useState } from 'react'
+import useUserProfile from '../../hooks/User/useUserProfile'
+import { SYSVAR_RENT_PUBKEY, SystemProgram, PublicKey, Keypair, Transaction,TransactionInstruction,FeeCalculator, sendAndConfirmTransaction, sendAndConfirmRawTransaction, SendTransactionError } from "@solana/web3.js";
+import { Token, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/spl-token"
+import { getBigNumber, connection, MINT_LAYOUT, ACCOUNT_LAYOUT, VISION_PROGRAM_ID } from '../../hooks/web3/useContract';
+import millify from "millify";
 
 export default function Square({content}){
+    const [mint, setMint] = useState(content.page?content.page.token_mint_address:null)
+    const [tokenBalance, setTokenBalance] = useState(null)
+    const [tokenBalanceSocketId, setTokenBalanceSocketId] = useState()
+    const [profile, isLoading, setUser] = useUserProfile()
+
+    useEffect(async() => {
+        if(mint && profile.public_key){
+            try{
+                const associatedUserPubKey = await Token.getAssociatedTokenAddress(ASSOCIATED_TOKEN_PROGRAM_ID,TOKEN_PROGRAM_ID,new PublicKey(mint),new PublicKey(profile.public_key))
+                const associatedUserAccoutInfo = await connection.getAccountInfo(associatedUserPubKey)
+                infoToTokenBalance(associatedUserAccoutInfo)
+                setTokenBalanceSocketId(connection.onAccountChange(
+                    associatedUserPubKey,
+                    async info => {
+                        infoToTokenBalance(info)
+                    },
+                ))
+            }catch(err){
+                console.error(err)
+            }
+          
+        }
+        return () => {
+          if(tokenBalanceSocketId){
+            connection.removeAccountChangeListener(tokenBalanceSocketId)
+          }
+        }
+    }, [mint,profile.public_key])
+
+
+    const infoToTokenBalance = (info) =>{
+        if ((info === null) || (info.lamports == 0) || (!info.owner.equals(TOKEN_PROGRAM_ID)) || (info.data.length != ACCOUNT_LAYOUT.span)) {
+          if(tokenBalance){
+            setTokenBalance(null)
+          }
+        }else{
+          setTokenBalance(millify(getBigNumber(ACCOUNT_LAYOUT.decode(Buffer.from(info.data)).amount) / 1000000000))
+        }
+    }
+
+
     return(
-        <div className={styles.container} style={{backgroundColor: `${content.page?'#444':content.mission?'#696969ce':content.topic?'#CECECE':null}`}}>
+        <div className={styles.container} style={{backgroundColor: `${content.page?'#FAFAFA':content.mission?'#696969ce':content.topic?'#CECECE':null}`}}>
             {content.page?
                 <div className={styles.header} style={{display: 'flex'}}>
                     {(content.page.page_icon.length < 7) ?
@@ -14,31 +59,36 @@ export default function Square({content}){
                     :
                         <img src={content.page.page_icon}/>
                     }
-                    <div className={styles.pageNameDiv}>
-                        <div>
+                    <div className={styles.pageNameDiv} style={{fontWeight: 'bold', fontSize: 12}}>
+                        <h3 style={{color: '#444', marginTop: '5px', marginBottom: 2}}>
                             /{content.page.unique_pagename}
-                        </div>
-                        <span>
-                            Balance: 0
+                        </h3>
+                        <span style={{color: '#444'}}>
+                            Balance: &nbsp;
+                        </span>
+                        <span style={{color: '#FF5B77'}}>
+                            {tokenBalance?tokenBalance:'?'}
                         </span>
                     </div>
                 </div>
             :content.mission?
-                <div style={{display: 'flex'}} className={`${styles.header} ${!content.page?styles.fontColor:null}`}>
+                <div style={{display: 'flex'}} className={`${styles.header}`}>
                     <h2>Mission · {content.mission.title}</h2>
                 </div>
             :content.topic?
-                <div style={{display: 'flex', alignItems: 'center'}} className={`${styles.header} ${!content.page?styles.fontColor:null}`}>
-                    <Lock stroke='3'/>
-                    <h2 style={{color: '#444', marginLeft: '10px', marginTop: '4px'}}>
-                        {content.topic.threshold} · &nbsp;
-                    </h2>
-                    <h2 style={{color: '#444', marginLeft: '5px', marginTop: '4px'}}>{content.topic.name}</h2>
+                <div style={{display: 'flex', alignItems: 'center'}} className={`${styles.header}`}>
+                    <div style={{display: 'flex', alignItems: 'center'}}>
+                        <div style={{transform: 'scale(0.72)', display: 'flex', justifyContent: 'center', alignItems: 'center'}}>
+                            <Lock stroke='4' color='#FF5B77'/>
+                        </div>
+                        <h2 style={{color: '#FF5B77', marginTop: 3}}>{content.topic.threshold}</h2>
+                        <h2 style={{color: '#444'}}>&nbsp;·&nbsp;{content.topic.name}</h2>
+                    </div>
                 </div>
             :
                 null
             }
-            <div className={!content.page?styles.fontColor:null}>
+            <div style={{color: '#444'}}>
                 {content.page?
                     content.page.vision
                 :content.mission?

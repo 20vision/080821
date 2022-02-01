@@ -14,19 +14,18 @@ import { useRouter } from 'next/router'
 import { motion, useAnimation } from 'framer-motion';
 import Loading from '../../assets/Loading/Loading';
 import Link from 'next/link';
-import { usePageSelectedStore } from '../../store/pageSelected';
 
-export default function index({root, ssrContent, ssrTreeCount}) {
+export default function index({ssrContent, ssrTreeCount}) {
   const [profile, isLoading, setUser] = useUserProfile()
   const [editHexColor, setEditHexColor] = useState()
   const router = useRouter()
-  const [dataset, setDataset] = useState(ssrContent)
+  const [dataset, setDataset] = useState([ssrContent])
   const [loading, setLoading] = useState(false)
   const [treeCount, setTreeCount] = useState(ssrTreeCount)
   const [filteredContentCache, setFilteredContentCache] = useState(false)
   const [changeFilteredIndex, setChangeFilteredIndex] = useState(0)
-  const setPageSelection = usePageSelectedStore(state => state.setPageSelection)
   const [filteredContent, setFilteredContent] = useState(() => {
+    console.log(ssrContent)
     let filtered = []
     for(var i=0;i<ssrContent.length;i++){
       filtered[i] = []
@@ -45,7 +44,6 @@ export default function index({root, ssrContent, ssrTreeCount}) {
   })
 
   useEffect(async() => {
-    setPageSelection(root.page)
     if(profile.username != null){
       try{
         const query = (await axios.get(`http://localhost:4000/get${router.asPath}`,{withCredentials: true})).data
@@ -188,12 +186,10 @@ export default function index({root, ssrContent, ssrTreeCount}) {
 
   return (
     <ForumLayout>
-      <Square content={{page:root.page}}/>
-      {root.mission?<Square content={{mission:root.mission}}/>:null}
-      {root.topics?<Square content={{topic:root.topics[0]}}/>:null}
+      {/* <Square content={{page:root.page}}/>
+      {root.mission?<Square content={{mission:root.mission}}/>:null} */}
       {/*.slice(0,selectionLeftRightArray.length)*/}
       {dataset && filteredContent && filteredContent.map((js, i) => {
-
         return(
           <motion.div
           key={i}
@@ -345,6 +341,7 @@ function Bubble({dataset, index, reorder, js, onClickReply, changeFilteredIndex}
     <div style={{marginBottom: '55px', position: 'relative', height: frontHeight}}>
       {(js.length != 0) && js.map((j, idx) => {
         if((idx != frontIndex) && (idx != frontIndex+1) && (idx != frontIndex - 1)) return
+        console.log(dataset)
         let cont = dataset[j]
         return(
           <motion.div
@@ -357,50 +354,54 @@ function Bubble({dataset, index, reorder, js, onClickReply, changeFilteredIndex}
             style={{position: 'absolute', left: 0, right: 0}}
             ref={el => motionRef.current[idx] = el}
           >
-            <BubbleBasicLayout 
-            mirror={(index % 2 == 0)?false:true} color={cont.hex_color}
-            profile={cont}
-            makeScroll={scrollInfo => {
-              if((scrollInfo.deltaY > 0) && js[idx+1] != null){
-                reorder({i: index,j: js[idx+1]})
-                setFrontIndex(idx+1)
-              }else if((scrollInfo.deltaY < 0) &&
-              js[idx-1] != null){
-                reorder({i: index,j: js[idx-1]})
-                setFrontIndex(idx-1)
-              }else{
-                null
-              }
-            }}
-            isInTheBackground={(j != js[frontIndex])}
-            postDate={cont.created}
-            >
-              <ConditionalLink condition={idx!=frontIndex} href={`/forum/${router.query.index[0]}/post/${cont.forumpost_id}`}>
-                <a>
-                  <BubbleView
-                  message={cont.message}
-                  mylike={cont.mylike}
-                  inFront={idx==frontIndex}
-                  setLike={
-                    () => new Promise((resolve, reject) => {
-                      axios.post(`http://localhost:4000/update/forum/like`,
-                      {forumpost_id: cont.forumpost_id}
-                      ,{withCredentials: true}
-                      ).then(async response => {
-                        resolve()
+            {cont.forumpost_id?
+              <BubbleBasicLayout 
+              mirror={(index % 2 == 0)?false:true} color={cont.hex_color}
+              profile={cont}
+              makeScroll={scrollInfo => {
+                if((scrollInfo.deltaY > 0) && js[idx+1] != null){
+                  reorder({i: index,j: js[idx+1]})
+                  setFrontIndex(idx+1)
+                }else if((scrollInfo.deltaY < 0) &&
+                js[idx-1] != null){
+                  reorder({i: index,j: js[idx-1]})
+                  setFrontIndex(idx-1)
+                }else{
+                  null
+                }
+              }}
+              isInTheBackground={(j != js[frontIndex])}
+              postDate={cont.created}
+              >
+                <ConditionalLink condition={idx!=frontIndex} href={`/forum/${router.query.index[0]}/post/${cont.forumpost_id}`}>
+                  <a>
+                    <BubbleView
+                    message={cont.message}
+                    mylike={cont.mylike}
+                    inFront={idx==frontIndex}
+                    setLike={
+                      () => new Promise((resolve, reject) => {
+                        axios.post(`http://localhost:4000/update/forum/like`,
+                        {forumpost_id: cont.forumpost_id}
+                        ,{withCredentials: true}
+                        ).then(async response => {
+                          resolve()
+                        })
+                        .catch(error =>{
+                          console.log(error)
+                          if(error.response) toast.error(`${error.response.status}: An error occured`)
+                          reject()
+                        })
                       })
-                      .catch(error =>{
-                        console.log(error)
-                        if(error.response) toast.error(`${error.response.status}: An error occured`)
-                        reject()
-                      })
-                    })
-                  }
-                  onClickReply={onClickReply}
-                  />
-                </a>
-              </ConditionalLink>
-            </BubbleBasicLayout>
+                    }
+                    onClickReply={onClickReply}
+                    />
+                  </a>
+                </ConditionalLink>
+              </BubbleBasicLayout>
+              :
+              'other content'
+            }
           </motion.div>
         )
       })}
@@ -415,11 +416,6 @@ export async function getServerSideProps(context) {
     const res = await axios.get(`http://localhost:4000/get/${context.resolvedUrl}`)
     return{
       props: {
-        root:{
-          page: res.data.page,
-          topics: res.data.topics?res.data.topics:null,
-          mission: res.data.mission?res.data.mission:null
-        },
         ssrContent: res.data.content?res.data.content:null,
         ssrTreeCount: res.data.tree_count?res.data.tree_count:null
       }
