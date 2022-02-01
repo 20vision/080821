@@ -7,6 +7,7 @@ import { SYSVAR_RENT_PUBKEY, SystemProgram, PublicKey, Keypair, Transaction,Tran
 import { Token, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/spl-token"
 import { getBigNumber, connection, MINT_LAYOUT, ACCOUNT_LAYOUT, VISION_PROGRAM_ID } from '../../hooks/web3/useContract';
 import millify from "millify";
+import disableScroll from 'disable-scroll';
 
 export default function Square({content, makeScroll, isInTheBackground}){
     const [mint, setMint] = useState(content.page?content.page.token_mint_address:null)
@@ -51,7 +52,7 @@ export default function Square({content, makeScroll, isInTheBackground}){
 
 
     return(
-        <div onWheel={info => makeScroll(info)} className={styles.container} style={{backgroundColor: `${content.page?'#FAFAFA':content.mission?'#696969ce':content.topic?'#CECECE':null}`}}>
+        <div onMouseEnter={e => disableScroll.on()} onMouseLeave={() => disableScroll.off()} onWheel={info => makeScroll(info)} className={styles.container} style={{backgroundColor: `${content.page?'#FAFAFA':content.mission?'#696969ce':content.topic?'#CECECE':null}`}}>
             {content.page?
                 <div className={styles.header} style={{display: 'flex'}}>
                     {(content.page.page_icon.length < 7) ?
