@@ -71,7 +71,7 @@ exports.AuthRequired = function(req, res, next) {
 }
 
 
-exports.role_any = function(req, res, next) {
+exports.role = function(req, res, next) {
     if((req.params.page_name == null) && (req.body.pagename == null)) {
         return res.status(422).send('Pagename missing')
     }
@@ -84,7 +84,6 @@ exports.role_any = function(req, res, next) {
                 res.status(500).send('An error occurred')
                 console.log(err)
             }else{
-                console.log(results)
                 if(results[0] && (results[0].role != null)){
                     next();
                 }else{

@@ -1,10 +1,12 @@
 import styles from '../../styles/forumLayout/square.module.css'
 import PageIcon from '../../assets/PageIcon/PageIcon'
+import Lock from '../../assets/Lock'
 import { useEffect } from 'react'
+import HelpCircle16 from '../../assets/HelpCircle16'
 
 export default function Square({content}){
     return(
-        <div className={styles.container} style={{backgroundColor: `${content.page?'#444':content.mission?'#696969ce':content.topic?'#696969ce':null}`}}>
+        <div className={styles.container} style={{backgroundColor: `${content.page?'#444':content.mission?'#696969ce':content.topic?'#CECECE':null}`}}>
             {content.page?
                 <div className={styles.header} style={{display: 'flex'}}>
                     {(content.page.page_icon.length < 7) ?
@@ -26,8 +28,12 @@ export default function Square({content}){
                     <h2>Mission · {content.mission.title}</h2>
                 </div>
             :content.topic?
-                <div style={{display: 'flex'}} className={`${styles.header} ${!content.page?styles.fontColor:null}`}>
-                    <h2>Topic · {content.topic.name}</h2>
+                <div style={{display: 'flex', alignItems: 'center'}} className={`${styles.header} ${!content.page?styles.fontColor:null}`}>
+                    <Lock stroke='3'/>
+                    <h2 style={{color: '#444', marginLeft: '10px', marginTop: '4px'}}>
+                        {content.topic.threshold} · &nbsp;
+                    </h2>
+                    <h2 style={{color: '#444', marginLeft: '5px', marginTop: '4px'}}>{content.topic.name}</h2>
                 </div>
             :
                 null

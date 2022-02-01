@@ -80,7 +80,7 @@ var Panel = onClickOutside(({children}) => {
                             <h2>Papers</h2>
                         </div>
                     </a>
-                    <a style={{marginBottom: 'auto'}}>
+                    <a href={`/forum/${router.query.index[0]}/page`} style={{marginBottom: 'auto'}}>
                         <div className={`${styles.button} ${router.query.index[1]=="page"?styles.selected:null}`}>
                             <div className={styles.highlight}/>
                             <h2>Page</h2>

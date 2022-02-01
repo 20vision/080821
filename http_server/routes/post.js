@@ -48,7 +48,7 @@ router.post("/create_page", check.AuthRequired, input_validation.checkRegexPagen
     }
 });
 
-router.post("/mission", check.AuthRequired, check.role_any, input_validation.checkUniqueMissionTitle, input_validation.missionBody_topicBody_forumPost, async (req, res) => {
+router.post("/mission", check.AuthRequired, check.role, input_validation.checkUniqueMissionTitle, input_validation.missionBody_topicBody_forumPost, async (req, res) => {
     if(req.user_id){
         pool.getConnection(function(err, conn) {
             if (err){
@@ -85,7 +85,7 @@ router.post("/mission", check.AuthRequired, check.role_any, input_validation.che
     }
 });
 
-router.post("/topic", check.AuthRequired, check.role_any, input_validation.checkUniqueTopicTitle, input_validation.missionBody_topicBody_forumPost, async (req, res) => {
+router.post("/topic", check.AuthRequired, check.role, input_validation.checkUniqueTopicTitle, input_validation.missionBody_topicBody_forumPost, async (req, res) => {
     if(req.user_id){
         if((req.body.topicThreshold != null) && (isNaN(req.body.topicThreshold) || (req.body.topicThreshold.length > 25))){
             res.status(422).send('Invalid Token Entry')

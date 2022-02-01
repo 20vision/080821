@@ -81,7 +81,7 @@ router.get("/user_profile", check.AuthOptional, async (req, res) => {
 
 // PUBLIC //////////////////////////////////////////////////
 
-router.get("/page/:page_name", check.AuthOptional, check.role_any, async (req, res) => {
+router.get("/page/:page_name", check.AuthOptional, async (req, res) => {
     pool.getConnection(async function(err, conn) {
         if (err){
             res.status(500).send('An error occurred')

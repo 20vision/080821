@@ -14,23 +14,6 @@ export default function index({page, missions}) {
     }
   }, [page])
 
-  const pageQuery = useQuery(`page/${page}`,
-  async () => {
-    const res = await axios.get(`http://localhost:4000/get/page/${context.params.page}`)
-    return res.data
-  },
-  {
-    initialData: page,
-    refetchOnWindowFocus: false,
-    refetchOnmount: false,
-    refetchOnReconnect: false,
-    retry: false,
-    staleTime: 1000 * 60 * 60 * 24,
-    onError: (error) => {
-      console.error(error)
-    },
-  })
-
   const papers = useInfiniteQuery(
     `papers/${page.unique_pagename}`,
     async () => {
@@ -38,14 +21,14 @@ export default function index({page, missions}) {
         return res.data
     },
     {
-        refetchOnWindowFocus: false,
-        refetchOnmount: false,
-        refetchOnReconnect: false,
-        retry: false,
-        staleTime: 1000 * 60 * 60 * 24,
-        onError: (error) => {
-          console.error(error)
-        },
+      refetchOnWindowFocus: false,
+      refetchOnmount: false,
+      refetchOnReconnect: false,
+      retry: false,
+      staleTime: 1000 * 60 * 60 * 24,
+      onError: (error) => {
+        console.error(error)
+      },
     }
   )
 
@@ -59,7 +42,9 @@ export default function index({page, missions}) {
 
 export async function getServerSideProps(context) {
   try{
+    console.log('2222')
     const res = await axios.get(`http://localhost:4000/get/page/${context.params.page}?missions=true`)
+    console.log('1111')
     return{
       props: {
         page: res.data.page,
@@ -67,6 +52,7 @@ export async function getServerSideProps(context) {
       }
     }
   }catch(error){
+    console.log(error)
     return {
       notFound: true
     }
