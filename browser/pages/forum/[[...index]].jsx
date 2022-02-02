@@ -34,6 +34,7 @@ export default function index({ssrContent, ssrTreeCount}) {
         filtered[i].push(j)
       }
     }
+    console.log(filtered)
     return filtered
   })
   const [selectedContent, setSelectedContent] = useState(() => {
@@ -68,13 +69,15 @@ export default function index({ssrContent, ssrTreeCount}) {
 
     if((new_dataset[i][j].left != null) && (new_dataset[i][j].right != null) && (new_dataset[i][j].left + 1 != new_dataset[i][j].right)){
       for(let y=i;y<new_selectedContent.length;y++){
-        if((new_dataset[y][new_selectedContent[y]].left + 1 == new_dataset[y][new_selectedContent[y]].right)) break
         let filtered = [];
+        if((new_dataset[y][new_selectedContent[y]].left + 1 == new_dataset[y][new_selectedContent[y]].right)) break
+
         if(new_dataset[y+1]) {
           for(let x=0;x<new_dataset[y+1].length;x++){
             if(new_dataset[y+1][x].left>new_dataset[y][new_selectedContent[y]].left &&
               new_dataset[y+1][x].right<new_dataset[y][new_selectedContent[y]].right &&
-              new_dataset[y+1][x].forumpost_parent_id == new_dataset[y][new_selectedContent[y]].forumpost_parent_id){
+              new_dataset[y+1][x].parent_id == new_dataset[y][new_selectedContent[y]].parent_id &&
+              (new_dataset[y+1][x].parent_type == new_dataset[y][new_selectedContent[y]].parent_type)){
               filtered.push(x)
             }
           }
@@ -115,6 +118,7 @@ export default function index({ssrContent, ssrTreeCount}) {
     if((next_count < 2) &&
       (i==0?(filteredContent[i].length<treeCount):(new_dataset[i][new_filteredContent[i].length - 1].next)) &&
       (filteredContent[i].length % 3 == 0)){
+        console.log('LOADING')
       axios.get(`http://localhost:4000/get/forum/_/posts/${new_dataset[i][new_selectedContent[i]].forumpost_parent_id}?depth=${i}${
         filteredContent[i]?'&offset='+(filteredContent[i].length/3):''}${(i!=0)?'&parent_id='+new_dataset[i-1][new_selectedContent[i-1]].forumpost_id:''}`,{
         withCredentials: true
@@ -135,30 +139,25 @@ export default function index({ssrContent, ssrTreeCount}) {
     resolve()
   })
 
-  const sendPost = (post, hex, xurl) => {
+  const sendPost = (post, hex, index) => {
     axios.post(`http://localhost:4000/post/forum/${dataset[0][selectedContent[0]].unique_pagename}/${
-      (index==0)?
-        (root.mission)?
-          'mission'
-        :
-          'page'
-      :'post'
-      }/${
-      (index == 0)?
-        (root.mission)?
-          content[0][selectedContent[0]].unique_pagename+'/'+content[1][selectedContent[1]].title
-        :
-          ''
-      :dataset[filteredContent.length - 1][selectedContent[filteredContent.length - 1]].forumpost_id
+      (index == 1)?
+        'page'
+      :(dataset[index - 1][selectedContent[index - 1]].forumpost_id)?
+        `post/${dataset[index - 1][selectedContent[index - 1]].forumpost_id}`
+      :(dataset[index - 1][selectedContent[index - 1]].topic_id)?
+        `topic/${dataset[index - 1][selectedContent[index - 1]].topic_id}`
+      :
+        null//Mission,Paper
     }`,{forum_post: post, hex_color: hex},{
       withCredentials: true
     }
     ).then(async response => {
-      router.push(`/forum/${root.page.unique_pagename}/post/${response.data.forumpost_id}`)    
+      router.push(`/forum/${dataset[0][selectedContent[0]].unique_pagename}/post/${response.data.forumpost_id}`)    
     })
     .catch(error =>{
       console.log(error)
-      if(error.response) toast.error(`${error.response.status}: An error occured`)
+      if(error.response) toast.error(`${error.response.data?error.response.data:error.response.status+': An error occured'}`)
     })
   }
 

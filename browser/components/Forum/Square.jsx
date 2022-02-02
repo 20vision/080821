@@ -78,7 +78,7 @@ export default function Square({content, makeScroll, isInTheBackground}){
                 </div>
             :content.topic?
                 <div className={`${styles.header}`}>
-                    <h2 style={{color: '#444'}}>{content.topic.name}</h2>
+                    <h2 style={{color: '#444'}}>Topic · {content.topic.name}</h2>
                     <div style={{display: 'flex', alignItems: 'center', marginTop: '5px'}}>
                         <Lock size='16' stroke='3' color='#696969ce'/>&nbsp;<span style={{color: '#696969ce', fontWeight: 'bold', marginTop: '2px'}}>{content.topic.threshold} Token</span>
                     </div>

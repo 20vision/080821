@@ -162,6 +162,52 @@ router.post("/fundPageToken", check.AuthRequired, check.fundTransaction, async (
     }
 });
 
+router.post("/forum/:unique_pagename/topic/:topic_id", check.AuthRequired, input_validation.missionBody_topicBody_forumPost, input_validation.hex_color, async (req, res) => {
+    pool.getConnection(async function(err, conn) {
+        if (err){
+            res.status(500).send('An error occurred')
+            console.log(err)
+        }else{
+            conn.query(
+                `SELECT t.threshold, p.token_mint_address from Topic t 
+                join Page p on t.page_id = p.page_id and p.unique_pagename = ? and t.topic_id = ?`,
+                [req.params.unique_pagename, parseInt(req.params.topic_id)],
+                async function(err, topic) {
+                    if (err){
+                        reject({
+                            status: 500,
+                            message: 'An error occurred'
+                        })
+                        console.log(err)
+                    }else{
+                        if(topic.length > 0){
+                            try{
+                                const tokenAmountAndImpact = await web3.getTokenAmountAndImpact(conn, topic[0].token_mint_address, req.user_id)
+
+                                if(tokenAmountAndImpact.balance < web3.getBigNumber(topic[0].threshold)){
+                                    res.status(422).send(`Your ${req.params.unique_pagename} token balance is below the topic threshold`)
+                                }else{
+                                    const forumpost_parent_id = await inserts.forumpost_parent(conn, parseInt(req.params.topic_id), 't')
+                                    const forumpost_id = await inserts.forumpost(conn, forumpost_parent_id, 0, 1, 0, req.body.forum_post, req.user_id, req.body.hex_color, tokenAmountAndImpact.impact)
+                                    res.json({
+                                        forumpost_id: forumpost_id
+                                    })
+                                }
+                            }catch(err){
+                                console.log(err)
+                                res.status(err.status).send(err.message)
+                            }
+                        }else{
+                            res.status(404).send('topic not found')
+                        }
+                    }
+                }
+            );
+        }
+        pool.releaseConnection(conn);
+    })
+})
+
 router.post("/forum/:unique_pagename/page", check.AuthRequired, input_validation.missionBody_topicBody_forumPost, input_validation.hex_color, async (req, res) => {
     pool.getConnection(async function(err, conn) {
         if (err){
@@ -171,8 +217,8 @@ router.post("/forum/:unique_pagename/page", check.AuthRequired, input_validation
             try{
                 const pageByName = await gets.getPageByName(conn, req.params.unique_pagename)
                 const forumpost_parent_id = await inserts.forumpost_parent(conn, pageByName.page_id, 'p')
-                const user_token_impact_per_mission = await web3.getTokenImpact(conn, pageByName.token_mint_address, req.user_id)
-                const forumpost_id = await inserts.forumpost(conn, forumpost_parent_id, 0, 1, 0, req.body.forum_post, req.user_id, req.body.hex_color, user_token_impact_per_mission)
+                const user_token_impact_per_mission = await web3.getTokenAmountAndImpact(conn, pageByName.token_mint_address, req.user_id)
+                const forumpost_id = await inserts.forumpost(conn, forumpost_parent_id, 0, 1, 0, req.body.forum_post, req.user_id, req.body.hex_color, user_token_impact_per_mission.impact)
                 res.json({
                     forumpost_id: forumpost_id
                 })
@@ -193,9 +239,9 @@ router.post("/forum/:unique_pagename/post/:parent_forumpost_id", check.AuthRequi
         }else{
             try{
                 const forumpost_parent_info = await gets.getForumPostParentInfo(conn, req.params.parent_forumpost_id)
-                const user_token_impact_per_mission = await web3.getTokenImpact(conn, forumpost_parent_info.token_mint_address, req.user_id)
+                const user_token_impact_per_mission = await web3.getTokenAmountAndImpact(conn, forumpost_parent_info.token_mint_address, req.user_id)
                 await updates.updateNestedForumSet(conn, forumpost_parent_info.forumpost_parent_id, forumpost_parent_info.right, forumpost_parent_info.right + 1)
-                const forumpost_id = await inserts.forumpost(conn, forumpost_parent_info.forumpost_parent_id, forumpost_parent_info.right, forumpost_parent_info.right+1, forumpost_parent_info.depth + 1, req.body.forum_post, req.user_id, req.body.hex_color, user_token_impact_per_mission)
+                const forumpost_id = await inserts.forumpost(conn, forumpost_parent_info.forumpost_parent_id, forumpost_parent_info.right, forumpost_parent_info.right+1, forumpost_parent_info.depth + 1, req.body.forum_post, req.user_id, req.body.hex_color, user_token_impact_per_mission.impact)
                 console.log(forumpost_id)
                 res.json({
                     forumpost_id: forumpost_id
@@ -209,41 +255,5 @@ router.post("/forum/:unique_pagename/post/:parent_forumpost_id", check.AuthRequi
     })
 })
 
-// router.post("/forum", check.AuthRequired, input_validation.missionBody_topicBody_forumPost, async (req, res) => {
-//     // // Main_Forum_Post_Adjacency_List -> parent_type -> 0=page, 1=mission, 2=topics, 3=paper
-//     // console.log(req)
-//     // pool.getConnection(async function(err, conn) {
-//     //     if (err){
-//     //         res.status(500).send('An error occurred')
-//     //         console.log(err)
-//     //     }else{
-//     //         try{
-//     //             const info = await getForumInfo(conn, req)
-//     //             const impact = await web3.getTokenImpact(conn, req)
-//     //             console.log(req.body.subject)
-//     //             if(req.body.subject == null){
-//     //                 // Handle Sub_Forum_Post
-//     //             }else{
-//     //                 conn.query(
-//     //                     'INSERT INTO Main_Forum_Post_Adjacency_List values (?,?,?,?,?,?,?,now());',
-//     //                     [null, gets.id, req.body.subject, req.body.forum_post, req.user_id, req.body.hexColor, impact],
-//     //                     async function(err, forum_result) {
-//     //                         if (err){
-//     //                             res.status(500).send('An error occurred')
-//     //                             console.log(err)
-//     //                         }else{
-//     //                             res.status(200).send()
-//     //                         }
-//     //                     }
-//     //                 );
-//     //             }
-//     //         }catch(err){
-//     //             console.log(err)
-//     //             res.status(err.status).send(err.message)
-//     //         }
-//     //     }
-//     //     pool.releaseConnection(conn);
-//     // })
-// });
 
 module.exports = router;

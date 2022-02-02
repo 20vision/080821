@@ -1,7 +1,7 @@
 
 const getPageByName = (conn, unique_pagename) => new Promise((resolve, reject) => {
     conn.query(
-        `SELECT page_id, page_icon, pagename, unique_pagename, token_mint_address, vision FROM Page where unique_pagename = ?;`,
+        `SELECT page_id, 'p' as parent_type, page_icon, pagename, unique_pagename, token_mint_address, vision FROM Page where unique_pagename = ?;`,
         [unique_pagename],
         function(err, page) {
             if (err){
@@ -16,12 +16,7 @@ const getPageByName = (conn, unique_pagename) => new Promise((resolve, reject) =
                     message: 'Page not found'
                 })
             }else{
-                let page_id = page[0].page_id
-                delete page[0].page_id
-                resolve({
-                    page_id: page_id,
-                    page: page[0]
-                })
+                resolve(page[0])
             }
         }
     );
@@ -29,7 +24,7 @@ const getPageByName = (conn, unique_pagename) => new Promise((resolve, reject) =
 
 const getMission_s = (conn, unique_pagename, title) => new Promise((resolve, reject) => {
     conn.query(
-        `SELECT ${title?'m.mission_id,':''} m.title, m.description, m.created from Mission m join Page p on p.page_id = m.page_id where p.unique_pagename = ? ${title?'and m.title = \''+title+'\'':''};`,
+        `SELECT ${title?'m.mission_id,':''} m.title, 'm' as parent_type, m.description, m.created from Mission m join Page p on p.page_id = m.page_id where p.unique_pagename = ? ${title?'and m.title = \''+title+'\'':''};`,
         [unique_pagename],
         function(err, mission_s) {
             if (err){
@@ -63,15 +58,14 @@ const getMission_s = (conn, unique_pagename, title) => new Promise((resolve, rej
 
 const getTopic_s = ({conn, unique_pagename}) => new Promise((resolve, reject) => {
     conn.query(
-        `SELECT t.topic_id, t.name, t.description, t.threshold from Topic t 
+        `SELECT t.topic_id, 't' as parent_type, t.name, t.description, t.threshold from Topic t 
         join Page p on t.page_id = p.page_id and p.unique_pagename = ?
         group by t.topic_id
         order by (
             SELECT count(fp2.forumpost_id)* 1 + count(fpl.forum_post_like_id) from ForumPost fp2
-            join ForumPost_Parent fpp on fpp.forumpost_parent_id = fp2.forumpost_parent_id and fpp.parent_type = 't'
-            join Topic t2 on t2.topic_id = fpp.parent_id
+            join ForumPost_Parent fpp on fpp.forumpost_parent_id = fp2.forumpost_parent_id and fpp.parent_type = 't' and fpp.parent_id = t.topic_id
             left join ForumPost_Like fpl on fpl.forumpost_id = fp2.forumpost_id
-            group by fp2.forumpost_id
+            group by t.topic_id
         ) desc limit 0,3`,
         [unique_pagename],
         function(err, topic_s) {
@@ -113,7 +107,7 @@ const getForumPostParentInfo = (conn, parent_post_id) => new Promise((resolve, r
                         `SELECT p.token_mint_address from Page p 
                         ${
                             forumpost_parent[0].parent_type == 't'?
-                            'JOIN Topics t on p.page_id = t.page_id and t.topic_id = '+forumpost_parent[0].parent_id
+                            'JOIN Topic t on p.page_id = t.page_id and t.topic_id = '+forumpost_parent[0].parent_id
                         :forumpost_parent[0].parent_type == 'm'?
                             'JOIN Mission m on m.page_id=p.page_id and m.mission_id = '+forumpost_parent[0].parent_id
                         :forumpost_parent[0].parent_type == 'mp'?

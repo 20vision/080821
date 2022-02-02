@@ -92,7 +92,7 @@ router.get("/page/:page_name", check.AuthOptional, async (req, res) => {
                 const pageByName = await gets.getPageByName(conn, req.params.page_name)
                 const missions = await gets.getMission_s(conn, req.params.page_name)
                 res.json({
-                    page: pageByName.page,
+                    page: pageByName,
                     missions: missions
                 })
             }catch(err){
@@ -162,14 +162,14 @@ router.get("/forum/:unique_pagename/page", check.AuthOptional, async (req, res) 
                             res.status(400).send('An error occurred')
                         }else{
                             tree_count = query_tree_count[0].tree_count
-                            if(!tree_count) return res.json({content: [[pageByName.page]],tree_count: 0})
+                            if(!tree_count) return res.json({content: [[pageByName]],tree_count: 0})
                             try{
                                 let new__main_content = await gets.getForumPost({conn: conn, user_id: req.user_id, page_id: pageByName.page_id, 
                                     depth: 0, 
                                     left: null,
                                     right: null})
                                 if(new__main_content.length == 0){
-                                    return res.json({content: [[pageByName.page]],tree_count: tree_count?tree_count:0})
+                                    return res.json({content: [[pageByName]],tree_count: tree_count?tree_count:0})
                                 }else{
                                     content.push(new__main_content)
                                     for(var i = 0; i <= 5; i++){
@@ -198,7 +198,7 @@ router.get("/forum/:unique_pagename/page", check.AuthOptional, async (req, res) 
                             }
                             res.json({
                                 content: [
-                                    [pageByName.page],
+                                    [pageByName],
                                     ...content
                                 ],
                                 tree_count: tree_count?tree_count:0
@@ -302,7 +302,7 @@ router.get("/forum/:unique_pagename/mission/:mission_title", async (req, res) =>
     //                         console.log(err)
     //                     }else{
     //                         res.json({
-    //                             page: pageByName.page,
+    //                             page: pageByName,
     //                             mission: mission_s.mission,
     //                             content: content
     //                         })
@@ -327,21 +327,22 @@ router.get("/forum/:unique_pagename/topics", async (req, res) => {
             try{
                 const pageByName = await gets.getPageByName(conn, req.params.unique_pagename)
                 let topics = await gets.getTopic_s({conn: conn, unique_pagename: req.params.unique_pagename});
-                if(topics.length == 0) return(res.json({content: [[pageByName.page]],tree_count: tree_count?tree_count:0}))
+                if(topics.length == 0) return(res.json({content: [[pageByName]],tree_count: tree_count?tree_count:0}))
                 let tree_count = 0
                 let content = []
                 conn.query(`SELECT count(fpp.forumpost_parent_id) as tree_count from ForumPost_Parent fpp 
                 join Topic t on fpp.parent_type = 't' and fpp.parent_id = t.topic_id and t.page_id = ?`,
-                    [req.params.unique_pagename],
+                    [pageByName.page_id],
                     async function(err, query_tree_count) {
                         if (err){
                             console.log(err)
                             res.status(400).send('An error occurred')
                         }else{
                             tree_count = query_tree_count[0].tree_count
+                            console.log(tree_count)
                             if(!tree_count){
                                 return res.json({
-                                    content: [[pageByName.page],topics],
+                                    content: [[pageByName],topics],
                                     tree_count: 0
                                 })
                             }
@@ -353,7 +354,7 @@ router.get("/forum/:unique_pagename/topics", async (req, res) => {
                                     depth: 0})
                                 if(new__main_content.length == 0){
                                     return res.json({
-                                        content: [[pageByName.page]],
+                                        content: [[pageByName]],
                                         tree_count: tree_count?tree_count:0,
                                     });
                                 }else{
@@ -384,7 +385,7 @@ router.get("/forum/:unique_pagename/topics", async (req, res) => {
                             }
                             res.json({
                                 content: [
-                                    pageByName.page,
+                                    [pageByName],
                                     topics,
                                     ...content
                                 ],
