@@ -149,6 +149,7 @@ const getForumPostParentInfo = (conn, parent_post_id) => new Promise((resolve, r
     );
 })
 
+
 const getForumPost = ({
     conn, 
     user_id, 
@@ -207,8 +208,14 @@ const getForumPost = ({
             ${user_id != null?',if(count(fpl2.user_id = ?) > 0, true, false) as mylike':''}
         from ForumPost fp2
         join User u on u.user_id = fp2.user_id
+        join (
+            SELECT (count(fpl3.forum_post_like_id) / POW((SUM(TIMESTAMPDIFF(HOUR, fp3.created, now()))/count(fp3.forumpost_id))+2, 1.2)) as value, fp.forumpost_id from ForumPost fp
+            join ForumPost fp3 on fp3.left >= fp.left and fp3.right <= fp.right and fp3.forumpost_parent_id = fp.forumpost_parent_id 
+            left join ForumPost_Like fpl3 on fp3.forumpost_id = fpl3.forumpost_id
+            group by fp.forumpost_id
+        ) as score on score.forumpost_id = fp2.forumpost_id
         left join ForumPost_Like fpl2 on fpl2.forumpost_id = fp2.forumpost_id
-        ${(parent_id != null)?'join ForumPost fp3 on fp3.forumpost_id = ? and fp3.forumpost_parent_id = fp2.forumpost_parent_id and fp3.left < fp2.left and fp3.right > fp2.right':''}
+        ${(parent_id != null)?'join ForumPost fp4 on fp4.forumpost_id = ? and fp4.forumpost_parent_id = fp2.forumpost_parent_id and fp4.left < fp2.left and fp4.right > fp2.right':''}
         ${((forumpost_parent_id == null) && (page_id != null))?'join ForumPost_Parent fpp on fpp.forumpost_parent_id = fp2.forumpost_parent_id and fpp.parent_id = ? and fpp.parent_type = \'p\'':
         (topic_id != null)?'join ForumPost_Parent fpp on fpp.forumpost_parent_id = fp2.forumpost_parent_id and fpp.parent_id = ? and fpp.parent_type = \'t\'':
         'join ForumPost_Parent fpp on fpp.forumpost_parent_id = fp2.forumpost_parent_id'}
@@ -217,11 +224,7 @@ const getForumPost = ({
         ${left != null?' and fp2.left > ?':''}
         ${right != null?' and fp2.right < ?':''}
         group by fp2.forumpost_id
-        order by (
-            SELECT count(fpl.forum_post_like_id) from ForumPost fp 
-            join ForumPost_Like fpl on fpl.forumpost_id = fp.forumpost_id 
-            where fp.left >= fp2.left and fp.right <= fp2.right group by fp2.forumpost_id
-        ) desc limit ?,3`
+        order by score.value desc limit ?,3`
     base_parameters.push((offset?offset*3:0))  
 
     conn.query(

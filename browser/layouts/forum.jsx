@@ -47,7 +47,18 @@ var Panel = onClickOutside(({children}) => {
         <div className={`hideScrollBar ${styles.child}`}>
             <div className={`${styles.menuContainer} ${menuStyle.container}`}>
                 <div className={styles.menu}>
-                    <h1>Forum</h1>
+                    <div style={{display: 'flex'}}>
+                        <h1>Forum</h1>
+                        <div style={{height: 19, marginTop: 'auto'}}>
+                            <Link href='/' style={{height: 19, marginTop: 'auto'}}>
+                                <a style={{marginTop: 'auto'}}>
+                                    <span style={{marginLeft: '10px', color: '#FF5B77'}}>
+                                        20Vision
+                                    </span>
+                                </a>
+                            </Link>
+                        </div>
+                    </div>
                     <Menu opened={true} setMenu={setMenu} pathname={menu}/>
                 </div>
             </div>
