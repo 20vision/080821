@@ -77,7 +77,8 @@ export default function index({ssrContent, ssrTreeCount}) {
             if(new_dataset[y+1][x].left>new_dataset[y][new_selectedContent[y]].left &&
               new_dataset[y+1][x].right<new_dataset[y][new_selectedContent[y]].right &&
               new_dataset[y+1][x].parent_id == new_dataset[y][new_selectedContent[y]].parent_id &&
-              (new_dataset[y+1][x].parent_type == new_dataset[y][new_selectedContent[y]].parent_type)){
+              (new_dataset[y+1][x].parent_type == new_dataset[y][new_selectedContent[y]].parent_type) &&
+              (new_dataset[y+1][x].forumpost_parent_id == new_dataset[y][new_selectedContent[y]].forumpost_parent_id)){
               filtered.push(x)
             }
           }
@@ -135,6 +136,7 @@ export default function index({ssrContent, ssrTreeCount}) {
         console.error(err)
       })
     }
+    console.log(new_dataset)
     
     resolve()
   })

@@ -45,40 +45,57 @@ router.post("/forum/like", check.AuthRequired, async (req, res) => {
             console.log(err)
         }else{
             conn.query(
-                `SELECT forum_post_like_id from ForumPost_Like where forumpost_id = ? and user_id = ?;`,
-                [req.body.forumpost_id, req.user_id],
-                function(err, like) {
+                `SELECT fp.user_id from ForumPost fp where fp.forumpost_id = ?;`,
+                [req.body.forumpost_id],
+                function(err, check_owner) {
                     if (err){
                         console.log(err)
                         res.status(500).send('An error occurred')
                     }else{
-                        if(like.length > 0){
-                            conn.query(
-                                `DELETE from ForumPost_Like where forumpost_id = ? and user_id = ?;`,
-                                [req.body.forumpost_id, req.user_id],
-                                function(err, like) {
-                                    if (err){
-                                        console.log(err)
-                                        res.status(500).send('An error occurred')
-                                    }else{
-                                        res.status(200).send()
-                                    }
-                                }
-                            );
-                        }else{
-                            conn.query(
-                                `INSERT into ForumPost_Like values(?,?,?,now());`,
-                                [null,req.user_id, req.body.forumpost_id],
-                                function(err, like) {
-                                    if (err){
-                                        console.log(err)
-                                        res.status(500).send('An error occurred')
-                                    }else{
-                                        res.status(200).send()
-                                    }
-                                }
-                            );
+                        if(check_owner[0].user_id == req.user_id){
+                            pool.releaseConnection(conn);
+                            res.status(422).send('User owns post')
+                            return
                         }
+                        
+                        conn.query(
+                            `SELECT forum_post_like_id from ForumPost_Like where forumpost_id = ? and user_id = ?;`,
+                            [req.body.forumpost_id, req.user_id],
+                            function(err, like) {
+                                if (err){
+                                    console.log(err)
+                                    res.status(500).send('An error occurred')
+                                }else{
+                                    if(like.length > 0){
+                                        conn.query(
+                                            `DELETE from ForumPost_Like where forumpost_id = ? and user_id = ?;`,
+                                            [req.body.forumpost_id, req.user_id],
+                                            function(err, like) {
+                                                if (err){
+                                                    console.log(err)
+                                                    res.status(500).send('An error occurred')
+                                                }else{
+                                                    res.status(200).send()
+                                                }
+                                            }
+                                        );
+                                    }else{
+                                        conn.query(
+                                            `INSERT into ForumPost_Like values(?,?,?,now());`,
+                                            [null,req.user_id, req.body.forumpost_id],
+                                            function(err, like) {
+                                                if (err){
+                                                    console.log(err)
+                                                    res.status(500).send('An error occurred')
+                                                }else{
+                                                    res.status(200).send()
+                                                }
+                                            }
+                                        );
+                                    }
+                                }
+                            }
+                        );
                     }
                 }
             );

@@ -209,7 +209,7 @@ const getForumPost = ({
         from ForumPost fp2
         join User u on u.user_id = fp2.user_id
         join (
-            SELECT (count(fpl3.forum_post_like_id) / POW((SUM(TIMESTAMPDIFF(HOUR, fp3.created, now()))/count(fp3.forumpost_id))+2, 1.2)) as value, fp.forumpost_id from ForumPost fp
+            SELECT ((count(fpl3.forum_post_like_id) + 1) / POW((SUM(TIMESTAMPDIFF(HOUR, fp3.created, now()))/count(fp3.forumpost_id))+2, 1.5)) as value, fp.forumpost_id from ForumPost fp
             join ForumPost fp3 on fp3.left >= fp.left and fp3.right <= fp.right and fp3.forumpost_parent_id = fp.forumpost_parent_id 
             left join ForumPost_Like fpl3 on fp3.forumpost_id = fpl3.forumpost_id
             group by fp.forumpost_id
