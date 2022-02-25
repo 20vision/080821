@@ -96,13 +96,13 @@ function Create(props){
 
             <div className={`areaLine ${styles.contentArea}`}>
                 <div className={styles.pagename}>
-                    <h2>/</h2><input ref={pagenameRef} placeholder="Pagename" onChange={e => {setNewPagename(e.target.value); addPageMuation.reset();}}/>
+                    <h2>/</h2><input ref={pagenameRef} placeholder="unique_pagename" onChange={e => {setNewPagename(e.target.value); addPageMuation.reset();}}/>
                 </div>
                 <div className={styles.vision}>
                     <TextareaAutosize 
                         minRows={6}
                         ref={visionRef}
-                        placeholder="Vision - Why do you do what you do ? Your purpose, cause or belief. " 
+                        placeholder="Vision - Why does this entity exist ? The purpose, cause or belief." 
                         onChange={e => {setVision(e.target.value); addPageMuation.reset();}}
                     />
                 </div>

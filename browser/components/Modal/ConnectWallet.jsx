@@ -176,7 +176,7 @@ export default function ConnectWallet() {
                 
                 {wallets.map((wallet) => (
                     <a key={wallet.name} onClick={() => select(wallet.name)} className={`${wallet.name == selectedWallet?styles.walletSelected:null} ${styles.connectWalletButton}`}>
-                        <img src={wallet.icon}/>
+                        <img style={wallet.name == 'Ledger'?{filter:'invert(1)'}:null} src={wallet.icon}/>
                         {ready && (wallet.name == selectedWallet) && !connected?
                             <div className={styles.walletSelectedChild}>
                                 <Loading/>
