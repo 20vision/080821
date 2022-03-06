@@ -709,14 +709,13 @@ export default function Trade() {
         :
         <>
           <span>
-            Page Tokens at it's core are a Feedback-loop. They help holders to shape the future of a Page. 
-            Tokens influence the reach of page related <a 
+            Page Tokens have been created to improve the connection between a Page's team and users that want to be part of the Vision.
+            It is intended to be a win/win situation. As the Page gains attention - more buyers, the token value goes up.
+            Page owners can create
+            &nbsp;<a 
             style={{textDecoration: 'underline'}}
-            href={`/forum/${queryRoute}`}>Forum</a> posts. Forum Topics can also have a Token Threshold to be able to post to.
-            Holders have stake, thus will try their best to make the Page succeed in their goals and add valueable input.
-            As the Page gains attention - more buyers, the token value goes up.
-            Page Owners receive a custom Page fee on every token being bought. 20Vision charges a 1% fee on each transaction.
-            <a style={{textDecoration: 'underline'}}>(see more)</a>
+            href={`/forum/${queryRoute}`}>Forum Topics</a> and limit the access to those, that own enough Token.
+            Page Owners receive a custom Page fee on every token being bought. 20Vision currently charges a 1% fee on each transaction.
             <br/>
             <br/>
             <br/>

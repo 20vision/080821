@@ -148,7 +148,7 @@ impl Processor {
                     system_program_info.clone()
                 ]
             )?;
-            // 1(*10^9) token will be added to calculation without actually ever minting and creating associated token account.
+            // Calculation will start with 1(*10^9) token without actually ever minting and creating associated token account to prevent formula from hitting 0.
             
         // Mint Token
         invoke(
