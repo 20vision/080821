@@ -15,3 +15,7 @@ DB -> Forum_Swipe -> type -> (same as parent_type) + po=post
 DEVNET Contract: 969cdvMTsXAs2QfCFvGb2TmaR9gbFvMjRfG8u5v1if3d
 Test Wallet private key: CMgGx8WdMqLmGwvZHZboWaF6zeknrEtituyNziwg5hgqCEwvrL7zQNuZg6bAic8Bv6TsGL21BhStiwXC653NSvf
 Test Page Mint Key: CtENBNHd5fz2u1TERoZZQ9wqoydxsXTbph5xTyy8LUva
+
+### Paper
+## Version Control
+  ![Version_Control drawio](https://user-images.githubusercontent.com/66218148/157411028-c5b8e295-c49e-4227-b035-35c8ecd801e7.png)
