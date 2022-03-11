@@ -59,7 +59,7 @@ function MissionNavWithRole({router}){
     const setModal = useModalStore(state => state.setModal)
     return(
         <>  
-            <a onClick={() => router.push(`/${router.query.page}/${router.query.mission}/new-paper/edit`)}>
+            <a onClick={() => setModal(7)}>
                 <Plus color="#FAFAFA"/>
                 <div>Paper</div>
             </a>
@@ -150,11 +150,6 @@ function PaperEdit({router}){
     return(
         <>
             <a>
-                <Share color="#FAFAFA"/>
-                <div>Publish</div>
-            </a>
-
-            <a>
                 <Plus color="#FAFAFA"/>
                 <div>Comment</div>
             </a>
@@ -179,6 +174,11 @@ function PaperEdit({router}){
                 </a>
 
             }
+
+            <a>
+                <Share color="#FAFAFA"/>
+                <div>Publish</div>
+            </a>
         </>
     )
 }

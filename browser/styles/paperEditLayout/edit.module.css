@@ -6,7 +6,21 @@
 }
 
 .editContainer{
+    width: 530px;
+}
+
+.button{
     margin-top: 35px;
+    padding: 15px 25px;
+    border-radius: 15px;
+    background-color: var(--red);
+    display: flex;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.button h2{
+    color: var(--white);
 }
 
 .header{

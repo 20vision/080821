@@ -709,17 +709,21 @@ export default function Trade() {
         :
         <>
           <span>
-            Page Tokens have been created to improve the connection between a Page's team and users that want to be part of the Vision.
-            It is intended to be a win/win situation. As the Page gains attention - more buyers, the token value goes up.
-            Page owners can create
-            &nbsp;<a 
+            Page Tokens create a win/win situation, where users help Pages to achieve their Vision without going empty-handed.
+            <br/>
+            With uniswap and bancor being our role models, tokens are priced using the &nbsp;<a href='https://docs.bancor.network/ethereum-contracts/ethereum-api-reference/converter/bancorformula' target="_blank" style={{textDecoration: 'underline'}}>bancor formula</a>.
+            <br/>
+            For now, Tokens can mainly be used to participate in <a 
             style={{textDecoration: 'underline'}}
-            href={`/forum/${queryRoute}`}>Forum Topics</a> and limit the access to those, that own enough Token.
-            Page Owners receive a custom Page fee on every token being bought. 20Vision currently charges a 1% fee on each transaction.
+            href={`/forum/${queryRoute}`}>Page Topics</a>.
+            <br/>
+            To further compentsate Pages for their great work, they receive a self-chosen Royalty Fee for every token being bought. 
+            <br/>
+            20Vision's model is also - currently charging a 1% fee on each transaction.
             <br/>
             <br/>
             <br/>
-            <b>Supply:</b>&nbsp;{tokenSupply?Math.floor((tokenSupply - 1000000000)/1000000000):0}
+            <b>Circulating Supply:</b>&nbsp;{tokenSupply?Math.floor((tokenSupply - 1000000000)/1000000000):0}
             <br/>
             <b>Page Fee:</b>&nbsp;{pageFee?pageFee/1000:2.5}%
             <br/>

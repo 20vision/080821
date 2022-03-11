@@ -6,6 +6,7 @@ import { useRouter } from 'next/router'
 import {useUserStore} from '../../store/user'
 import UserPages from './UserPages'
 import ConnectWallet from './ConnectWallet'
+import Paper from './Paper'
 import User from "./User"
 import CreateTopicOrMission from './CreateTopicOrMission'
 import Trade from './Trade'
@@ -75,6 +76,8 @@ const ClickOutside = onClickOutside(() =>{
                     <Trade/>
                 :modal == 6 ?
                     <CreateTopicOrMission type='topic'/>
+                :modal == 7 ?
+                    <Paper/>
                 :
                     null}
 
