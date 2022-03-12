@@ -4,7 +4,6 @@ import PageInfo from '../components/PageLayout/PageInfo'
 import Missions from '../components/PageLayout/Missions'
 import onClickOutside from "react-onclickoutside";
 import NavPanel from "../components/NavPanel/Index"
-import Overview from "../components/Paper/Overview"
 import { useRouter } from "next/router";
 
 export default function PageLayout( {children, page, missions} ) {
@@ -44,11 +43,10 @@ var Panel = onClickOutside(({children, page, missions}) => {
                 </div>
             </div>
 
-            <div className={styles.overviewParent}>
-                <div className={styles.overview}>
-                    <Overview className={styles.overview}/>
+            <div className={styles.overview}>
+                <div style={{marginTop: 'auto'}}>
+                    <NavPanel/>
                 </div>
-                <NavPanel/>
             </div>
 
         </div>

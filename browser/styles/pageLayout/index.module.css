@@ -44,15 +44,10 @@
     height: 100%;
 }
 
-.overviewParent{
-    margin-left: 50px;
+.overview{
     position: sticky;
     margin: 35px;
     height: auto;
     display:flex;
     flex-direction: column;
-}
-
-.overview{
-    flex-grow: 1;
 }

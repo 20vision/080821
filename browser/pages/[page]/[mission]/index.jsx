@@ -2,7 +2,6 @@ import PageLayout from '../../../layouts/page'
 import axios from 'axios'
 import {useInfiniteQuery} from 'react-query'
 import { useRouter } from 'next/router'
-import Preview from '../../../components/Paper/Preview'
 
 export default function index({page, missions}) {
   const router = useRouter()
@@ -27,7 +26,6 @@ export default function index({page, missions}) {
 
   return (
     <PageLayout page={page} missions={missions}>
-      <Preview/>
     </PageLayout>
   )
 }

@@ -1,16 +1,17 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import TextareaAutosize from 'react-textarea-autosize';
 import styles from '../../styles/paperEditLayout/edit.module.css'
-import { useRouter } from 'next/router'
 import { FilePond, registerPlugin } from 'react-filepond';
 import 'filepond/dist/filepond.min.css';
 import FilePondPluginFileValidateType from 'filepond-plugin-file-validate-type';
 import FilePondPluginFilePoster from 'filepond-plugin-file-poster';
 import 'filepond-plugin-file-poster/dist/filepond-plugin-file-poster.css';
 import FilePondPluginImageEditor from 'filepond-plugin-image-editor';
-import usePaperSocket from '../../hooks/Socket/usePaperSocket'
+import { useRouter } from 'next/router'
+import { toast } from 'react-toastify';
+import FilePondPluginFileEncode from 'filepond-plugin-file-encode';
 
-registerPlugin(FilePondPluginFileValidateType, FilePondPluginFilePoster, FilePondPluginImageEditor)
+registerPlugin(FilePondPluginFileEncode, FilePondPluginFileValidateType, FilePondPluginFilePoster, FilePondPluginImageEditor)
 
 import {
     openEditor,
@@ -41,6 +42,7 @@ import {
     plugin_finetune_defaults,
 
 } from 'pintura'
+import axios from 'axios';
 
 setPlugins(plugin_crop, plugin_finetune, plugin_annotate, plugin_sticker);
 
@@ -48,15 +50,21 @@ setPlugins(plugin_crop, plugin_finetune, plugin_annotate, plugin_sticker);
 export default function Edit(){
     const [header, setHeader] = useState('')
     const [body, setBody] = useState('')
+    const [loading, setLoading] = useState(false)
     const router = useRouter()
+    let pond = useRef()
 
     return(
         <div className={styles.editContainer}>
             <FilePond
+                ref={(ref) => (pond = ref)}
                 acceptedFileTypes= {['image/png', 'image/jpeg']}
                 name="filepond"
                 imageEditorInstantEdit={true}
                 allowMultiple={false}
+                instantUpload={false}
+                allowProcess={false}
+                allowFileEncode={true}
                 server={{
                     url: 'http://localhost:4000/post/paper_image',
                     process: {
@@ -74,8 +82,8 @@ export default function Edit(){
                             return JSON.parse(response).url
                         },
                         withCredentials: true
-                    },
-                }} 
+                    }
+                }}
                 labelIdle={
                     `<div>
                         Drag & Drop your files or <span class="filepond--label-action">Browse</span>
@@ -134,7 +142,23 @@ export default function Edit(){
                 </div>
             </div>
 
-            <div className={styles.button}>
+            <div onClick={async() => {
+                try{
+                    setLoading(true)
+                    console.log(pond)
+                    console.log(pond.getFileEncodeBase64String)
+                    const image = await pond.getFileEncodeBase64String()
+                    console.log(image)
+                    const response = await axios.post(`http://localhost:4000/post/paper`,{image: image, header: header, body: body},{withCredentials: true})
+                    setLoading(false)
+                    console.log(response.data)
+                }catch(err){
+                    console.log(err)
+                    setLoading(false)
+                    if(err.response.status && (err.response.status != 500)) return toast.error(err.response.data)
+                    toast.error('An error occurred')
+                }
+            }}className={styles.button}>
                 <h2>
                     Publish
                 </h2>

@@ -6,7 +6,7 @@ let pool = require('../config/db');
 const { random_string } = require("../utils/random");
 
 
-exports.paper_image = function(req, res, next) {
+/*exports.paper_image = function(req, res, next) {
     
     const upload = multer({
         storage: multer.memoryStorage(),
@@ -76,9 +76,9 @@ exports.paper_image = function(req, res, next) {
                                     console.log(err)
                                 }else{
                                     if(results[0] && results[0].paper_version_id){
-                                        /*
-                                        Use paper_version_id to either append new Media or update old Media with same version id
-                                        */
+                                        
+                                        //Use paper_version_id to either append new Media or update old Media with same version id
+                                        
                                         conn.query(
                                             'SELECT pm.content from Paper_Media pm where pm.paper_version_id = ?;',
                                             [results[0].paper_version_id],
@@ -87,9 +87,9 @@ exports.paper_image = function(req, res, next) {
                                                     res.status(500).send('An error occurred')
                                                     console.log(err)
                                                 }else{
-                                                    /*
-                                                    If there already is a media on that paper version -> update, otherwise insert
-                                                    */
+                                                    
+                                                    //If there already is a media on that paper version -> update, otherwise insert
+                                                    
                                                     if(resultsPaperMediaContent[0] && resultsPaperMediaContent[0].content){
                                                         const paperMedia = resultsPaperMediaContent[0].content.split('/')
                                                         const mediaData = {
@@ -133,9 +133,9 @@ exports.paper_image = function(req, res, next) {
                                             }
                                         );
                                     }else if(req.paper_id){
-                                        /*
-                                        If no paper_version_id available at 0.0.0 -> no edit version -> create new one Use paper_version_id to either append new Media or update old Media with same version id
-                                        */
+                                        
+                                        //If no paper_version_id available at 0.0.0 -> no edit version -> create new one Use paper_version_id to either append new Media or update old Media with same version id
+                                        
                                         conn.query(
                                             'INSERT into Paper_Version values (?,?,?,?,now());',
                                             [null, req.paper_id, '0.0.0', null, null],
@@ -211,7 +211,7 @@ exports.paper_image = function(req, res, next) {
         }
     })
     
-}
+}*/
 
 
 exports.profile_picture = function(req, res, next) {

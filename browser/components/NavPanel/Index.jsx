@@ -13,7 +13,6 @@ import { useModalStore } from '../../store/modal'
 import { useRouter } from 'next/router'
 import AddSub from '../../assets/AddSub'
 import Loading from '../../assets/Loading/Loading'
-import usePaperSocket from '../../hooks/Socket/usePaperSocket'
 import Link from 'next/link'
 
 import { useEffect, useState } from 'react'
@@ -144,7 +143,6 @@ function PageNav({router}){
 
 
 function PaperEdit({router}){
-    const socket = usePaperSocket()
     const [saved, setSaved] = useState()
 
     return(

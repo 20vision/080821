@@ -8,7 +8,7 @@ const { sendAndConfirmRawTransaction, Connection } = require("@solana/web3.js");
 const gets = require("../utils/gets");
 const inserts = require("../utils/inserts");
 const updates = require("../utils/updates");
-
+var validator = require('validator');
 const colorOptions = [
     '7dbef5', '097bdc', '2dc3bc', '70908e', '67c166', '189c3b', 'c3c52e', 'd28e2a', 'dcb882', 'af9877', 'd64675', 'bb82c5', 'ac34c1', '9778bf', 'bf1402'
 ]
@@ -85,6 +85,35 @@ router.post("/mission", check.AuthRequired, check.role, input_validation.checkUn
     }
 });
 
+router.post("/paper", async (req, res) => {
+
+    if(!validator.isBase64(req.body.image) || (!validator.isMimeType('image/png') && !validator.isMimeType('image/jpeg'))){
+        return res.status(422).send('Invalid Data Type')
+    }
+
+    let imageBuffer = Buffer.from(req.body.image, 'base64')
+
+
+
+    await sharp(req.file.buffer)
+    .resize({ fit: sharp.fit.contain, width: ratio[i], height: ratio[i] })
+    .webp({ quality: 60 })
+    .toBuffer()
+    .then(async response => {
+        data.buffer = response,
+        data.filename = ratio[i].toString()+'x'+ratio[i].toString()+'.webp'
+        try{
+            req.imageUrl = await uploadFile(data)
+        }catch(error){
+            console.log(error)
+            res.status(500).send('An error occured while uploading file')
+        }
+    }).catch(err =>{
+        console.log("err: ",err);   
+        res.status(500).send() 
+    })
+})
+
 router.post("/topic", check.AuthRequired, check.role, input_validation.checkUniqueTopicTitle, input_validation.missionBody_topicBody_forumPost, async (req, res) => {
     if(req.user_id){
         if((req.body.topicThreshold != null) && (isNaN(req.body.topicThreshold) || (req.body.topicThreshold.length > 25))){
@@ -126,7 +155,7 @@ router.post("/topic", check.AuthRequired, check.role, input_validation.checkUniq
     }
 });
 
-router.post("/paper_image/process", check.AuthRequired, check.paperAuth, cloudStorage.paper_image, async (req, res) => {
+/*router.post("/paper_image/process", check.AuthRequired, check.paperAuth, cloudStorage.paper_image, async (req, res) => {
     if(req.user_id){
         let resObject = {url: req.imageUrl}
 
@@ -138,7 +167,7 @@ router.post("/paper_image/process", check.AuthRequired, check.paperAuth, cloudSt
     }else{
         res.status(401).send('Not authenticated')
     }
-});
+});*/
 
 router.post("/fundPageToken", check.AuthRequired, check.fundTransaction, async (req, res) => {
     const connection = new Connection('https://api.devnet.solana.com', 'confirmed')
