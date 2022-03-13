@@ -88,9 +88,30 @@ router.post("/mission", check.AuthRequired, check.role, input_validation.checkUn
     }
 });
 
-router.post("/paper", async (req, res) => {
-    
-    if(!validator.isBase64(req.body.image.split(',')[1]) /*|| (!validator.isMimeType(req.body.image))*/){
+router.post("/paper", check.AuthRequired, check.role, async (req, res) => {
+    if(
+        !req.body.header ||
+        (req.body.header > 100) ||
+        (req.body.header < 3)
+    ){
+        return res.status(422).send('Invalid Paper Header')
+    }else if(
+        !req.body.body ||
+        (req.body.body > 500) ||
+        (req.body.body < 3)
+    ){
+        return res.status(422).send('Invalid Paper Body')
+    }else if(!req.body.image) {
+        return res.status(422).send('Missing Paper Image')
+    }
+
+    const image = req.body.image.split(',')
+    if((image.length != 2) || !validator.isBase64(image[1]) || 
+    (
+        (image[0] != 'data:image/png;base64') &&
+        (image[0] != 'data:image/jpeg;base64') &&
+        (image[0] != 'data:image/webp;base64')
+    )){
         return res.status(422).send('Invalid Data Type')
     }
 
@@ -103,7 +124,7 @@ router.post("/paper", async (req, res) => {
     }
 
     for(var i=0; i<ratio.length;i++){
-        await sharp(Buffer.from(req.body.image.split(',')[1], 'base64'))
+        await sharp(Buffer.from(image[1], 'base64'))
         .resize({ fit: sharp.fit.contain, width: ratio[i], height: ratio[i] })
         .webp({ quality: 60 })
         .toBuffer()
@@ -112,7 +133,22 @@ router.post("/paper", async (req, res) => {
             data.filename = ratio[i].toString()+'x'+ratio[i].toString()+'.webp'
 
             try{
-                req.imageUrl = await uploadFile(data)
+                const image_url = await uploadFile(data)
+                pool.getConnection(async function(err, conn) {
+                    if (err){
+                        res.status(500).send('An error occurred')
+                        console.log(err)
+                    }else{
+                        conn.query(
+                            'INSERT INTO Paper values (?,?,?,?,?,?,now());',
+                            [null, timefolder+randomfolder, req.body.header, req.body.body, req.body.topicThreshold?req.body.topicThreshold:'0', null],
+                            function(err, results) {
+                                if (err) throw err
+                                res.status(200).send()
+                            }
+                        );
+                    }
+                })
             }catch(error){
                 console.log(error)
                 res.status(500).send('An error occured while uploading file')
