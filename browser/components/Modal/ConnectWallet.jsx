@@ -21,13 +21,13 @@ export default function ConnectWallet() {
     const setModal = useModalStore(state => state.setModal)
     const router = useRouter()
     const {
+        autoConnect = false,
         wallets,
         connecting,
         connected,
         select,
         connect,
         ready,
-        adapter,
         wallet,
         publicKey,
         signMessage
@@ -123,17 +123,19 @@ export default function ConnectWallet() {
     }
 
     useEffect(async() => {
-        if(wallet && adapter && (wallet.name != selectedWallet)){
-            if(ready){
+        if(wallet && wallet.adapter){
+            if(wallet.readyState != 'Unsupported' && 
+                wallet.readyState != 'NotDetected'
+            ){
                 try{
-                    setSelectedWallet(wallet.name)
+                    setSelectedWallet(wallet.adapter.name)
                     await connect()
                 }catch(err){
                     unselectWallet()
                     toast.error(err.name)
                 }
             }else{
-                window.open(wallet.url, "_blank");
+                window.open(wallet.adapter.url, "_blank");
                 unselectWallet()
             }
         }
@@ -160,7 +162,7 @@ export default function ConnectWallet() {
     if((step == 1) || (connected == false)){
 
         return(
-            <div className={modalStyle.container}>
+            <div className={modalStyle.container} style={{maxWidth: 350}}>
                 
                 {connecting?
                     <h1>Connecting Wallet...</h1>
@@ -175,19 +177,24 @@ export default function ConnectWallet() {
                 </div>
                 
                 {wallets.map((wallet) => (
-                    <a key={wallet.name} onClick={() => select(wallet.name)} className={`${wallet.name == selectedWallet?styles.walletSelected:null} ${styles.connectWalletButton}`}>
-                        <img style={wallet.name == 'Ledger'?{filter:'invert(1)'}:null} src={wallet.icon}/>
-                        {ready && (wallet.name == selectedWallet) && !connected?
+                    <a style={{position: 'relative'}} key={wallet.adapter.name} onClick={() => select(wallet.adapter.name)} className={`${wallet.adapter.name == selectedWallet?styles.walletSelected:null} ${styles.connectWalletButton}`}>
+                        <img style={wallet.adapter.name == 'Ledger'?{filter:'invert(1)'}:null} src={wallet.adapter.icon}/>
+                        {ready && (wallet.adapter.name == selectedWallet) && !connected?
                             <div className={styles.walletSelectedChild}>
                                 <Loading/>
                             </div>
                         :
                             <div>
-                                {(wallet.name == selectedWallet)?
-                                    <h2 style={{color: '#FAFAFA'}}>{wallet.name}</h2>
-                                :
-                                    <h2>{wallet.name}</h2>
-                                }
+                                <div>
+                                    {(wallet.adapter.name == selectedWallet)?
+                                        <h2 style={{color: '#FAFAFA'}}>{wallet.adapter.name}</h2>
+                                    :
+                                        <h2>{wallet.adapter.name}</h2>
+                                    }
+                                </div>
+                                <div style={{position: 'absolute', fontSize: '12px', color: '#FF5B77', right: 20}}>
+                                    {wallet.readyState}
+                                </div>
                             </div>
                         }
                         

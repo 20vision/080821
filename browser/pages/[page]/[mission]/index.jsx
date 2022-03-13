@@ -1,9 +1,19 @@
 import PageLayout from '../../../layouts/page'
 import axios from 'axios'
 import {useInfiniteQuery} from 'react-query'
+import {usePageSelectedStore} from '../../../store/pageSelected'
 import { useRouter } from 'next/router'
+import { useEffect } from 'react'
 
 export default function index({page, missions}) {
+  const setPageSelection = usePageSelectedStore(state => state.setPageSelection)
+
+  useEffect(() => {
+    if(page){
+      setPageSelection(page)
+    }
+  }, [page])
+
   const router = useRouter()
 
   const papers = useInfiniteQuery(

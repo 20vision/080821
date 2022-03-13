@@ -64,7 +64,6 @@ export default function Edit(){
                 allowMultiple={false}
                 instantUpload={false}
                 allowProcess={false}
-                allowFileEncode={true}
                 server={{
                     url: 'http://localhost:4000/post/paper_image',
                     process: {
@@ -145,10 +144,9 @@ export default function Edit(){
             <div onClick={async() => {
                 try{
                     setLoading(true)
-                    console.log(pond)
-                    console.log(pond.getFileEncodeBase64String)
-                    const image = await pond.getFileEncodeBase64String()
+                    const image = await pond.getFile()
                     console.log(image)
+                    console.log(await image.getFileEncodeBase64String())
                     const response = await axios.post(`http://localhost:4000/post/paper`,{image: image, header: header, body: body},{withCredentials: true})
                     setLoading(false)
                     console.log(response.data)

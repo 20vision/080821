@@ -11,12 +11,10 @@ import SolanaIcon from '../../assets/SolanaIcon'
 import NumberFormat from 'react-number-format';
 import axios from 'axios'
 import { useRouter } from 'next/router';
-import assert from 'assert';
 import Loading from '../../assets/Loading/Loading'
 import { SYSVAR_RENT_PUBKEY, SystemProgram, PublicKey, Keypair, Transaction,TransactionInstruction,FeeCalculator, sendAndConfirmTransaction, sendAndConfirmRawTransaction, SendTransactionError } from "@solana/web3.js";
 import { Token, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/spl-token"
 import { getBigNumber, connection, MINT_LAYOUT, ACCOUNT_LAYOUT, VISION_PROGRAM_ID } from '../../hooks/web3/useContract';
-import BN from 'bn.js';
 import * as BufferLayout from "buffer-layout";
 import useSolPrice from '../../hooks/web3/useSolPrice';
 
@@ -327,7 +325,7 @@ export default function Trade() {
   
     // Send Transaction
     try{
-      tx.recentBlockhash = (await connection.getRecentBlockhash("confirmed")).blockhash
+      tx.recentBlockhash = (await connection.getLatestBlockhash("confirmed")).blockhash
       tx.feePayer = publicKey
       tx.partialSign(new_mint_keypair);
       const signedTx = await signTransaction(tx)
@@ -440,7 +438,7 @@ export default function Trade() {
     tx.add(txInst);
     // Send Transaction
     try{
-      tx.recentBlockhash = (await connection.getRecentBlockhash("confirmed")).blockhash
+      tx.recentBlockhash = (await connection.getLatestBlockhash("confirmed")).blockhash
       tx.feePayer = publicKey
       const signedTx = await signTransaction(tx)
       await sendAndConfirmRawTransaction(connection, signedTx.serialize())
@@ -537,7 +535,7 @@ export default function Trade() {
 
     // Send Transaction
     try{
-      tx.recentBlockhash = (await connection.getRecentBlockhash("confirmed")).blockhash
+      tx.recentBlockhash = (await connection.getLatestBlockhash("confirmed")).blockhash
       tx.feePayer = publicKey
       const signedTx = await signTransaction(tx)
       await sendAndConfirmRawTransaction(connection, signedTx.serialize())
@@ -609,7 +607,7 @@ export default function Trade() {
     tx.add(txInst);
     // Send Transaction
     try{
-      tx.recentBlockhash = (await connection.getRecentBlockhash("confirmed")).blockhash
+      tx.recentBlockhash = (await connection.getLatestBlockhash("confirmed")).blockhash
       tx.feePayer = publicKey
       const signedTx = await signTransaction(tx)
       await sendAndConfirmRawTransaction(connection, signedTx.serialize())
