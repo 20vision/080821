@@ -12,6 +12,9 @@ var validator = require('validator');
 const colorOptions = [
     '7dbef5', '097bdc', '2dc3bc', '70908e', '67c166', '189c3b', 'c3c52e', 'd28e2a', 'dcb882', 'af9877', 'd64675', 'bb82c5', 'ac34c1', '9778bf', 'bf1402'
 ]
+const { random_string } = require("../utils/random");
+const sharp = require('sharp')
+const { uploadFile, deleteFile } = require("../config/storage");
 
 router.post("/create_page", check.AuthRequired, input_validation.checkRegexPagename, input_validation.checkUniquePagename, input_validation.vision, async (req, res) => {
     if(req.user_id){
@@ -86,36 +89,40 @@ router.post("/mission", check.AuthRequired, check.role, input_validation.checkUn
 });
 
 router.post("/paper", async (req, res) => {
-
-    if(!validator.isBase64(req.body.image) || (!validator.isMimeType('image/png') && !validator.isMimeType('image/jpeg') && !validator.isMimeType('image/webp'))){
+    
+    if(!validator.isBase64(req.body.image.split(',')[1]) /*|| (!validator.isMimeType(req.body.image))*/){
         return res.status(422).send('Invalid Data Type')
     }
-    
-    console.log(req.body.image)
 
-    res.status(200).send()
+    let ratio = [512]
+            
+    let data = {
+        bucketname: 'paper_images',
+        timefolder: (new Date()).getTime().toString(),
+        randomfolder: await random_string(8)
+    }
 
-    // let imageBuffer = Buffer.from(req.body.image, 'base64')
+    for(var i=0; i<ratio.length;i++){
+        await sharp(Buffer.from(req.body.image.split(',')[1], 'base64'))
+        .resize({ fit: sharp.fit.contain, width: ratio[i], height: ratio[i] })
+        .webp({ quality: 60 })
+        .toBuffer()
+        .then(async response => {
+            data.buffer = response,
+            data.filename = ratio[i].toString()+'x'+ratio[i].toString()+'.webp'
 
+            try{
+                req.imageUrl = await uploadFile(data)
+            }catch(error){
+                console.log(error)
+                res.status(500).send('An error occured while uploading file')
+            }
 
-
-    // await sharp(req.file.buffer)
-    // .resize({ fit: sharp.fit.contain, width: ratio[i], height: ratio[i] })
-    // .webp({ quality: 60 })
-    // .toBuffer()
-    // .then(async response => {
-    //     data.buffer = response,
-    //     data.filename = ratio[i].toString()+'x'+ratio[i].toString()+'.webp'
-    //     try{
-    //         req.imageUrl = await uploadFile(data)
-    //     }catch(error){
-    //         console.log(error)
-    //         res.status(500).send('An error occured while uploading file')
-    //     }
-    // }).catch(err =>{
-    //     console.log("err: ",err);   
-    //     res.status(500).send() 
-    // })
+        }).catch(err =>{
+            console.log("err: ",err);   
+            res.status(500).send() 
+        })
+    }
 })
 
 router.post("/topic", check.AuthRequired, check.role, input_validation.checkUniqueTopicTitle, input_validation.missionBody_topicBody_forumPost, async (req, res) => {

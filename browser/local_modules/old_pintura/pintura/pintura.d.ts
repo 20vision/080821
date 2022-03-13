@@ -377,12 +377,6 @@ interface MarkupEditorPropertier {
     markupEditorShapeStyleControls?: MarkupEditorShapeStyleControlDefaults;
     markupEditorToolSelectRadius?: number;
     markupEditorTextInputMode?: 'modal' | 'inline';
-    enableSelectToolToAddShape?: boolean;
-    enableTapToAddText?: boolean;
-    enableZoom?: boolean;
-    enablePan?: boolean;
-    enableZoomControls?: boolean;
-    markupEditorWillStartInteraction?: (point: Vector, image: Rect) => boolean;
 }
 
 interface AnnotatePluginOptions extends MarkupEditorPropertier {
@@ -435,7 +429,15 @@ interface StickerPluginOptions {
     stickersEnableButtonFlipVertical?: boolean;
 }
 
-interface PinturaImageState {
+interface ImageOptions {
+    readonly size: Size;
+    readonly aspectRatio: number;
+    readonly cropSize: Size;
+    readonly cropRectAspectRatio: number;
+    readonly file: File;
+    readonly loadState: any;
+    readonly processState: any;
+    readonly rotationRange: [number, number];
     backgroundColor?: Color;
     colorMatrix?: ColorMatrix;
     convolutionMatrix?: ConvolutionMatrix;
@@ -449,23 +451,12 @@ interface PinturaImageState {
     decoration?: Shape[];
     flipX?: boolean;
     flipY?: boolean;
-    frame?: string;
     gamma?: number;
+    noise?: number;
     rotation?: number;
     vignette?: number;
     targetSize?: Size;
     metadata?: PinturaMetadata;
-}
-
-interface ImageOptions extends PinturaImageState {
-    readonly size: Size;
-    readonly aspectRatio: number;
-    readonly cropSize: Size;
-    readonly cropRectAspectRatio: number;
-    readonly file: File;
-    readonly loadState: any;
-    readonly processState: any;
-    readonly rotationRange: [number, number];
     state?: any;
 }
 
@@ -560,6 +551,7 @@ interface EditorOptions {
     enableUtils?: boolean;
     enableDropImage?: boolean;
     enablePasteImage?: boolean;
+    enableMarkupEditorToolSelectToAddShape?: boolean;
     handleEvent?: (type: string, detail: any) => void;
     willRequestResource?: (url: string) => boolean;
     willClose?: () => Promise<boolean>;
@@ -588,8 +580,7 @@ interface EditorOptions {
     willRenderShapePresetToolbar?: (
         nodes: PinturaNode[],
         addPreset: (sticker: Sticker) => void,
-        env: any,
-        render: () => void
+        env: any
     ) => PinturaNode[];
 }
 
@@ -649,24 +640,6 @@ interface PinturaEditorModalOptions {
 interface PinturaEditorModal extends PinturaEditor, PinturaEditorModalOptions {
     show: () => void;
     hide: () => void;
-}
-
-interface PinturaReadState {
-    index: number;
-    task: string;
-    taskLengthComputable: boolean;
-    taskProgress: number;
-    timeStamp: number;
-    error?: unknown;
-}
-
-interface PinturaWriteState {
-    index: number;
-    task: string;
-    taskLengthComputable: boolean;
-    taskProgress: number;
-    timeStamp: number;
-    error?: unknown;
 }
 
 // Default image reader and writer
@@ -867,9 +840,6 @@ export function insertNodeAfter(
 // utils
 export const supportsWebGL: () => boolean;
 export const degToRad: (deg: number) => number;
-export const naturalAspectRatioToNumber: (
-    aspectRatio: string | number | undefined
-) => number | false | undefined;
 export const colorStringToColorArray: (Color: string) => Color;
 export const legacyDataToImageState: (data: any) => ImageOptions;
 export const dispatchEditorEvents: (

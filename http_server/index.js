@@ -1,7 +1,8 @@
 //Express Basic
 const express = require('express')
 const app = express()
-    app.use(express.json());
+app.use(express.json({limit: '5mb'}));
+
 const port = 4000
 
 const cookieParser = require('cookie-parser')

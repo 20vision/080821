@@ -2,6 +2,12 @@ declare module 'react-pintura' {
     import {
         PinturaEditorDefaultOptions,
         PinturaEditorModalOptions,
+        PinturaDefaultImageReaderResult,
+        PinturaDefaultImageWriterResult,
+        PinturaReadState,
+        PinturaWriteState,
+        PinturaImageState,
+        Shape,
         // @ts-ignore
     } from 'pintura';
 
@@ -9,33 +15,35 @@ declare module 'react-pintura' {
     import * as React from 'react';
 
     interface PinturaComponentEvents {
-        onLoadstart?: (detail: any) => void;
-        onLoadabort?: (detail: any) => void;
-        onLoaderror?: (detail: any) => void;
-        onLoadprogress?: (detail: any) => void;
-        onLoad?: (detail: any) => void;
-        onProcessstart?: (detail: any) => void;
-        onProcessabort?: (detail: any) => void;
-        onProcesserror?: (detail: any) => void;
-        onProcessprogress?: (detail: any) => void;
-        onProcess?: (detail: any) => void;
-        onLoadpreview?: (detail: any) => void;
-        onReady?: (detail: any) => void;
-        onUpdate?: (detail: any) => void;
-        onUndo?: (detail: any) => void;
-        onRedo?: (detail: any) => void;
-        onRevert?: (detail: any) => void;
-        onClose?: (detail: any) => void;
-        onDestroy?: (detail: any) => void;
-        onAddshape?: (detail: any) => void;
-        onSelectshape?: (detail: any) => void;
-        onUpdateshape?: (detail: any) => void;
-        onRemoveshape?: (detail: any) => void;
+        onInit?: (detail: PinturaEditor) => void;
+        onLoadstart?: () => void;
+        onLoadabort?: (detail: PinturaReadState) => void;
+        onLoaderror?: (detail: PinturaReadState) => void;
+        onLoadprogress?: (detail: PinturaReadState) => void;
+        onLoad?: (detail: PinturaDefaultImageReaderResult) => void;
+        onProcessstart?: () => void;
+        onProcessabort?: (detail: PinturaWriteState) => void;
+        onProcesserror?: (detail: PinturaWriteState) => void;
+        onProcessprogress?: (detail: PinturaWriteState) => void;
+        onProcess?: (detail: PinturaDefaultImageWriterResult) => void;
+        onLoadpreview?: (detail: ImageData | ImageBitmap) => void;
+        onReady?: () => void;
+        onUpdate?: (detail: PinturaImageState) => void;
+        onUndo?: (detail: number) => void;
+        onRedo?: (detail: number) => void;
+        onRevert?: () => void;
+        onClose?: () => void;
+        onDestroy?: () => void;
+        onAddshape?: (detail: Shape) => void;
+        onSelectshape?: (detail: Shape) => void;
+        onUpdateshape?: (detail: Shape) => void;
+        onRemoveshape?: (detail: Shape) => void;
+        onSelectstyle?: (detail: { [key: string]: unknown }) => void;
     }
 
     interface PinturaComponentModalEvents extends PinturaComponentEvents {
-        onShow?: (detail: any) => void;
-        onHide?: (detail: any) => void;
+        onShow?: () => void;
+        onHide?: () => void;
     }
 
     export class PinturaEditor extends React.Component<

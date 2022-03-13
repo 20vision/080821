@@ -1,6 +1,6 @@
 {
   "private": true,
-  "version": "8.25.1",
+  "version": "8.19.1",
   "name": "react-pintura",
   "browser": "index.js",
   "main": "index.js",

@@ -1,6 +1,6 @@
 /*!
- * Pintura Image Editor 8.25.1
- * (c) 2018-2022 PQINA Inc. - All Rights Reserved
+ * Pintura Image Editor 8.6.0
+ * (c) 2018-2021 PQINA Inc. - All Rights Reserved
  * License: https://pqina.nl/pintura/license/
  */
 /* eslint-disable */
@@ -14,84 +14,21 @@ var FilePondPluginImageEditor = (function () {
 
     var isString = (v) => typeof v === 'string';
 
-    var h = (name, attributes, children = []) => {
-        const el = document.createElement(name);
-        // @ts-ignore
-        const descriptors = Object.getOwnPropertyDescriptors(el.__proto__);
-        for (const key in attributes) {
-            if (key === 'style') {
-                el.style.cssText = attributes[key];
-            }
-            else if ((descriptors[key] && descriptors[key].set) ||
-                /textContent|innerHTML/.test(key) ||
-                typeof attributes[key] === 'function') {
-                el[key] = attributes[key];
-            }
-            else {
-                el.setAttribute(key, attributes[key]);
-            }
-        }
-        children.forEach((child) => el.appendChild(child));
-        return el;
-    };
-
-    let result$4 = null;
-    var isBrowser = () => {
-        if (result$4 === null)
-            result$4 = typeof window !== 'undefined' && typeof window.document !== 'undefined';
-        return result$4;
-    };
-
-    // @ts-ignore
-    const supportsReplaceChildren = isBrowser() && !!Node.prototype.replaceChildren;
-    const fn = supportsReplaceChildren
-        ? // @ts-ignore
-            (parent, newChildren) => parent.replaceChildren(newChildren)
-        : (parent, newChildren) => {
-            while (parent.lastChild) {
-                parent.removeChild(parent.lastChild);
-            }
-            if (newChildren !== undefined) {
-                parent.append(newChildren);
-            }
-        };
-
-    const container = isBrowser() &&
-        h('div', {
-            class: 'PinturaMeasure',
-            style: 'pointer-events:none;left:0;top:0;width:0;height:0;contain:strict;overflow:hidden;position:absolute;',
-        });
-    let timeoutId;
-    var appendForMeasuring = (element) => {
-        // replace element children with this child
-        fn(container, element);
-        // append to DOM if not in it atm
-        if (!container.parentNode)
-            document.body.append(container);
-        // auto detach from DOM after it isn't used for a little while
-        clearTimeout(timeoutId);
-        timeoutId = setTimeout(() => {
-            container.remove();
-        }, 500);
-        // return added element for measuring
-        return element;
-    };
-
-    let result$3 = null;
-    var isSafari = () => {
-        if (result$3 === null)
-            result$3 = isBrowser() && /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-        return result$3;
+    let isSafari = null;
+    var isSafari$1 = () => {
+        if (isSafari === null)
+            isSafari = isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+        return isSafari;
     };
 
     var getImageElementSize = (imageElement) => new Promise((resolve, reject) => {
         let shouldAutoRemove = false;
         // test if image is attached to DOM, if not attached, attach so measurement is correct on Safari
-        if (!imageElement.parentNode && isSafari()) {
+        if (!imageElement.parentNode && isSafari$1()) {
             shouldAutoRemove = true;
             // has width 0 and height 0 to prevent rendering very big SVGs (without width and height) that will for one frame overflow the window and show a scrollbar
             imageElement.style.cssText = `position:absolute;visibility:hidden;pointer-events:none;left:0;top:0;width:0;height:0;`;
-            appendForMeasuring(imageElement);
+            document.body.appendChild(imageElement);
         }
         // start testing size
         const measure = () => {
@@ -102,7 +39,7 @@ var FilePondPluginImageEditor = (function () {
                 return;
             // clean up image if was attached for measuring
             if (shouldAutoRemove)
-                imageElement.remove();
+                imageElement.parentNode.removeChild(imageElement);
             clearInterval(intervalId);
             resolve({ width, height });
         };
@@ -136,6 +73,34 @@ var FilePondPluginImageEditor = (function () {
 
     var noop = (...args) => { };
 
+    let result$3 = null;
+    var isBrowser = () => {
+        if (result$3 === null)
+            result$3 = typeof window !== 'undefined' && typeof window.document !== 'undefined';
+        return result$3;
+    };
+
+    var h = (name, attributes, children = []) => {
+        const el = document.createElement(name);
+        // @ts-ignore
+        const descriptors = Object.getOwnPropertyDescriptors(el.__proto__);
+        for (const key in attributes) {
+            if (key === 'style') {
+                el.style.cssText = attributes[key];
+            }
+            else if ((descriptors[key] && descriptors[key].set) ||
+                /textContent|innerHTML/.test(key) ||
+                typeof attributes[key] === 'function') {
+                el[key] = attributes[key];
+            }
+            else {
+                el.setAttribute(key, attributes[key]);
+            }
+        }
+        children.forEach((child) => el.appendChild(child));
+        return el;
+    };
+
     var releaseCanvas = (canvas) => {
         canvas.width = 1;
         canvas.height = 1;
@@ -156,7 +121,6 @@ var FilePondPluginImageEditor = (function () {
                     result$2 = false;
                 }
                 canvas && releaseCanvas(canvas);
-                canvas = undefined;
             }
             else {
                 result$2 = false;
@@ -175,10 +139,9 @@ var FilePondPluginImageEditor = (function () {
     let result$1 = null;
     var supportsWebGL = () => {
         if (result$1 === null) {
-            let canvas = h('canvas');
+            const canvas = h('canvas');
             result$1 = !!getWebGLContext(canvas);
             releaseCanvas(canvas);
-            canvas = undefined;
         }
         return result$1;
     };
@@ -212,42 +175,6 @@ var FilePondPluginImageEditor = (function () {
         const { addFilter, utils, views } = _;
         const { Type, createRoute } = utils;
         const { fileActionButton } = views;
-        const createQueue = ({ parallel = 1, autoShift = true }) => {
-            const queue = [];
-            let jobs = 0;
-            const next = () => {
-                // done
-                if (!queue.length)
-                    return api.oncomplete();
-                // get next item
-                jobs++;
-                const job = queue.shift();
-                // run
-                job(() => {
-                    jobs--;
-                    // pick up next item
-                    if (jobs < parallel)
-                        runJobs();
-                });
-            };
-            const runJobs = () => {
-                for (let i = 0; i < parallel - jobs; i++) {
-                    next();
-                }
-            };
-            const api = {
-                queue: (cb) => {
-                    // queue job
-                    queue.push(cb);
-                    // run item immidiately
-                    autoShift && runJobs();
-                },
-                runJobs,
-                oncomplete: () => { },
-            };
-            return api;
-        };
-        const renderQueue = createQueue({ parallel: 1 });
         const getEditorSafe = (editor) => (editor === null ? {} : editor);
         addFilter('SHOULD_REMOVE_ON_REVERT', (shouldRemove, { item, query }) => new Promise((resolve) => {
             const { file } = item;
@@ -325,57 +252,6 @@ var FilePondPluginImageEditor = (function () {
                 imageReader &&
                 imageWriter);
         };
-        // generate preview
-        const getPosterTargetSize = (query, targetSize) => {
-            const posterHeight = query('GET_FILE_POSTER_HEIGHT');
-            const maxPosterHeight = query('GET_FILE_POSTER_MAX_HEIGHT');
-            if (posterHeight) {
-                targetSize.width = posterHeight * 2;
-                targetSize.height = posterHeight * 2;
-            }
-            else if (maxPosterHeight) {
-                targetSize.width = maxPosterHeight * 2;
-                targetSize.height = maxPosterHeight * 2;
-            }
-            return targetSize;
-        };
-        const createImagePoster = (query, item, done = () => { }) => {
-            if (!item)
-                return;
-            const { imageProcessor, imageReader, imageWriter, editorOptions, imageState: imageBaseState, } = getEditorSafe(query('GET_IMAGE_EDITOR'));
-            // need image processor to create image poster
-            if (!imageProcessor)
-                return;
-            const [createImageReader, imageReaderOptions] = imageReader;
-            const [createImageWriter = noop, imageWriterOptions] = imageWriter;
-            const file = item.file;
-            const imageState = item.getMetadata('imageState');
-            const targetSize = getPosterTargetSize(query, {
-                width: 512,
-                height: 512,
-            });
-            const options = {
-                ...editorOptions,
-                imageReader: createImageReader(imageReaderOptions),
-                imageWriter: createImageWriter({
-                    // can optionally overwrite poster size
-                    ...(imageWriterOptions || {}),
-                    // limit memory so poster is created quicker
-                    canvasMemoryLimit: targetSize.width * targetSize.height * 2,
-                }),
-                imageState: {
-                    ...imageBaseState,
-                    ...imageState,
-                },
-            };
-            renderQueue.queue((next) => {
-                imageProcessor(file, options).then(({ dest }) => {
-                    item.setMetadata('poster', URL.createObjectURL(dest), true);
-                    next();
-                    done();
-                });
-            });
-        };
         // called for each view that is created right after the 'create' method
         addFilter('CREATE_VIEW', (viewAPI) => {
             // get reference to created view
@@ -390,20 +266,21 @@ var FilePondPluginImageEditor = (function () {
             if (!shouldExtendView)
                 return;
             // no editor defined, then exit
-            const { createEditor, imageReader, imageWriter, editorOptions, legacyDataToImageState, imageState: imageBaseState, } = getEditorSafe(query('GET_IMAGE_EDITOR'));
+            const { createEditor, imageProcessor, imageReader, imageWriter, editorOptions, legacyDataToImageState, imageState: imageBaseState, } = getEditorSafe(query('GET_IMAGE_EDITOR'));
             if (!imageReader || !imageWriter || !editorOptions || !editorOptions.locale)
                 return;
             // remove default image reader and writer if set
             delete editorOptions.imageReader;
             delete editorOptions.imageWriter;
             const [createImageReader, imageReaderOptions] = imageReader;
+            const [createImageWriter = noop, imageWriterOptions] = imageWriter;
             // tests if file item has poster
             const getItemByProps = (props) => {
                 const { id } = props;
                 const item = query('GET_ITEM', id);
                 return item;
             };
-            const hasPoster = (props) => {
+            const hasPoster = (root, props) => {
                 if (!query('GET_ALLOW_FILE_POSTER'))
                     return false;
                 const item = getItemByProps(props);
@@ -415,6 +292,56 @@ var FilePondPluginImageEditor = (function () {
                 const poster = item.getMetadata('poster');
                 return !!poster;
             };
+            // generate preview
+            const getPosterTargetSize = (root, targetSize) => {
+                const posterHeight = root.query('GET_FILE_POSTER_HEIGHT');
+                const maxPosterHeight = root.query('GET_FILE_POSTER_MAX_HEIGHT');
+                if (posterHeight) {
+                    targetSize.width = posterHeight * 2;
+                    targetSize.height = posterHeight * 2;
+                }
+                else if (maxPosterHeight) {
+                    targetSize.width = maxPosterHeight * 2;
+                    targetSize.height = maxPosterHeight * 2;
+                }
+                return targetSize;
+            };
+            const createEditorOptions = (root) => {
+                const targetSize = getPosterTargetSize(root, {
+                    width: 512,
+                    height: 512,
+                });
+                return {
+                    ...editorOptions,
+                    imageReader: createImageReader(imageReaderOptions),
+                    imageWriter: createImageWriter({
+                        // poster size
+                        targetSize,
+                        // can optionally overwrite poster size
+                        ...(imageWriterOptions || {}),
+                    }),
+                };
+            };
+            const createImagePoster = ({ root, props }) => {
+                // need image processor to create image poster
+                if (!imageProcessor)
+                    return;
+                const item = getItemByProps(props);
+                if (!item)
+                    return;
+                const file = item.file;
+                const imageState = item.getMetadata('imageState');
+                const options = {
+                    ...createEditorOptions(root),
+                    imageState: {
+                        ...imageBaseState,
+                        ...imageState,
+                    },
+                };
+                imageProcessor(file, options).then(({ dest }) => {
+                    item.setMetadata('poster', URL.createObjectURL(dest), true);
+                });
+            };
             // opens the editor, if it does not already exist, it creates the editor
             const openImageEditor = ({ root, props, action }) => {
                 const { handleEditorResponse } = action;
@@ -424,8 +351,7 @@ var FilePondPluginImageEditor = (function () {
                 const file = item.file;
                 // open the editor (sets editor properties and imageState property)
                 const editor = createEditor({
-                    ...editorOptions,
-                    imageReader: createImageReader(imageReaderOptions),
+                    ...createEditorOptions(root),
                     src: file,
                 });
                 // when the image has loaded, update the editor
@@ -441,12 +367,12 @@ var FilePondPluginImageEditor = (function () {
                         ...imageState,
                     };
                 });
-                editor.on('process', ({ imageState }) => {
+                editor.on('process', ({ imageState, dest }) => {
                     // if already has post URL, try to revoke
-                    // const poster = item.getMetadata('poster');
-                    // poster && URL.revokeObjectURL(item.getMetadata('poster'));
+                    const poster = item.getMetadata('poster');
+                    poster && URL.revokeObjectURL(item.getMetadata('poster'));
                     // store state, two seperate actions because we want to trigger preparefile when setting `imageState`
-                    // item.setMetadata('poster', URL.createObjectURL(dest));
+                    item.setMetadata('poster', URL.createObjectURL(dest));
                     item.setMetadata('imageState', imageState);
                     // used in instant edit mode
                     if (!handleEditorResponse)
@@ -477,22 +403,19 @@ var FilePondPluginImageEditor = (function () {
                 }
                 if (!query('GET_IMAGE_EDITOR_ALLOW_EDIT') || !query('GET_IMAGE_EDITOR_SUPPORT_EDIT'))
                     return;
-                // draw edit button next to file name
+                // handle interactions
+                root.ref.handleEdit = (e) => {
+                    e.stopPropagation();
+                    root.dispatch('EDIT_ITEM', { id });
+                };
                 updateEditButton(root, props);
             };
             const updateEditButton = (root, props) => {
-                // handle interactions
-                if (!root.ref.handleEdit) {
-                    root.ref.handleEdit = (e) => {
-                        e.stopPropagation();
-                        root.dispatch('EDIT_ITEM', { id: props.id });
-                    };
+                root.ref.buttonEditItem && root.removeChildView(root.ref.buttonEditItem);
+                if (root.ref.editButton && root.ref.editButton.parentNode) {
+                    root.ref.editButton.parentNode.removeChild(root.ref.editButton);
                 }
-                if (hasPoster(props)) {
-                    // remove current editButton
-                    if (root.ref.editButton && root.ref.editButton.parentNode) {
-                        root.ref.editButton.parentNode.removeChild(root.ref.editButton);
-                    }
+                if (hasPoster(root, props)) {
                     // add edit button to preview
                     const buttonView = view.createChildView(fileActionButton, {
                         label: 'edit',
@@ -505,12 +428,7 @@ var FilePondPluginImageEditor = (function () {
                     buttonView.on('click', root.ref.handleEdit);
                     root.ref.buttonEditItem = view.appendChildView(buttonView);
                 }
-                // no poster
                 else {
-                    // remove current button
-                    if (root.ref.buttonEditItem) {
-                        root.removeChildView(root.ref.buttonEditItem);
-                    }
                     // view is file info
                     const filenameElement = view.element.querySelector('.filepond--file-info-main');
                     const editButton = document.createElement('button');
@@ -521,15 +439,9 @@ var FilePondPluginImageEditor = (function () {
                     root.ref.editButton = editButton;
                 }
             };
-            //#endregion
             const didUpdateItemMetadata = ({ root, props, action }) => {
-                // handle image state updates
-                if (/imageState/.test(action.change.key) && query('GET_ALLOW_FILE_POSTER'))
-                    return root.dispatch('REQUEST_CREATE_IMAGE_POSTER', { id: props.id });
-                // no change to poster, skip
                 if (!/poster/.test(action.change.key))
                     return;
-                // no editor allowed so no need to show the button
                 if (!query('GET_IMAGE_EDITOR_ALLOW_EDIT') || !query('GET_IMAGE_EDITOR_SUPPORT_EDIT'))
                     return;
                 updateEditButton(root, props);
@@ -554,7 +466,7 @@ var FilePondPluginImageEditor = (function () {
                     const poster = item.getMetadata('poster');
                     poster && URL.revokeObjectURL(poster);
                 },
-                REQUEST_CREATE_IMAGE_POSTER: ({ root, props }) => createImagePoster(root.query, getItemByProps(props)),
+                REQUEST_CREATE_IMAGE_POSTER: createImagePoster,
                 DID_FILE_POSTER_LOAD: undefined,
             };
             if (supportsFilePoster) {
@@ -566,6 +478,7 @@ var FilePondPluginImageEditor = (function () {
                 };
                 routes.DID_FILE_POSTER_LOAD = didPosterUpdate;
             }
+            //#endregion
             // start writing
             view.registerWriter(createRoute(routes));
         });
@@ -607,38 +520,24 @@ var FilePondPluginImageEditor = (function () {
         // subscribe to file transformations
         addFilter('PREPARE_OUTPUT', (file, { query, item }) => {
             const writeOutputImage = (file) => new Promise((resolve, reject) => {
-                // test if has image poster yet, if not, create poster
-                const prepare = () => {
-                    // queue for preparing
-                    renderQueue.queue((next) => {
-                        const imageState = item.getMetadata('imageState');
-                        // no editor defined, then exit
-                        const { imageProcessor, imageReader, imageWriter, editorOptions, imageState: imageBaseState, } = getEditorSafe(query('GET_IMAGE_EDITOR'));
-                        if (!imageProcessor || !imageReader || !imageWriter || !editorOptions)
-                            return;
-                        const [createImageReader, imageReaderOptions] = imageReader;
-                        const [createImageWriter = noop, imageWriterOptions] = imageWriter;
-                        imageProcessor(file, {
-                            ...editorOptions,
-                            imageReader: createImageReader(imageReaderOptions),
-                            imageWriter: createImageWriter(imageWriterOptions),
-                            imageState: {
-                                ...imageBaseState,
-                                ...imageState,
-                            },
-                        })
-                            .then(resolve)
-                            .catch(reject)
-                            .finally(next);
-                    });
-                };
-                if (query('GET_ALLOW_FILE_POSTER') && !item.getMetadata('poster')) {
-                    // create poster
-                    createImagePoster(query, item, prepare);
-                }
-                else {
-                    prepare();
-                }
+                const imageState = item.getMetadata('imageState');
+                // no editor defined, then exit
+                const { imageProcessor, imageReader, imageWriter, editorOptions, imageState: imageBaseState, } = getEditorSafe(query('GET_IMAGE_EDITOR'));
+                if (!imageProcessor || !imageReader || !imageWriter || !editorOptions)
+                    return;
+                const [createImageReader, imageReaderOptions] = imageReader;
+                const [createImageWriter = noop, imageWriterOptions] = imageWriter;
+                imageProcessor(file, {
+                    ...editorOptions,
+                    imageReader: createImageReader(imageReaderOptions),
+                    imageWriter: createImageWriter(imageWriterOptions),
+                    imageState: {
+                        ...imageBaseState,
+                        ...imageState,
+                    },
+                })
+                    .then(resolve)
+                    .catch(reject);
             });
             return new Promise((resolve) => {
                 shouldTransformFile(query, file, item).then((shouldWrite) => {
@@ -646,9 +545,8 @@ var FilePondPluginImageEditor = (function () {
                         return resolve(file);
                     writeOutputImage(file).then((res) => {
                         const afterFn = query('GET_IMAGE_EDITOR_AFTER_WRITE_IMAGE');
-                        // if a function is defined
                         if (afterFn)
-                            return Promise.resolve(afterFn(res)).then(resolve);
+                            return afterFn(res).then(resolve);
                         // @ts-ignore
                         resolve(res.dest);
                     });

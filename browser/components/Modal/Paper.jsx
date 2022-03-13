@@ -64,14 +64,41 @@ export default function Edit(){
                 allowMultiple={false}
                 instantUpload={false}
                 allowProcess={false}
-                onaddfile= {(err, item) => {
+                onupdatefiles = {(item) => {
+                    console.log(item[0])
+                    // if (err) {
+                    //     toast.error('An error occurred')
+                    //     console.warn(err);
+                    //     return;
+                    // }
+                    console.log(item[0].getFileEncodeBase64String())
+                    setBase64Image(item[0].getFileEncodeBase64String())
+                }}
+                // onupdatefiles={(files, err) => {
+                //     console.log('update')
+                //     // if (err) {
+                //     //     toast.error('An error occurred')
+                //     //     console.warn(err);
+                //     //     return;
+                //     // }
+                //     // console.log('changed')
+                //     // console.log(files[0].getFileEncodeBase64String())
+                //     // setBase64Image(files[0].getFileEncodeBase64String())
+                // }}
+                // imageEditorAfterWriteImage={(res) => {
+                //     console.log(res.dest.getFileEncodeBase64String())
+                //     return res.dest;
+                // }}
+                /*onaddfile= {(err, item) => {
+                    console.log(item)
                     if (err) {
                         toast.error('An error occurred')
                         console.warn(err);
                         return;
                     }
+                    console.log(item.getFileEncodeBase64String())
                     setBase64Image(item.getFileEncodeBase64String())
-                }}
+                }}*/
                 /*server={{
                     url: 'http://localhost:4000/post/paper_image',
                     process: {
@@ -151,6 +178,7 @@ export default function Edit(){
             </div>
 
             <div onClick={async() => {
+                const base64Image = pond.getFile().getFileEncodeDataURL()
                 try{
                     setLoading(true)
                     const response = await axios.post(`http://localhost:4000/post/paper`,{image: base64Image, header: header, body: body},{withCredentials: true})
