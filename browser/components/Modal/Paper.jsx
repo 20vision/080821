@@ -5,11 +5,12 @@ import { FilePond, registerPlugin } from 'react-filepond';
 import 'filepond/dist/filepond.min.css';
 import FilePondPluginFileValidateType from 'filepond-plugin-file-validate-type';
 import FilePondPluginFilePoster from 'filepond-plugin-file-poster';
+import FilePondPluginFileEncode from 'filepond-plugin-file-encode';
 import 'filepond-plugin-file-poster/dist/filepond-plugin-file-poster.css';
 import FilePondPluginImageEditor from 'filepond-plugin-image-editor';
 import { useRouter } from 'next/router'
 import { toast } from 'react-toastify';
-import FilePondPluginFileEncode from 'filepond-plugin-file-encode';
+import axios from 'axios'
 
 registerPlugin(FilePondPluginFileEncode, FilePondPluginFileValidateType, FilePondPluginFilePoster, FilePondPluginImageEditor)
 
@@ -42,14 +43,13 @@ import {
     plugin_finetune_defaults,
 
 } from 'pintura'
-import axios from 'axios';
 
 setPlugins(plugin_crop, plugin_finetune, plugin_annotate, plugin_sticker);
-
 
 export default function Edit(){
     const [header, setHeader] = useState('')
     const [body, setBody] = useState('')
+    const [base64Image, setBase64Image] = useState()
     const [loading, setLoading] = useState(false)
     const router = useRouter()
     let pond = useRef()
@@ -64,7 +64,15 @@ export default function Edit(){
                 allowMultiple={false}
                 instantUpload={false}
                 allowProcess={false}
-                server={{
+                onaddfile= {(err, item) => {
+                    if (err) {
+                        toast.error('An error occurred')
+                        console.warn(err);
+                        return;
+                    }
+                    setBase64Image(item.getFileEncodeBase64String())
+                }}
+                /*server={{
                     url: 'http://localhost:4000/post/paper_image',
                     process: {
                         url: `/process${
@@ -82,7 +90,7 @@ export default function Edit(){
                         },
                         withCredentials: true
                     }
-                }}
+                }}*/
                 labelIdle={
                     `<div>
                         Drag & Drop your files or <span class="filepond--label-action">Browse</span>
@@ -100,6 +108,7 @@ export default function Edit(){
                     imageWriter: [
                         createDefaultImageWriter,
                         {
+                            canvasMemoryLimit: 4096 * 4096,
                             targetSize: {
                                 width: 512,
                                 height: 512,
@@ -144,12 +153,8 @@ export default function Edit(){
             <div onClick={async() => {
                 try{
                     setLoading(true)
-                    const image = await pond.getFile()
-                    console.log(image)
-                    console.log(await image.getFileEncodeBase64String())
-                    const response = await axios.post(`http://localhost:4000/post/paper`,{image: image, header: header, body: body},{withCredentials: true})
+                    const response = await axios.post(`http://localhost:4000/post/paper`,{image: base64Image, header: header, body: body},{withCredentials: true})
                     setLoading(false)
-                    console.log(response.data)
                 }catch(err){
                     console.log(err)
                     setLoading(false)

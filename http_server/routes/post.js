@@ -87,31 +87,35 @@ router.post("/mission", check.AuthRequired, check.role, input_validation.checkUn
 
 router.post("/paper", async (req, res) => {
 
-    if(!validator.isBase64(req.body.image) || (!validator.isMimeType('image/png') && !validator.isMimeType('image/jpeg'))){
+    if(!validator.isBase64(req.body.image) || (!validator.isMimeType('image/png') && !validator.isMimeType('image/jpeg') && !validator.isMimeType('image/webp'))){
         return res.status(422).send('Invalid Data Type')
     }
+    
+    console.log(req.body.image)
 
-    let imageBuffer = Buffer.from(req.body.image, 'base64')
+    res.status(200).send()
+
+    // let imageBuffer = Buffer.from(req.body.image, 'base64')
 
 
 
-    await sharp(req.file.buffer)
-    .resize({ fit: sharp.fit.contain, width: ratio[i], height: ratio[i] })
-    .webp({ quality: 60 })
-    .toBuffer()
-    .then(async response => {
-        data.buffer = response,
-        data.filename = ratio[i].toString()+'x'+ratio[i].toString()+'.webp'
-        try{
-            req.imageUrl = await uploadFile(data)
-        }catch(error){
-            console.log(error)
-            res.status(500).send('An error occured while uploading file')
-        }
-    }).catch(err =>{
-        console.log("err: ",err);   
-        res.status(500).send() 
-    })
+    // await sharp(req.file.buffer)
+    // .resize({ fit: sharp.fit.contain, width: ratio[i], height: ratio[i] })
+    // .webp({ quality: 60 })
+    // .toBuffer()
+    // .then(async response => {
+    //     data.buffer = response,
+    //     data.filename = ratio[i].toString()+'x'+ratio[i].toString()+'.webp'
+    //     try{
+    //         req.imageUrl = await uploadFile(data)
+    //     }catch(error){
+    //         console.log(error)
+    //         res.status(500).send('An error occured while uploading file')
+    //     }
+    // }).catch(err =>{
+    //     console.log("err: ",err);   
+    //     res.status(500).send() 
+    // })
 })
 
 router.post("/topic", check.AuthRequired, check.role, input_validation.checkUniqueTopicTitle, input_validation.missionBody_topicBody_forumPost, async (req, res) => {
