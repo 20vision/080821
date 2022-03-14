@@ -17,5 +17,6 @@ Test Wallet private key: CMgGx8WdMqLmGwvZHZboWaF6zeknrEtituyNziwg5hgqCEwvrL7zQNu
 Test Page Mint Key: CtENBNHd5fz2u1TERoZZQ9wqoydxsXTbph5xTyy8LUva
 
 ## Paper
+Stored image in folder paper_images/timestampstring/random_int(8) | Same as paper uid -> timestampstring+random_int(8)
 ### Version Control
   ![Version_Control drawio](https://user-images.githubusercontent.com/66218148/157411028-c5b8e295-c49e-4227-b035-35c8ecd801e7.png)
