@@ -23,7 +23,7 @@ const uploadFile = (data) => new Promise((res, rej) => {
 
 const deleteFile = (data) => new Promise((res, rej) => {
     async function deleteFile() {
-        await storage.bucket(`${data.bucketname}`).getFiles({ prefix: `${data.timefolder}/${data.randomfolder}`}, function(err, files){
+        storage.bucket(`${data.bucketname}`).getFiles({ prefix: `${data.timefolder}/${data.randomfolder}`}, function(err, files){
             for(var i in files){
                 files[i].delete()
             }

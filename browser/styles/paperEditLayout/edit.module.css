@@ -1,16 +1,17 @@
 .body{
     margin-top: 25px;
-    height: 120px;
+    min-height: 120px;
     display: flex;
     flex-direction: column;
 }
 
 .editContainer{
     width: 530px;
+    max-height: calc(90vh - 120px);
+    overflow: scroll;
 }
 
 .button{
-    margin-top: 35px;
     padding: 15px 25px;
     border-radius: 15px;
     background-color: var(--red);
@@ -32,4 +33,15 @@
     display: flex;
     flex-direction: column;
     margin-top: 25px;
+    margin-bottom: 25px;
+    overflow: none;
+}
+
+.maxTextLength{
+    font-size: 12px;
+    margin-left:auto;
+}
+
+.highlight{
+    color: var(--red);
 }

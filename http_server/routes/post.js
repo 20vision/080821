@@ -88,8 +88,10 @@ router.post("/mission", check.AuthRequired, check.role, input_validation.checkUn
     }
 });
 
-router.post("/paper", check.AuthRequired, check.role, async (req, res) => {
-    if(
+router.post("/paper", check.AuthRequired, async (req, res) => {
+    if(!req.body.pagename){
+        return res.status(422).send('Pagename missing')
+    }else if(
         !req.body.header ||
         (req.body.header > 100) ||
         (req.body.header < 3)
@@ -113,52 +115,68 @@ router.post("/paper", check.AuthRequired, check.role, async (req, res) => {
         (image[0] != 'data:image/webp;base64')
     )){
         return res.status(422).send('Invalid Data Type')
+    }else if(!req.body.mission){
+        return res.status(422).send('Mission missing')
     }
 
-    let ratio = [512]
-            
-    let data = {
-        bucketname: 'paper_images',
-        timefolder: (new Date()).getTime().toString(),
-        randomfolder: await random_string(8)
-    }
-
-    for(var i=0; i<ratio.length;i++){
-        await sharp(Buffer.from(image[1], 'base64'))
-        .resize({ fit: sharp.fit.contain, width: ratio[i], height: ratio[i] })
-        .webp({ quality: 60 })
-        .toBuffer()
-        .then(async response => {
-            data.buffer = response,
-            data.filename = ratio[i].toString()+'x'+ratio[i].toString()+'.webp'
-
-            try{
-                const image_url = await uploadFile(data)
-                pool.getConnection(async function(err, conn) {
-                    if (err){
-                        res.status(500).send('An error occurred')
-                        console.log(err)
-                    }else{
-                        conn.query(
-                            'INSERT INTO Paper values (?,?,?,?,?,?,now());',
-                            [null, timefolder+randomfolder, req.body.header, req.body.body, req.body.topicThreshold?req.body.topicThreshold:'0', null],
-                            function(err, results) {
-                                if (err) throw err
-                                res.status(200).send()
-                            }
-                        );
+    pool.getConnection(async function(err, conn) {
+        if (err){
+            res.status(500).send('An error occurred')
+            console.log(err)
+        }else{
+            conn.query(
+                `SELECT m.mission_id from Mission m 
+                join Page p on p.page_id = m.page_id and p.unique_pagename = ? and m.title = ?
+                join PageUser pu on pu.user_id = ? and pu.page_id = p.page_id;`,
+                [req.body.pagename, req.body.mission, req.user_id],
+                async function(err, mission_id) {
+                    if (err) throw err
+                    if(!mission_id || (mission_id.length == 0)) {
+                        pool.releaseConnection(conn);
+                        return res.status(400).send('Could not find the mission belonging to your account')
                     }
-                })
-            }catch(error){
-                console.log(error)
-                res.status(500).send('An error occured while uploading file')
-            }
+                    let ratio = [512]
+            
+                    let data = {
+                        bucketname: 'paper_images',
+                        timefolder: (new Date()).getTime().toString(),
+                        randomfolder: await random_string(8)
+                    }
 
-        }).catch(err =>{
-            console.log("err: ",err);   
-            res.status(500).send() 
-        })
-    }
+                    for(var i=0; i<ratio.length;i++){
+                        await sharp(Buffer.from(image[1], 'base64'))
+                        .resize({ fit: sharp.fit.contain, width: ratio[i], height: ratio[i] })
+                        .webp({ quality: 60 })
+                        .toBuffer()
+                        .then(async response => {
+                            data.buffer = response,
+                            data.filename = ratio[i].toString()+'x'+ratio[i].toString()+'.webp'
+
+                            try{
+                                const image_url = await uploadFile(data)
+                                conn.query(
+                                    'INSERT INTO Paper values (?,?,?,?,?,now());',
+                                    [null, data.timefolder+data.randomfolder, req.body.header, req.body.body, mission_id[0].mission_id, null],
+                                    function(err, results) {
+                                        if (err) throw err
+                                        res.status(200).send()
+                                    }
+                                );
+                            }catch(error){
+                                console.log(error)
+                                res.status(500).send('An error occured while uploading file')
+                            }
+
+                        }).catch(err =>{
+                            console.log("err: ",err);   
+                            res.status(500).send() 
+                        })
+                    }
+                }
+            );
+        }
+        pool.releaseConnection(conn);
+    })
 })
 
 router.post("/topic", check.AuthRequired, check.role, input_validation.checkUniqueTopicTitle, input_validation.missionBody_topicBody_forumPost, async (req, res) => {

@@ -59,89 +59,102 @@ export default function Edit(){
     let pond = useRef()
 
     return(
-        <div className={styles.editContainer}>
-            <FilePond
-                ref={(ref) => (pond = ref)}
-                acceptedFileTypes= {['image/png', 'image/jpeg']}
-                name="filepond"
-                imageEditorInstantEdit={true}
-                allowMultiple={false}
-                instantUpload={false}
-                allowProcess={false}
-                onaddfile={(err, file) => {
-                    if(err){
-                        return console.log(error)
+        <div className={styles.parentContainer}>
+            <div className={styles.editContainer}>
+                <FilePond
+                    ref={(ref) => (pond = ref)}
+                    acceptedFileTypes= {['image/png', 'image/jpeg']}
+                    name="filepond"
+                    imageEditorInstantEdit={true}
+                    allowMultiple={false}
+                    instantUpload={false}
+                    allowProcess={false}
+                    onaddfile={(err, file) => {
+                        if(err){
+                            return console.log(error)
+                        }
+                        setImageExists(true)
+                    }}
+                    onremovefile={(err, file) => {
+                        setImageExists(false)
+                    }}
+                    labelIdle={
+                        `<div>
+                            Drag & Drop your files or <span class="filepond--label-action">Browse</span>
+                        </div>
+                        <div class="smalltext">
+                            A picture is worth a thousand words
+                        </div>`
                     }
-                    setImageExists(true)
-                }}
-                onremovefile={(err, file) => {
-                    setImageExists(false)
-                }}
-                labelIdle={
-                    `<div>
-                        Drag & Drop your files or <span class="filepond--label-action">Browse</span>
-                    </div>
-                    <div class="smalltext">
-                        A picture is worth a thousand words
-                    </div>`
-                }
-                imageEditor={{
-                    legacyDataToImageState: legacyDataToImageState,
-                    createEditor: openEditor,
-                    imageReader: [
-                        createDefaultImageReader
-                    ],
-                    imageWriter: [
-                        createDefaultImageWriter,
-                        {
-                            canvasMemoryLimit: 4096 * 4096,
-                            targetSize: {
-                                width: 512,
-                                height: 512,
+                    imageEditor={{
+                        legacyDataToImageState: legacyDataToImageState,
+                        createEditor: openEditor,
+                        imageReader: [
+                            createDefaultImageReader
+                        ],
+                        imageWriter: [
+                            createDefaultImageWriter,
+                            {
+                                canvasMemoryLimit: 4096 * 4096,
+                                targetSize: {
+                                    width: 512,
+                                    height: 512,
+                                },
+                            },
+                        ],
+                        imageProcessor: processImage,
+                        editorOptions: {
+                            ...markup_editor_defaults,
+
+                            // The finetune util controls
+                            ...plugin_finetune_defaults,
+
+                            imageCropAspectRatio: 1,
+                            cropAutoCenterImageSelectionTimeout: 1,
+                            
+                            class: 'ignore_click_outside_page ignore_click_outside_modal',
+
+                            locale: {
+                                ...locale_en_gb,
+                                ...plugin_crop_locale_en_gb,
+                                ...plugin_finetune_locale_en_gb,
+                                ...plugin_annotate_locale_en_gb,
+                                ...markup_editor_locale_en_gb,
+                                ...plugin_sticker_locale_en_gb
                             },
                         },
-                    ],
-                    imageProcessor: processImage,
-                    editorOptions: {
-                        ...markup_editor_defaults,
+                    }}
+                />
 
-                        // The finetune util controls
-                        ...plugin_finetune_defaults,
-
-                        imageCropAspectRatio: 1,
-                        cropAutoCenterImageSelectionTimeout: 1,
-                        
-                        class: 'ignore_click_outside_page ignore_click_outside_modal',
-
-                        locale: {
-                            ...locale_en_gb,
-                            ...plugin_crop_locale_en_gb,
-                            ...plugin_finetune_locale_en_gb,
-                            ...plugin_annotate_locale_en_gb,
-                            ...markup_editor_locale_en_gb,
-                            ...plugin_sticker_locale_en_gb
-                        },
-                    },
-                }}
-            />
-
-            <div className={`areaLine ${styles.text}`}>
-                <input className={styles.header} maxLength="100" placeholder="Header" onChange={e => {e.target.value = e.target.value.replace(/_/g, ' ');; setHeader(e.target.value);}}/>
-                <div className={styles.body}>
-                    <TextareaAutosize 
-                        minRows={6}
-                        placeholder="Sub-/Paper  - What did you do that brings you closer to you Vision. Your products, services or results."
-                        onChange={e => {setBody(e.target.value);}}
-                    />
+                <div className={`areaLine ${styles.text}`}>
+                    <input disabled={loading} className={styles.header} maxLength="100" placeholder="Header" onChange={e => {e.target.value = e.target.value.replace(/_/g, ' ');; setHeader(e.target.value);}}/>
+                    <div className={styles.body}>
+                        <TextareaAutosize 
+                            disabled={loading}
+                            style={{overflow: 'auto'}}
+                            minRows={6}
+                            placeholder="Paper - What did or do you do that brings you closer towards achieving your Mission ? (products, services or results)"
+                            onChange={e => {setBody(e.target.value);}}
+                        />
+                    </div>
+                    <div className={`${styles.maxTextLength} ${((500-body.length) < 0)?styles.highlight:null}`}>
+                        {500 - body.length}
+                    </div>
                 </div>
-            </div>
 
+            </div>
             <div onClick={async() => {
                 if(!pond.getFile()) return toast.error('Image not found')
                 const base64Image = pond.getFile().getFileEncodeDataURL()
                 try{
                     setLoading(true)
-                    const response = await axios.post(`http://localhost:4000/post/paper`,{image: base64Image, header: header, body: body},{withCredentials: true})
+                    const response = await axios.post(`http://localhost:4000/post/paper`,{
+                        image: base64Image, 
+                        header: header, 
+                        body: body, 
+                        pagename: router.query.page,
+                        mission: router.query.mission
+                    },{withCredentials: true})
                     setModal(0)
                 }catch(err){
                     console.log(err)
@@ -165,7 +178,6 @@ export default function Edit(){
                     <Loading/>
                 }
             </div>
-
         </div>
     )
 }
