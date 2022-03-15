@@ -13,6 +13,7 @@ import { toast } from 'react-toastify'
 import axios from 'axios'
 import Loading from '../../assets/Loading/Loading'
 import { useModalStore } from '../../store/modal'
+import Dragable from '../User/Dragable/Dragable'
 
 registerPlugin(FilePondPluginFileEncode, FilePondPluginFileValidateType, FilePondPluginFilePoster, FilePondPluginImageEditor)
 
@@ -54,95 +55,121 @@ export default function Edit(){
     const [imageExists, setImageExists] = useState(false)
     const [base64Image, setBase64Image] = useState()
     const [loading, setLoading] = useState(false)
+    const [selectedRoute, setSelectedRoute] = useState(0)
+    const [papers, setPapers] = useState([
+        {id:0, name: 'okk'},
+        {id:1, name: 'okkasf'},
+        {id:2, name: 'okkdsafsda'},
+        {id:3, name: 'okkadsfasdfsad'},
+        {id:4, name: 'okkadfasdfdasfdas'}
+    ])
     const setModal = useModalStore(state => state.setModal)
     const router = useRouter()
     let pond = useRef()
 
     return(
         <div className={styles.parentContainer}>
-            <div className={styles.editContainer}>
-                <FilePond
-                    ref={(ref) => (pond = ref)}
-                    acceptedFileTypes= {['image/png', 'image/jpeg']}
-                    name="filepond"
-                    imageEditorInstantEdit={true}
-                    allowMultiple={false}
-                    instantUpload={false}
-                    allowProcess={false}
-                    onaddfile={(err, file) => {
-                        if(err){
-                            return console.log(error)
+            <div className={`noselect ${styles.nav}`}>
+                <h1 onClick={() => setSelectedRoute(0)} style={{marginLeft: '10px'}} className={`${selectedRoute == 0?styles.highlight:null}`}>
+                    Component
+                </h1>
+                <h1 onClick={() => setSelectedRoute(1)} style={{marginRight: '10px'}} className={`${selectedRoute == 1?styles.highlight:null}`}>
+                    Sub-Components
+                </h1>
+                {/* <h1 onClick={() => setSelectedRoute(2)} style={{marginLeft: '10px'}} className={`${selectedRoute == 2?styles.highlight:null}`}>
+                    %
+                </h1> */}
+            </div>
+            {(selectedRoute == 0)?
+                <div className={styles.editContainer}>
+                    <FilePond
+                        ref={(ref) => (pond = ref)}
+                        acceptedFileTypes= {['image/png', 'image/jpeg']}
+                        name="filepond"
+                        className={styles.filepond}
+                        imageEditorInstantEdit={true}
+                        allowMultiple={false}
+                        instantUpload={false}
+                        allowProcess={false}
+                        onaddfile={(err, file) => {
+                            if(err){
+                                return console.log(error)
+                            }
+                            setImageExists(true)
+                        }}
+                        onremovefile={(err, file) => {
+                            setImageExists(false)
+                        }}
+                        labelIdle={
+                            `<div>
+                                Drag & Drop your files or <span class="filepond--label-action">Browse</span>
+                            </div>
+                            <div class="smalltext">
+                                A picture is worth a thousand words
+                            </div>`
                         }
-                        setImageExists(true)
-                    }}
-                    onremovefile={(err, file) => {
-                        setImageExists(false)
-                    }}
-                    labelIdle={
-                        `<div>
-                            Drag & Drop your files or <span class="filepond--label-action">Browse</span>
-                        </div>
-                        <div class="smalltext">
-                            A picture is worth a thousand words
-                        </div>`
-                    }
-                    imageEditor={{
-                        legacyDataToImageState: legacyDataToImageState,
-                        createEditor: openEditor,
-                        imageReader: [
-                            createDefaultImageReader
-                        ],
-                        imageWriter: [
-                            createDefaultImageWriter,
-                            {
-                                canvasMemoryLimit: 4096 * 4096,
-                                targetSize: {
-                                    width: 512,
-                                    height: 512,
+                        imageEditor={{
+                            legacyDataToImageState: legacyDataToImageState,
+                            createEditor: openEditor,
+                            imageReader: [
+                                createDefaultImageReader
+                            ],
+                            imageWriter: [
+                                createDefaultImageWriter,
+                                {
+                                    canvasMemoryLimit: 4096 * 4096,
+                                    targetSize: {
+                                        width: 512,
+                                        height: 512,
+                                    },
+                                },
+                            ],
+                            imageProcessor: processImage,
+                            editorOptions: {
+                                ...markup_editor_defaults,
+
+                                // The finetune util controls
+                                ...plugin_finetune_defaults,
+
+                                imageCropAspectRatio: 1,
+                                cropAutoCenterImageSelectionTimeout: 1,
+                                
+                                class: 'ignore_click_outside_page ignore_click_outside_modal',
+
+                                locale: {
+                                    ...locale_en_gb,
+                                    ...plugin_crop_locale_en_gb,
+                                    ...plugin_finetune_locale_en_gb,
+                                    ...plugin_annotate_locale_en_gb,
+                                    ...markup_editor_locale_en_gb,
+                                    ...plugin_sticker_locale_en_gb
                                 },
                             },
-                        ],
-                        imageProcessor: processImage,
-                        editorOptions: {
-                            ...markup_editor_defaults,
+                        }}
+                    />
 
-                            // The finetune util controls
-                            ...plugin_finetune_defaults,
-
-                            imageCropAspectRatio: 1,
-                            cropAutoCenterImageSelectionTimeout: 1,
-                            
-                            class: 'ignore_click_outside_page ignore_click_outside_modal',
-
-                            locale: {
-                                ...locale_en_gb,
-                                ...plugin_crop_locale_en_gb,
-                                ...plugin_finetune_locale_en_gb,
-                                ...plugin_annotate_locale_en_gb,
-                                ...markup_editor_locale_en_gb,
-                                ...plugin_sticker_locale_en_gb
-                            },
-                        },
-                    }}
-                />
-
-                <div className={`areaLine ${styles.text}`}>
-                    <input disabled={loading} className={styles.header} maxLength="100" placeholder="Header" onChange={e => {e.target.value = e.target.value.replace(/_/g, ' ');; setHeader(e.target.value);}}/>
-                    <div className={styles.body}>
-                        <TextareaAutosize 
-                            disabled={loading}
-                            style={{overflow: 'auto'}}
-                            minRows={6}
-                            placeholder="Paper - What did or do you do that brings you closer towards achieving your Mission ? (products, services or results)"
-                            onChange={e => {setBody(e.target.value);}}
-                        />
+                    <div className={`areaLine ${styles.text}`}>
+                        <input disabled={loading} className={styles.header} maxLength="100" placeholder="Header" onChange={e => {e.target.value = e.target.value.replace(/_/g, ' ');; setHeader(e.target.value);}}/>
+                        <div className={styles.body}>
+                            <TextareaAutosize 
+                                disabled={loading}
+                                style={{overflow: 'auto'}}
+                                minRows={6}
+                                placeholder="Paper - What did or do you do that brings you closer towards achieving your Mission ? (products, services or results)"
+                                onChange={e => {setBody(e.target.value);}}
+                            />
+                        </div>
+                        <div className={`${styles.maxTextLength} ${((500-body.length) < 0)?styles.highlight:null}`}>
+                            {500 - body.length}
+                        </div>
                     </div>
-                    <div className={`${styles.maxTextLength} ${((500-body.length) < 0)?styles.highlight:null}`}>
-                        {500 - body.length}
-                    </div>
+
                 </div>
-
-            </div>
+            :
+                <div className={styles.subComp}>
+                    <Dragable/>
+                </div>
+            }
             <div onClick={async() => {
                 if(!pond.getFile()) return toast.error('Image not found')
                 const base64Image = pond.getFile().getFileEncodeDataURL()

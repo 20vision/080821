@@ -33,7 +33,7 @@ export default function Missions({missions}) {
                 })}
             </div>
             <div className={styles.missionFooter}>
-                <Folder color="#8A8A8A"/><h3>{missions.length} Mission{missions.length>1?'s':null}/~300 Papers</h3>
+                <Folder color="#8A8A8A"/><h3>{missions.length} Mission{missions.length>1?'s':null}/~300 Components</h3>
             </div>
         </div>
     )

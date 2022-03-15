@@ -7,8 +7,34 @@
 
 .editContainer{
     width: 530px;
-    max-height: calc(90vh - 120px);
+    max-height: calc(90vh - 190px);
     overflow: scroll;
+}
+
+.subComp{
+    min-height: 500px;
+    width: 530px;
+}
+
+.nav{
+    width: 100%;
+    display: flex;
+    align-items: center;
+    margin-bottom: 35px;
+}
+
+.nav h1{
+    flex-grow: 1;
+    text-align: center;
+    padding: 5px 30px;
+    color: var(--grey);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.nav .highlight{
+    border-bottom: 2px solid var(--red);
+    color: var(--red);
 }
 
 .button{
