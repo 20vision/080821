@@ -57,11 +57,11 @@ export default function Edit(){
     const [loading, setLoading] = useState(false)
     const [selectedRoute, setSelectedRoute] = useState(0)
     const [papers, setPapers] = useState([
-        {id:0, name: 'okk'},
-        {id:1, name: 'okkasf'},
-        {id:2, name: 'okkdsafsda'},
-        {id:3, name: 'okkadsfasdfsad'},
-        {id:4, name: 'okkadfasdfdasfdas'}
+        {id:0, content: 'okk'},
+        {id:1, content: 'okkasf'},
+        {id:2, content: 'okkdsafsda'},
+        {id:3, content: 'okkadsfasdfsad'},
+        {id:4, content: 'okkadfasdfdasfdas'}
     ])
     const setModal = useModalStore(state => state.setModal)
     const router = useRouter()
@@ -167,7 +167,7 @@ export default function Edit(){
                 </div>
             :
                 <div className={styles.subComp}>
-                    <Dragable/>
+                    <Dragable items={papers} setItems={new_items => setPapers(new_items)}/>
                 </div>
             }
             <div onClick={async() => {
