@@ -7,13 +7,14 @@
 
 .editContainer{
     width: 530px;
-    max-height: calc(90vh - 190px);
+    height: calc(80vh - 190px);
     overflow: scroll;
 }
 
 .subComp{
-    min-height: 500px;
+    height: calc(80vh - 190px);
     width: 530px;
+    overflow: scroll;
 }
 
 .nav{

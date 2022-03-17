@@ -46,6 +46,7 @@ import {
     plugin_finetune_defaults,
 
 } from 'pintura'
+import Checkbox from '../User/Checkbox/Checkbox';
 
 setPlugins(plugin_crop, plugin_finetune, plugin_annotate, plugin_sticker);
 
@@ -168,6 +169,15 @@ export default function Edit(){
             :
                 <div className={styles.subComp}>
                     <Dragable items={papers} setItems={new_items => setPapers(new_items)}/>
+                    <div style={{width: '100%', height: '10px', borderBottom: '1px solid black', textAlign: 'center', marginTop: '35px'}}>
+                        <h2 style={{backgroundColor: '#FAFAFA', width: '200px', margin: '0px auto'}}>
+                            All Components
+                        </h2>
+                    </div>
+                    <div>
+                        hello
+                        <Checkbox checked={false}/>
+                    </div>
                 </div>
             }
             <div onClick={async() => {
