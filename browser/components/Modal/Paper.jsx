@@ -57,12 +57,13 @@ export default function Edit(){
     const [base64Image, setBase64Image] = useState()
     const [loading, setLoading] = useState(false)
     const [selectedRoute, setSelectedRoute] = useState(0)
+    const [selectedPapers, setSelectedPapers] = useState()
     const [papers, setPapers] = useState([
-        {id:0, content: 'okk'},
-        {id:1, content: 'okkasf'},
-        {id:2, content: 'okkdsafsda'},
-        {id:3, content: 'okkadsfasdfsad'},
-        {id:4, content: 'okkadfasdfdasfdas'}
+        {id:0, uid: 'ds1212af', content: 'okk'},
+        {id:1, uid: 'ds5435af', content: 'okkasf'},
+        {id:2, uid: 'dsa434f', content: 'okkdsafsda'},
+        {id:3, uid: 'dsaf12213', content: 'okkadsfasdfsad'},
+        {id:4, uid: 'dsaf32', content: 'okkadfasdfdasfdas'}
     ])
     const setModal = useModalStore(state => state.setModal)
     const router = useRouter()
@@ -168,15 +169,33 @@ export default function Edit(){
                 </div>
             :
                 <div className={styles.subComp}>
-                    <Dragable items={papers} setItems={new_items => setPapers(new_items)}/>
+                    {papers?<Dragable items={selectedPapers} setItems={new_items => setSelectedPapers(new_items)}/>:null}
                     <div style={{width: '100%', height: '10px', borderBottom: '1px solid black', textAlign: 'center', marginTop: '35px'}}>
                         <h2 style={{backgroundColor: '#FAFAFA', width: '200px', margin: '0px auto'}}>
                             All Components
                         </h2>
                     </div>
                     <div>
-                        hello
-                        <Checkbox checked={false}/>
+                        {papers && papers.map((paper, index) => {
+                            return(
+                                <a onClick={() => {
+                                    let items = [...papers]
+                                    let item = {...items[index]}
+                                    item.checked = item.checked?false:true
+                                    items[index] = item
+                                    if(!item.checked && selectedPapers && (selectedPapers.length > 0)){
+                                        setSelectedPapers([...selectedPapers.sort(() => selectedPapers.uid != item.uid)])
+                                    }else if(selectedPapers && (selectedPapers.length > 0)){
+                                        setSelectedPapers([...selectedPapers, item])
+                                    }else{
+                                        setSelectedPapers([item])
+                                    }
+                                    setPapers(items)
+                                }}>
+                                    <Checkbox checked={paper.checked}/>
+                                </a>
+                            )
+                        })}
                     </div>
                 </div>
             }
