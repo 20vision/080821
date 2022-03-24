@@ -1,10 +1,10 @@
-import PaperLayout from '../../../layouts/paper'
+import ComponentLayout from '../../../layouts/component'
 
 export default function Component({component}){
     return(
-        <PaperLayout >
+        <ComponentLayout >
             Hello
-        </PaperLayout>
+        </ComponentLayout>
     )
 }
 

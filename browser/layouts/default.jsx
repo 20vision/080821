@@ -17,8 +17,8 @@ export default function DefaultLayout( {children} ) {
                         </main>
                     </div>
 
-                    <div className={styles.paperOverview}>
-                        -insert paper overview-
+                    <div className={styles.componentOverview}>
+                        -insert component overview-
                     </div>
                 </div>
             </div>

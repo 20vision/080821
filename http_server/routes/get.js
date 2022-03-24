@@ -402,10 +402,45 @@ router.get("/forum/:unique_pagename/topics", async (req, res) => {
         pool.releaseConnection(conn);
     })
 })
-// Only Paper related
-router.get("/forum/:unique_pagename/papers/:uid", async (req, res) => {
+// Only component related
+router.get("/forum/:unique_pagename/components/:uid", async (req, res) => {
     console.log('route not ready yet')
     res.status(404).send('not ready yet')
+})
+
+router.get("/component/:uid", async (req, res) => {
+    pool.getConnection(async function(err, conn) {
+        if (err){
+            res.status(500).send('An error occurred')
+            console.log(err)
+        }else{
+            conn.query(`SELECT p.component_id, p.header, p.body, p.type from component p where p.uid = ? and p.status = 0`,
+                [],
+                async function(err, component) {
+                    if (err){
+                        console.log(err)
+                        res.status(400).send('An error occurred')
+                    }else{
+                        conn.query(`
+                        SELECT p.header, p.body, p.type from component p 
+                        join componentConnection pc on pc.child_component_id = p.component_id and 
+                            where p.uid = ? and p.status = 0`,
+                            [],
+                            async function(err, sub) {
+                                if (err){
+                                    console.log(err)
+                                    res.status(400).send('An error occurred')
+                                }else{
+                                    
+                                }
+                            }
+                        );
+                    }
+                }
+            );
+        }
+        pool.releaseConnection(conn);
+    })
 })
 
 // router.get("/forum/post/:offset", async (req, res) => {

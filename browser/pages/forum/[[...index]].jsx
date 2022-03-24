@@ -150,7 +150,7 @@ export default function index({ssrContent, ssrTreeCount}) {
       :(dataset[index - 1][selectedContent[index - 1]].topic_id)?
         `topic/${dataset[index - 1][selectedContent[index - 1]].topic_id}`
       :
-        null//Mission,Paper
+        null//Mission,Component
     }`,{forum_post: post, hex_color: hex},{
       withCredentials: true
     }

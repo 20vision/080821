@@ -111,7 +111,7 @@ const getForumPostParentInfo = (conn, parent_post_id) => new Promise((resolve, r
                         :forumpost_parent[0].parent_type == 'm'?
                             'JOIN Mission m on m.page_id=p.page_id and m.mission_id = '+forumpost_parent[0].parent_id
                         :forumpost_parent[0].parent_type == 'mp'?
-                            'JOIN Mission m on m.mission_id = p.page_id JOIN Paper pa on pa.mission_id = m.mission_id and pa.paper_id ='+forumpost_parent[0].parent_id
+                            'JOIN Mission m on m.mission_id = p.page_id JOIN component pa on pa.mission_id = m.mission_id and pa.component_id ='+forumpost_parent[0].parent_id
                         :forumpost_parent[0].parent_type == 'p'?
                             'where p.page_id='+forumpost_parent[0].parent_id
                         :

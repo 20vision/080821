@@ -88,7 +88,7 @@ router.post("/mission", check.AuthRequired, check.role, input_validation.checkUn
     }
 });
 
-router.post("/paper", check.AuthRequired, async (req, res) => {
+router.post("/component", check.AuthRequired, async (req, res) => {
     if(!req.body.pagename){
         return res.status(422).send('Pagename missing')
     }else if(
@@ -96,15 +96,15 @@ router.post("/paper", check.AuthRequired, async (req, res) => {
         (req.body.header > 100) ||
         (req.body.header < 3)
     ){
-        return res.status(422).send('Invalid Paper Header')
+        return res.status(422).send('Invalid component Header')
     }else if(
         !req.body.body ||
         (req.body.body > 500) ||
         (req.body.body < 3)
     ){
-        return res.status(422).send('Invalid Paper Body')
+        return res.status(422).send('Invalid component Body')
     }else if(!req.body.image) {
-        return res.status(422).send('Missing Paper Image')
+        return res.status(422).send('Missing component Image')
     }
 
     const image = req.body.image.split(',')
@@ -138,7 +138,7 @@ router.post("/paper", check.AuthRequired, async (req, res) => {
                     let ratio = [512]
             
                     let data = {
-                        bucketname: 'paper_images',
+                        bucketname: 'component_images',
                         timefolder: (new Date()).getTime().toString(),
                         randomfolder: await random_string(8)
                     }
@@ -155,7 +155,7 @@ router.post("/paper", check.AuthRequired, async (req, res) => {
                             try{
                                 const image_url = await uploadFile(data)
                                 conn.query(
-                                    'INSERT INTO Paper values (?,?,?,?,?,now());',
+                                    'INSERT INTO component values (?,?,?,?,?,now());',
                                     [null, data.timefolder+data.randomfolder, req.body.header, req.body.body, mission_id[0].mission_id, null],
                                     function(err, results) {
                                         if (err) throw err
@@ -220,12 +220,12 @@ router.post("/topic", check.AuthRequired, check.role, input_validation.checkUniq
     }
 });
 
-/*router.post("/paper_image/process", check.AuthRequired, check.paperAuth, cloudStorage.paper_image, async (req, res) => {
+/*router.post("/component_image/process", check.AuthRequired, check.componentAuth, cloudStorage.component_image, async (req, res) => {
     if(req.user_id){
         let resObject = {url: req.imageUrl}
 
-        if(req.paper_uid){
-            resObject.paper_uid = req.paper_uid
+        if(req.component_uid){
+            resObject.component_uid = req.component_uid
         }
 
         res.json(resObject)

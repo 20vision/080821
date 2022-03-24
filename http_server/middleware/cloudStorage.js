@@ -6,7 +6,7 @@ let pool = require('../config/db');
 const { random_string } = require("../utils/random");
 
 
-/*exports.paper_image = function(req, res, next) {
+/*exports.component_image = function(req, res, next) {
     
     const upload = multer({
         storage: multer.memoryStorage(),
@@ -33,7 +33,7 @@ const { random_string } = require("../utils/random");
             let ratio = [512]
             
             let data = {
-                bucketname: 'paper_images',
+                bucketname: 'component_images',
                 timefolder: (new Date()).getTime().toString(),
                 randomfolder: await random_string(8)
             }
@@ -66,36 +66,36 @@ const { random_string } = require("../utils/random");
                     res.status(500).send('An error occurred')
                     console.log(err)
                 }else{
-                    if(req.paper_id){
+                    if(req.component_id){
                         conn.query(
-                            'SELECT pv.paper_version_id from Paper_Version pv where pv.version = ? and pv.paper_id = ?;',
-                            ['0.0.0',req.paper_id],
+                            'SELECT pv.component_version_id from component_Version pv where pv.version = ? and pv.component_id = ?;',
+                            ['0.0.0',req.component_id],
                             function(err, results) {
                                 if (err){
                                     res.status(500).send('An error occurred')
                                     console.log(err)
                                 }else{
-                                    if(results[0] && results[0].paper_version_id){
+                                    if(results[0] && results[0].component_version_id){
                                         
-                                        //Use paper_version_id to either append new Media or update old Media with same version id
+                                        //Use component_version_id to either append new Media or update old Media with same version id
                                         
                                         conn.query(
-                                            'SELECT pm.content from Paper_Media pm where pm.paper_version_id = ?;',
-                                            [results[0].paper_version_id],
-                                            async function(err, resultsPaperMediaContent) {
+                                            'SELECT pm.content from component_Media pm where pm.component_version_id = ?;',
+                                            [results[0].component_version_id],
+                                            async function(err, resultscomponentMediaContent) {
                                                 if (err){
                                                     res.status(500).send('An error occurred')
                                                     console.log(err)
                                                 }else{
                                                     
-                                                    //If there already is a media on that paper version -> update, otherwise insert
+                                                    //If there already is a media on that component version -> update, otherwise insert
                                                     
-                                                    if(resultsPaperMediaContent[0] && resultsPaperMediaContent[0].content){
-                                                        const paperMedia = resultsPaperMediaContent[0].content.split('/')
+                                                    if(resultscomponentMediaContent[0] && resultscomponentMediaContent[0].content){
+                                                        const componentMedia = resultscomponentMediaContent[0].content.split('/')
                                                         const mediaData = {
-                                                            bucketname: paperMedia[0],
-                                                            timefolder: paperMedia[1],
-                                                            randomfolder: paperMedia[2]
+                                                            bucketname: componentMedia[0],
+                                                            timefolder: componentMedia[1],
+                                                            randomfolder: componentMedia[2]
                                                         }
                                                         try{
                                                             await deleteFile(mediaData)
@@ -104,8 +104,8 @@ const { random_string } = require("../utils/random");
                                                             res.status(500).send('An error occured')
                                                         }
                                                         conn.query(
-                                                            'UPDATE Paper_Media pm set pm.content = ? where pm.paper_version_id = ?;',
-                                                            [req.imageUrl, results[0].paper_version_id],
+                                                            'UPDATE component_Media pm set pm.content = ? where pm.component_version_id = ?;',
+                                                            [req.imageUrl, results[0].component_version_id],
                                                             function(err, results) {
                                                                 if (err){
                                                                     res.status(500).send('An error occurred')
@@ -117,8 +117,8 @@ const { random_string } = require("../utils/random");
                                                         );
                                                     }else{
                                                         conn.query(
-                                                            'INSERT into Paper_Media values (?,?,?);',
-                                                            [null, req.imageUrl, results[0].paper_version_id],
+                                                            'INSERT into component_Media values (?,?,?);',
+                                                            [null, req.imageUrl, results[0].component_version_id],
                                                             function(err, results) {
                                                                 if (err){
                                                                     res.status(500).send('An error occurred')
@@ -132,21 +132,21 @@ const { random_string } = require("../utils/random");
                                                 }
                                             }
                                         );
-                                    }else if(req.paper_id){
+                                    }else if(req.component_id){
                                         
-                                        //If no paper_version_id available at 0.0.0 -> no edit version -> create new one Use paper_version_id to either append new Media or update old Media with same version id
+                                        //If no component_version_id available at 0.0.0 -> no edit version -> create new one Use component_version_id to either append new Media or update old Media with same version id
                                         
                                         conn.query(
-                                            'INSERT into Paper_Version values (?,?,?,?,now());',
-                                            [null, req.paper_id, '0.0.0', null, null],
-                                            function(err, resultsPaperVersion) {
+                                            'INSERT into component_Version values (?,?,?,?,now());',
+                                            [null, req.component_id, '0.0.0', null, null],
+                                            function(err, resultscomponentVersion) {
                                                 if (err){
                                                     res.status(500).send('An error occurred')
                                                     console.log(err)
                                                 }else{
                                                     conn.query(
-                                                        'INSERT into Paper_Media values (?,?,?);',
-                                                        [null, req.imageUrl, resultsPaperVersion.insertId],
+                                                        'INSERT into component_Media values (?,?,?);',
+                                                        [null, req.imageUrl, resultscomponentVersion.insertId],
                                                         function(err, results) {
                                                             if (err){
                                                                 res.status(500).send('An error occurred')
@@ -165,7 +165,7 @@ const { random_string } = require("../utils/random");
                         );
                     }else if(req.query.mission_title && req.query.page_name){
                         conn.query(
-                            'INSERT into Paper values (?,?,?,?);',
+                            'INSERT into component values (?,?,?,?);',
                             [null, data.timefolder, req.mission_id, 1],
                             function(err, results) {
                                 if (err){
@@ -173,22 +173,22 @@ const { random_string } = require("../utils/random");
                                     console.log(err)
                                 }else{
                                     conn.query(
-                                        'INSERT into Paper_Version values (?,?,?,?,now());',
+                                        'INSERT into component_Version values (?,?,?,?,now());',
                                         [null, results.insertId, '0.0.0', null, null],
-                                        function(err, resultsPaperVersion) {
+                                        function(err, resultscomponentVersion) {
                                             if (err){
                                                 res.status(500).send('An error occurred')
                                                 console.log(err)
                                             }else{
                                                 conn.query(
-                                                    'INSERT into Paper_Media values (?,?,?);',
-                                                    [null, req.imageUrl, resultsPaperVersion.insertId],
+                                                    'INSERT into component_Media values (?,?,?);',
+                                                    [null, req.imageUrl, resultscomponentVersion.insertId],
                                                     function(err, results) {
                                                         if (err){
                                                             res.status(500).send('An error occurred')
                                                             console.log(err)
                                                         }else{
-                                                            req.paper_uid = data.timefolder
+                                                            req.component_uid = data.timefolder
                                                             next()
                                                         }
                                                     }
@@ -200,7 +200,7 @@ const { random_string } = require("../utils/random");
                             }
                         );
                     }else{
-                        res.status(400).send('An error occured, paper not updated')
+                        res.status(400).send('An error occured, component not updated')
                     }
                     
                 }

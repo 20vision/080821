@@ -94,18 +94,18 @@ exports.role = function(req, res, next) {
     );
 }
 
-exports.paperAuth = function(req, res, next) {
-    if(req.query.paper_uid && req.query.mission_title && req.query.page_name){
+exports.componentAuth = function(req, res, next) {
+    if(req.query.component_uid && req.query.mission_title && req.query.page_name){
         pool.query(
-            'SELECT pu.role, pa.paper_id from PageUser pu join Mission m on pu.page_id = m.page_id and pu.user_id = ? join Paper pa on pa.mission_id = m.mission_id and pa.uid = ? and m.title = ? join Page p on pu.page_id = p.page_id and p.unique_pagename = ?;',
-            [req.user_id, req.query.paper_uid, req.query.mission_title, req.query.page_name],
+            'SELECT pu.role, pa.component_id from PageUser pu join Mission m on pu.page_id = m.page_id and pu.user_id = ? join component pa on pa.mission_id = m.mission_id and pa.uid = ? and m.title = ? join Page p on pu.page_id = p.page_id and p.unique_pagename = ?;',
+            [req.user_id, req.query.component_uid, req.query.mission_title, req.query.page_name],
             function(err, results) {
                 if (err){
                     res.status(500).send('An error occurred')
                     console.log(err)
                 }else{
-                    if(results[0] && results[0].role && (results[0].role >= 0) && results[0].paper_id){
-                        req.paper_id = results[0].paper_id
+                    if(results[0] && results[0].role && (results[0].role >= 0) && results[0].component_id){
+                        req.component_id = results[0].component_id
                         next();
                     }else{
                         res.status(403).send('Permission denied')

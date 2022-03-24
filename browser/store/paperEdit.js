@@ -2,9 +2,9 @@ import create from 'zustand'
 import { devtools } from 'zustand/middleware'
 
 let modalStore = (set) => ({
-    //saves all edits made on a paper -> send to server. Server changes
-    paperEdit: [],
-    setPaperEdit: (modalType) => set({modal: modalType})
+    //saves all edits made on a component -> send to server. Server changes
+    componentEdit: [],
+    setComponentEdit: (modalType) => set({modal: modalType})
 })
 
 modalStore = devtools(modalStore)

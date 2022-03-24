@@ -16,10 +16,10 @@ export default function index({page, missions}) {
 
   const router = useRouter()
 
-  const papers = useInfiniteQuery(
-    `papers/${page.unique_pagename}`,
+  const components = useInfiniteQuery(
+    `components/${page.unique_pagename}`,
     async () => {
-        const res = await axios.get(`http://localhost:4000/get/papers/${page.unique_pagename}/${router.query.mission}`)
+        const res = await axios.get(`http://localhost:4000/get/components/${page.unique_pagename}/${router.query.mission}`)
         return res.data
     },
     {

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import TextareaAutosize from 'react-textarea-autosize';
-import styles from '../../styles/paper/editModal.module.css'
+import styles from '../../styles/component/editModal.module.css'
 import { FilePond, registerPlugin } from 'react-filepond';
 import 'filepond/dist/filepond.min.css';
 import FilePondPluginFileValidateType from 'filepond-plugin-file-validate-type';
@@ -57,8 +57,8 @@ export default function Edit(){
     const [base64Image, setBase64Image] = useState()
     const [loading, setLoading] = useState(false)
     const [selectedRoute, setSelectedRoute] = useState(0)
-    const [selectedPapers, setSelectedPapers] = useState()
-    const [papers, setPapers] = useState([
+    const [selectedComponents, setSelectedComponents] = useState()
+    const [components, setComponents] = useState([
         {id:0, uid: 'ds1212af', content: 'okk'},
         {id:1, uid: 'ds5435af', content: 'okkasf'},
         {id:2, uid: 'dsa434f', content: 'okkdsafsda'},
@@ -157,7 +157,7 @@ export default function Edit(){
                                 disabled={loading}
                                 style={{overflow: 'auto'}}
                                 minRows={6}
-                                placeholder="Paper - What did or do you do that brings you closer towards achieving your Mission ? (products, services or results)"
+                                placeholder="Component - What did or do you do that brings you closer towards achieving your Mission ? (products, services or results)"
                                 onChange={e => {setBody(e.target.value);}}
                             />
                         </div>
@@ -169,30 +169,30 @@ export default function Edit(){
                 </div>
             :
                 <div className={styles.subComp}>
-                    {papers?<Dragable items={selectedPapers} setItems={new_items => setSelectedPapers(new_items)}/>:null}
+                    {components?<Dragable items={selectedComponents} setItems={new_items => setSelectedComponents(new_items)}/>:null}
                     <div style={{width: '100%', height: '10px', borderBottom: '1px solid black', textAlign: 'center', marginTop: '35px'}}>
                         <h2 style={{backgroundColor: '#FAFAFA', width: '200px', margin: '0px auto'}}>
                             All Components
                         </h2>
                     </div>
                     <div>
-                        {papers && papers.map((paper, index) => {
+                        {components && components.map((component, index) => {
                             return(
                                 <a onClick={() => {
-                                    let items = [...papers]
+                                    let items = [...components]
                                     let item = {...items[index]}
                                     item.checked = item.checked?false:true
                                     items[index] = item
-                                    if(!item.checked && selectedPapers && (selectedPapers.length > 0)){
-                                        setSelectedPapers([...selectedPapers.sort(() => selectedPapers.uid != item.uid)])
-                                    }else if(selectedPapers && (selectedPapers.length > 0)){
-                                        setSelectedPapers([...selectedPapers, item])
+                                    if(!item.checked && selectedComponents && (selectedComponents.length > 0)){
+                                        setSelectedComponents([...selectedComponents.sort(() => selectedComponents.uid != item.uid)])
+                                    }else if(selectedComponents && (selectedComponents.length > 0)){
+                                        setSelectedComponents([...selectedComponents, item])
                                     }else{
-                                        setSelectedPapers([item])
+                                        setSelectedComponents([item])
                                     }
-                                    setPapers(items)
+                                    setComponents(items)
                                 }}>
-                                    <Checkbox checked={paper.checked}/>
+                                    <Checkbox checked={component.checked}/>
                                 </a>
                             )
                         })}
@@ -204,7 +204,7 @@ export default function Edit(){
                 const base64Image = pond.getFile().getFileEncodeDataURL()
                 try{
                     setLoading(true)
-                    const response = await axios.post(`http://localhost:4000/post/paper`,{
+                    const response = await axios.post(`http://localhost:4000/post/component`,{
                         image: base64Image, 
                         header: header, 
                         body: body, 

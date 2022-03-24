@@ -35,7 +35,7 @@ export default function Index() {
                     {profile.username?
                         <>
                             {router.pathname.split('/')[4] == 'edit'?
-                                <PaperEdit router={router}/>  
+                                <ComponentEdit router={router}/>  
                             :router.pathname.split('/')[1] == 'forum'?     
                                 <ForumNav router={router}/>
                             :router.query.mission?
@@ -60,7 +60,7 @@ function MissionNavWithRole({router}){
         <>  
             <a onClick={() => setModal(7)}>
                 <Plus color="#FAFAFA"/>
-                <div>Paper</div>
+                <div>Component</div>
             </a>
 
             <a onClick={() => setModal(5)}>
@@ -142,7 +142,7 @@ function PageNav({router}){
 }
 
 
-function PaperEdit({router}){
+function ComponentEdit({router}){
     const [saved, setSaved] = useState()
 
     return(

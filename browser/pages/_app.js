@@ -22,7 +22,7 @@ function MyApp({ Component, pageProps }) {
         {(modal > 0) ? <div className="ignore_click_outside_page"><Index/></div> : null}
         <Component {...pageProps}/>
         <ReactQueryDevtools/>
-        <ToastContainer position="bottom-left" className={`ignore_click_outside_paper-image_modal ignore_click_outside_modal ignore_click_outside_page`}/>
+        <ToastContainer position="bottom-left" className={`ignore_click_outside_component-image_modal ignore_click_outside_modal ignore_click_outside_page`}/>
       </QueryClientProvider>
     </WalletConnectionProvider>
   ) 
