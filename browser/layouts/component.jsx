@@ -9,7 +9,7 @@ import { useEffect, useState } from "react";
 import InfiniteScroll from 'react-infinite-scroll-component'
 import PacmanLoader from 'react-spinners/PacmanLoader'
 import axios from "axios";
-import Import from '../assets/Import'
+import DownloadCloud from '../assets/DownloadCloud'
 import config from '../public/config.json';
 import Link from 'next/link'
 
@@ -98,7 +98,7 @@ var Panel = onClickOutside(({children, page}) => {
                             null}
                     </div>
                     <div className={styles.dependentsList}>
-                        <div><Import/>&nbsp;&nbsp;<h3>{dependentsCount}&nbsp;Dependents</h3></div>
+                        <div><DownloadCloud/>&nbsp;&nbsp;<h3>{dependentsCount}&nbsp;Dependents</h3></div>
                     </div>
                 </div>
             </div>
