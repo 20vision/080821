@@ -12,7 +12,7 @@
     width: clamp(1600px, 80%, 1800px);
     height:90vh;
     display:flex;
-    background-color: var(--lighter_black);
+    /*background-color: var(--lighter_black);*/
     filter: drop-shadow( 0px 3px 54px rgb(0, 0, 0, 0.20));
     border-radius: 35px;
 }
@@ -24,7 +24,7 @@
     left: 0;
     top: 0;
     bottom: 0;
-    background-color: var(--black);
+    /*background-color: var(--2E2E2E);*/
     filter: drop-shadow(0px 3px 26px rgba(0, 0, 0, 0.4));
     width: 400px;
     margin-right: 50px;

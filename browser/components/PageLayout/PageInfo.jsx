@@ -1,7 +1,7 @@
 import styles from '../../styles/pageLayout/pageInfo.module.css'
 import PageIcon from '../../assets/PageIcon/PageIcon'
 
-export default function PageInfo({page}) {
+export default function PageInfo({page, type}) {
     return (
         <>
         <div className={styles.container}>
@@ -11,7 +11,7 @@ export default function PageInfo({page}) {
                 :
                     <PageIcon color={'#'+page.page_icon}/>
                 }
-                <div className={styles.pagename}>
+                <div className={`${type=='paper'?styles.paper:null} ${styles.pagename}`}>
                     <h3>
                         {page.pagename}
                     </h3>
@@ -22,12 +22,12 @@ export default function PageInfo({page}) {
             </div>
             
 
-            {page.vision?
+            {type == 'paper'?
+                null
+            :
                 <div className={styles.vision}>
                     {page.vision}
                 </div>
-            :
-                null
             }
         </div>
 

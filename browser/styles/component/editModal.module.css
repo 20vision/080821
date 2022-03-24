@@ -33,15 +33,22 @@
     white-space: nowrap;
 }
 
-.nav .highlight{
-    border-bottom: 2px solid var(--red);
-    color: var(--red);
+.nav .highlightP{
+    border-bottom: 2px solid var(--blue);
+    color: var(--blue);
+}
+.nav .highlightS{
+    border-bottom: 2px solid var(--yellow);
+    color: var(--yellow);
+}
+.nav .highlightR{
+    border-bottom: 2px solid var(--green);
+    color: var(--green);
 }
 
 .button{
     padding: 15px 25px;
     border-radius: 15px;
-    background-color: var(--red);
     display: flex;
     justify-content: center;
     cursor: pointer;

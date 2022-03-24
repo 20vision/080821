@@ -17,6 +17,14 @@
     color: var(--grey);
 }
 
+.paper div{
+    color: var(--dark_grey);
+}
+
+.paper h3{
+    color: var(--lighter_black);
+}
+
 .vision{
     margin-top: 15px;
 }

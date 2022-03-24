@@ -40,9 +40,7 @@ export default function index({page, missions}) {
 
 export async function getServerSideProps(context) {
   try{
-    console.log('2222')
     const res = await axios.get(`http://localhost:4000/get/page/${context.params.page}?missions=true`)
-    console.log('1111')
     return{
       props: {
         page: res.data.page,

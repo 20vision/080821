@@ -138,7 +138,7 @@ router.post("/component", check.AuthRequired, async (req, res) => {
                     let ratio = [512]
             
                     let data = {
-                        bucketname: 'component_images',
+                        bucketname: 'comp_images',
                         timefolder: (new Date()).getTime().toString(),
                         randomfolder: await random_string(8)
                     }
@@ -155,8 +155,8 @@ router.post("/component", check.AuthRequired, async (req, res) => {
                             try{
                                 const image_url = await uploadFile(data)
                                 conn.query(
-                                    'INSERT INTO component values (?,?,?,?,?,now());',
-                                    [null, data.timefolder+data.randomfolder, req.body.header, req.body.body, mission_id[0].mission_id, null],
+                                    'INSERT INTO Component values (?,?,?,?,?,?,?,now());',
+                                    [null, data.timefolder+data.randomfolder, req.body.header, req.body.body, mission_id[0].mission_id, req.body.type, 0, null],
                                     function(err, results) {
                                         if (err) throw err
                                         res.status(200).send()

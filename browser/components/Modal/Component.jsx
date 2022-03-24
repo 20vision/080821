@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useRef } from 'react'
 import TextareaAutosize from 'react-textarea-autosize';
 import styles from '../../styles/component/editModal.module.css'
 import { FilePond, registerPlugin } from 'react-filepond';
@@ -13,7 +13,7 @@ import { toast } from 'react-toastify'
 import axios from 'axios'
 import Loading from '../../assets/Loading/Loading'
 import { useModalStore } from '../../store/modal'
-import Dragable from '../User/Dragable/Dragable'
+//import Dragable from '../User/Dragable/Dragable'
 
 registerPlugin(FilePondPluginFileEncode, FilePondPluginFileValidateType, FilePondPluginFilePoster, FilePondPluginImageEditor)
 
@@ -46,7 +46,7 @@ import {
     plugin_finetune_defaults,
 
 } from 'pintura'
-import Checkbox from '../User/Checkbox/Checkbox';
+//import Checkbox from '../User/Checkbox/Checkbox';
 
 setPlugins(plugin_crop, plugin_finetune, plugin_annotate, plugin_sticker);
 
@@ -56,15 +56,15 @@ export default function Edit(){
     const [imageExists, setImageExists] = useState(false)
     const [base64Image, setBase64Image] = useState()
     const [loading, setLoading] = useState(false)
-    const [selectedRoute, setSelectedRoute] = useState(0)
-    const [selectedComponents, setSelectedComponents] = useState()
-    const [components, setComponents] = useState([
-        {id:0, uid: 'ds1212af', content: 'okk'},
-        {id:1, uid: 'ds5435af', content: 'okkasf'},
-        {id:2, uid: 'dsa434f', content: 'okkdsafsda'},
-        {id:3, uid: 'dsaf12213', content: 'okkadsfasdfsad'},
-        {id:4, uid: 'dsaf32', content: 'okkadfasdfdasfdas'}
-    ])
+    const [type, setType] = useState('p')
+    // const [selectedComponents, setSelectedComponents] = useState()
+    // const [components, setComponents] = useState([
+    //     {id:0, uid: 'ds1212af', content: 'okk'},
+    //     {id:1, uid: 'ds5435af', content: 'okkasf'},
+    //     {id:2, uid: 'dsa434f', content: 'okkdsafsda'},
+    //     {id:3, uid: 'dsaf12213', content: 'okkadsfasdfsad'},
+    //     {id:4, uid: 'dsaf32', content: 'okkadfasdfdasfdas'}
+    // ])
     const setModal = useModalStore(state => state.setModal)
     const router = useRouter()
     let pond = useRef()
@@ -72,133 +72,141 @@ export default function Edit(){
     return(
         <div className={styles.parentContainer}>
             <div className={`noselect ${styles.nav}`}>
-                <h1 onClick={() => setSelectedRoute(0)} style={{marginLeft: '10px'}} className={`${selectedRoute == 0?styles.highlight:null}`}>
-                    Component
+                <h1 onClick={() => setType('p')} style={{marginLeft: '10px'}} className={`${type == 'p'?styles.highlightP:null}`}>
+                    Product
                 </h1>
-                <h1 onClick={() => setSelectedRoute(1)} style={{marginRight: '10px'}} className={`${selectedRoute == 1?styles.highlight:null}`}>
+                <h1 onClick={() => setType('s')} style={{marginRight: '10px'}} className={`${type == 's'?styles.highlightS:null}`}>
+                    Service
+                </h1>
+                <h1 onClick={() => setType('r')} style={{marginRight: '10px'}} className={`${type == 'r'?styles.highlightR:null}`}>
+                    Result
+                </h1>
+                {/* <h1 onClick={() => setType(1)} style={{marginRight: '10px'}} className={`${type == 1?styles.highlight:null}`}>
                     Sub-Components
-                </h1>
-                {/* <h1 onClick={() => setSelectedRoute(2)} style={{marginLeft: '10px'}} className={`${selectedRoute == 2?styles.highlight:null}`}>
+                </h1> 
+                
+                <h1 onClick={() => setType(2)} style={{marginLeft: '10px'}} className={`${type == 2?styles.highlight:null}`}>
                     %
                 </h1> */}
             </div>
-            {(selectedRoute == 0)?
-                <div className={styles.editContainer}>
-                    <FilePond
-                        ref={(ref) => (pond = ref)}
-                        acceptedFileTypes= {['image/png', 'image/jpeg']}
-                        name="filepond"
-                        className={styles.filepond}
-                        imageEditorInstantEdit={true}
-                        allowMultiple={false}
-                        instantUpload={false}
-                        allowProcess={false}
-                        onaddfile={(err, file) => {
-                            if(err){
-                                return console.log(error)
-                            }
-                            setImageExists(true)
-                        }}
-                        onremovefile={(err, file) => {
-                            setImageExists(false)
-                        }}
-                        labelIdle={
-                            `<div>
-                                Drag & Drop your files or <span class="filepond--label-action">Browse</span>
-                            </div>
-                            <div class="smalltext">
-                                A picture is worth a thousand words
-                            </div>`
+
+            <div className={styles.editContainer}>
+                <FilePond
+                    ref={(ref) => (pond = ref)}
+                    acceptedFileTypes= {['image/png', 'image/jpeg']}
+                    name="filepond"
+                    className={styles.filepond}
+                    imageEditorInstantEdit={true}
+                    allowMultiple={false}
+                    instantUpload={false}
+                    allowProcess={false}
+                    onaddfile={(err, file) => {
+                        if(err){
+                            return console.log(error)
                         }
-                        imageEditor={{
-                            legacyDataToImageState: legacyDataToImageState,
-                            createEditor: openEditor,
-                            imageReader: [
-                                createDefaultImageReader
-                            ],
-                            imageWriter: [
-                                createDefaultImageWriter,
-                                {
-                                    canvasMemoryLimit: 4096 * 4096,
-                                    targetSize: {
-                                        width: 512,
-                                        height: 512,
-                                    },
-                                },
-                            ],
-                            imageProcessor: processImage,
-                            editorOptions: {
-                                ...markup_editor_defaults,
-
-                                // The finetune util controls
-                                ...plugin_finetune_defaults,
-
-                                imageCropAspectRatio: 1,
-                                cropAutoCenterImageSelectionTimeout: 1,
-                                
-                                class: 'ignore_click_outside_page ignore_click_outside_modal',
-
-                                locale: {
-                                    ...locale_en_gb,
-                                    ...plugin_crop_locale_en_gb,
-                                    ...plugin_finetune_locale_en_gb,
-                                    ...plugin_annotate_locale_en_gb,
-                                    ...markup_editor_locale_en_gb,
-                                    ...plugin_sticker_locale_en_gb
+                        setImageExists(true)
+                    }}
+                    onremovefile={(err, file) => {
+                        setImageExists(false)
+                    }}
+                    labelIdle={
+                        `<div>
+                            Drag & Drop your files or <span class="filepond--label-action">Browse</span>
+                        </div>
+                        <div class="smalltext">
+                            A picture is worth a thousand words
+                        </div>`
+                    }
+                    imageEditor={{
+                        legacyDataToImageState: legacyDataToImageState,
+                        createEditor: openEditor,
+                        imageReader: [
+                            createDefaultImageReader
+                        ],
+                        imageWriter: [
+                            createDefaultImageWriter,
+                            {
+                                canvasMemoryLimit: 4096 * 4096,
+                                targetSize: {
+                                    width: 512,
+                                    height: 512,
                                 },
                             },
-                        }}
-                    />
+                        ],
+                        imageProcessor: processImage,
+                        editorOptions: {
+                            ...markup_editor_defaults,
 
-                    <div className={`areaLine ${styles.text}`}>
-                        <input disabled={loading} className={styles.header} maxLength="100" placeholder="Header" onChange={e => {e.target.value = e.target.value.replace(/_/g, ' ');; setHeader(e.target.value);}}/>
-                        <div className={styles.body}>
-                            <TextareaAutosize 
-                                disabled={loading}
-                                style={{overflow: 'auto'}}
-                                minRows={6}
-                                placeholder="Component - What did or do you do that brings you closer towards achieving your Mission ? (products, services or results)"
-                                onChange={e => {setBody(e.target.value);}}
-                            />
-                        </div>
-                        <div className={`${styles.maxTextLength} ${((500-body.length) < 0)?styles.highlight:null}`}>
-                            {500 - body.length}
-                        </div>
-                    </div>
+                            // The finetune util controls
+                            ...plugin_finetune_defaults,
 
-                </div>
-            :
-                <div className={styles.subComp}>
-                    {components?<Dragable items={selectedComponents} setItems={new_items => setSelectedComponents(new_items)}/>:null}
-                    <div style={{width: '100%', height: '10px', borderBottom: '1px solid black', textAlign: 'center', marginTop: '35px'}}>
-                        <h2 style={{backgroundColor: '#FAFAFA', width: '200px', margin: '0px auto'}}>
-                            All Components
-                        </h2>
+                            imageCropAspectRatio: 1,
+                            cropAutoCenterImageSelectionTimeout: 1,
+                            
+                            class: 'ignore_click_outside_page ignore_click_outside_modal',
+
+                            locale: {
+                                ...locale_en_gb,
+                                ...plugin_crop_locale_en_gb,
+                                ...plugin_finetune_locale_en_gb,
+                                ...plugin_annotate_locale_en_gb,
+                                ...markup_editor_locale_en_gb,
+                                ...plugin_sticker_locale_en_gb
+                            },
+                        },
+                    }}
+                />
+
+                <div className={`areaLine ${styles.text}`}>
+                    <input disabled={loading} className={styles.header} maxLength="100" placeholder="Header" onChange={e => {e.target.value = e.target.value.replace(/_/g, ' ');; setHeader(e.target.value);}}/>
+                    <div className={styles.body}>
+                        <TextareaAutosize 
+                            disabled={loading}
+                            style={{overflow: 'auto'}}
+                            minRows={6}
+                            placeholder="Component - What did or do you do that brings you closer towards achieving your Mission ? (products, services or results)"
+                            onChange={e => {setBody(e.target.value);}}
+                        />
                     </div>
-                    <div>
-                        {components && components.map((component, index) => {
-                            return(
-                                <a onClick={() => {
-                                    let items = [...components]
-                                    let item = {...items[index]}
-                                    item.checked = item.checked?false:true
-                                    items[index] = item
-                                    if(!item.checked && selectedComponents && (selectedComponents.length > 0)){
-                                        setSelectedComponents([...selectedComponents.sort(() => selectedComponents.uid != item.uid)])
-                                    }else if(selectedComponents && (selectedComponents.length > 0)){
-                                        setSelectedComponents([...selectedComponents, item])
-                                    }else{
-                                        setSelectedComponents([item])
-                                    }
-                                    setComponents(items)
-                                }}>
-                                    <Checkbox checked={component.checked}/>
-                                </a>
-                            )
-                        })}
+                    <div className={`${styles.maxTextLength} ${((500-body.length) < 0)?styles.highlight:null}`}>
+                        {500 - body.length}
                     </div>
                 </div>
-            }
+
+            </div>
+
+            
+            {/* <div className={styles.subComp}>
+                {components?<Dragable items={selectedComponents} setItems={new_items => setSelectedComponents(new_items)}/>:null}
+                <div style={{width: '100%', height: '10px', borderBottom: '1px solid black', textAlign: 'center', marginTop: '35px'}}>
+                    <h2 style={{backgroundColor: '#FAFAFA', width: '200px', margin: '0px auto'}}>
+                        All Components
+                    </h2>
+                </div>
+                <div>
+                    {components && components.map((component, index) => {
+                        return(
+                            <a onClick={() => {
+                                let items = [...components]
+                                let item = {...items[index]}
+                                item.checked = item.checked?false:true
+                                items[index] = item
+                                if(!item.checked && selectedComponents && (selectedComponents.length > 0)){
+                                    setSelectedComponents([...selectedComponents.sort(() => selectedComponents.uid != item.uid)])
+                                }else if(selectedComponents && (selectedComponents.length > 0)){
+                                    setSelectedComponents([...selectedComponents, item])
+                                }else{
+                                    setSelectedComponents([item])
+                                }
+                                setComponents(items)
+                            }}>
+                                <Checkbox checked={component.checked}/>
+                            </a>
+                        )
+                    })}
+                </div>
+            </div> */}
+
             <div onClick={async() => {
                 if(!pond.getFile()) return toast.error('Image not found')
                 const base64Image = pond.getFile().getFileEncodeDataURL()
@@ -206,6 +214,7 @@ export default function Edit(){
                     setLoading(true)
                     const response = await axios.post(`http://localhost:4000/post/component`,{
                         image: base64Image, 
+                        type: type,
                         header: header, 
                         body: body, 
                         pagename: router.query.page,
@@ -218,7 +227,10 @@ export default function Edit(){
                     if(err.response.status && (err.response.status != 500)) return toast.error(err.response.data)
                     toast.error('An error occurred')
                 }
-            }} className={`${styles.button} ${(
+            }} 
+            style={{backgroundColor: type=='p'?'var(--blue)':type=='s'?'var(--yellow)':'var(--green)'}}
+            className={`${styles.button}
+            ${(
                 loading || 
                 (body.length > 500) ||
                 (body.length < 5) ||

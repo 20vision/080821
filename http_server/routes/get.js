@@ -90,6 +90,7 @@ router.get("/page/:page_name", check.AuthOptional, async (req, res) => {
         }else{
             try{
                 const pageByName = await gets.getPageByName(conn, req.params.page_name)
+                if(req.query.missions === 'false') return res.json({page: pageByName})
                 const missions = await gets.getMission_s(conn, req.params.page_name)
                 res.json({
                     page: pageByName,
@@ -409,29 +410,34 @@ router.get("/forum/:unique_pagename/components/:uid", async (req, res) => {
 })
 
 router.get("/component/:uid", async (req, res) => {
+    //console.log('okk')
     pool.getConnection(async function(err, conn) {
         if (err){
             res.status(500).send('An error occurred')
             console.log(err)
         }else{
-            conn.query(`SELECT p.component_id, p.header, p.body, p.type from component p where p.uid = ? and p.status = 0`,
-                [],
+            conn.query(`SELECT c.component_id, c.header, c.body, c.type from Component c where c.uid = ? and c.status = 0`,
+                [req.params.uid],
                 async function(err, component) {
-                    if (err){
+                    if (err || component.length > 1){
                         console.log(err)
                         res.status(400).send('An error occurred')
+                    }else if(component.length == 0){
+                        res.status(404).send('Paper not found')
                     }else{
-                        conn.query(`
-                        SELECT p.header, p.body, p.type from component p 
-                        join componentConnection pc on pc.child_component_id = p.component_id and 
-                            where p.uid = ? and p.status = 0`,
-                            [],
-                            async function(err, sub) {
+                        component = component[0]
+                        conn.query(
+                        `SELECT c.header, c.body, c.type from Component c 
+                        join ComponentConnection cc on cc.child_component_id = c.component_id and cc.component_id = ?`,
+                        [component.component_id], async function(err, subs) {
                                 if (err){
                                     console.log(err)
                                     res.status(400).send('An error occurred')
                                 }else{
-                                    
+                                    res.json({
+                                        component: component,
+                                        subComponents: subs
+                                    })
                                 }
                             }
                         );

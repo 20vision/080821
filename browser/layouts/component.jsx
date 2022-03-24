@@ -4,12 +4,13 @@ import PageInfo from '../components/PageLayout/PageInfo'
 import onClickOutside from "react-onclickoutside";
 import NavPanel from "../components/NavPanel/Index"
 import { useRouter } from "next/router";
+import Loading from "../assets/Loading/Loading";
 
-export default function PageLayout( {children} ) {
+export default function PageLayout( {children, page} ) {
     return (
         <>  
             <div className={styles.container}>
-                <Panel children={children} outsideClickIgnoreClass={'ignore_click_outside_page'}/>
+                <Panel children={children} page={page} outsideClickIgnoreClass={'ignore_click_outside_page'}/>
             </div>
         </>
     )
@@ -19,7 +20,7 @@ const clickOutsideConfig = {
     handleClickOutside: () => Panel.handleClickOutside
 }
 
-var Panel = onClickOutside(({children}) => {
+var Panel = onClickOutside(({children, page}) => {
     const router = useRouter()
 
     Panel.handleClickOutside = () => {
@@ -27,10 +28,10 @@ var Panel = onClickOutside(({children}) => {
     };
 
     return(
-        <div className={styles.child}>
+        <div className={styles.child} style={{backgroundColor: 'var(--white)'}}>
 
-            <div className={styles.pageInfo}>
-                {/* <PageInfo page={page}/> */}
+            <div className={styles.pageInfo} style={{backgroundColor: 'var(--white)'}}>
+                {page?<PageInfo page={page} type='paper'/>:<div style={{margin: 'auto auto'}}><Loading/></div>}
             </div>
 
             <div className={styles.previewContainer}>
