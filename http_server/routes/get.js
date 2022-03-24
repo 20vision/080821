@@ -416,7 +416,7 @@ router.get("/component/:uid", async (req, res) => {
             res.status(500).send('An error occurred')
             console.log(err)
         }else{
-            conn.query(`SELECT c.component_id, c.header, c.body, c.type from Component c where c.uid = ? and c.status = 0`,
+            conn.query(`SELECT c.component_id, c.uid, c.header, c.body, c.type from Component c where c.uid = ? and c.status = 0`,
                 [req.params.uid],
                 async function(err, component) {
                     if (err || component.length > 1){
@@ -427,13 +427,13 @@ router.get("/component/:uid", async (req, res) => {
                     }else{
                         component = component[0]
                         conn.query(
-                        `SELECT c.header, c.body, c.type from Component c 
-                        join ComponentConnection cc on cc.child_component_id = c.component_id and cc.component_id = ?`,
+                        `SELECT c.uid, c.header, c.body, c.type from Component c join ComponentConnection cc on cc.child_component_id = c.component_id and cc.component_id = ?`,
                         [component.component_id], async function(err, subs) {
                                 if (err){
                                     console.log(err)
                                     res.status(400).send('An error occurred')
                                 }else{
+                                    delete component.component_id
                                     res.json({
                                         component: component,
                                         subComponents: subs

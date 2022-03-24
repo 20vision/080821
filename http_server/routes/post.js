@@ -146,7 +146,7 @@ router.post("/component", check.AuthRequired, async (req, res) => {
                     for(var i=0; i<ratio.length;i++){
                         await sharp(Buffer.from(image[1], 'base64'))
                         .resize({ fit: sharp.fit.contain, width: ratio[i], height: ratio[i] })
-                        .webp({ quality: 60 })
+                        .webp({ quality: 70 })
                         .toBuffer()
                         .then(async response => {
                             data.buffer = response,

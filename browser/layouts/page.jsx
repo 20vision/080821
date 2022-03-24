@@ -9,7 +9,7 @@ import { useRouter } from "next/router";
 export default function PageLayout( {children, page, missions} ) {
     return (
         <>  
-            <div className={styles.container}>
+            <div className={styles.container} style={{color: 'var(--white)'}}>
                 <Panel children={children} page={page} missions={missions} outsideClickIgnoreClass={'ignore_click_outside_page'}/>
             </div>
         </>

@@ -31,7 +31,7 @@ export default function Index() {
             null
         :
             <div className={styles.container}>
-                <div className={styles.child}>
+                <div className={styles.child} style={{color: 'var(--white)'}}>
                     {profile.username?
                         <>
                             {router.pathname.split('/')[4] == 'edit'?

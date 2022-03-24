@@ -1,0 +1,13 @@
+.compContainer{
+    display: flex;
+    flex-direction: column;
+    margin-top: 35px;
+}
+
+.compContainer img{
+    border-radius: 35px 35px 0px 0px;
+}
+
+.compContainer h2{
+    margin-top: 25px;
+}

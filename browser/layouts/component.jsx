@@ -9,7 +9,7 @@ import Loading from "../assets/Loading/Loading";
 export default function PageLayout( {children, page} ) {
     return (
         <>  
-            <div className={styles.container}>
+            <div className={styles.container} style={{color: 'var(--lighter_black)'}}>
                 <Panel children={children} page={page} outsideClickIgnoreClass={'ignore_click_outside_page'}/>
             </div>
         </>
