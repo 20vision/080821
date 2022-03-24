@@ -1,6 +1,6 @@
 import style from '../../styles/component/subComponent.module.css'
 import config from '../../public/config.json';
-import { DateTime, Interval } from "luxon";
+import { DateTime } from "luxon";
 
 export default function Subdata({data}){
     return(
@@ -14,7 +14,8 @@ export default function Subdata({data}){
                 </div>
                 <div className={style.compFooter}>
                     <div>
-                        {data.subcomponents} Sub-Components
+                        <span style={{color: data.type == 'p'?'var(--blue)':data.type == 's'?'var(--yellow)':'var(--green)'}}>{data.type == 'p'?'Product':data.type == 's'?'Service':'Result'}</span>&nbsp;
+                        <span>· {data.subcomponents} Components</span>
                     </div>
                     <span>
                     /{data.unique_pagename} · {DateTime.fromISO(data.created).toLocaleString(DateTime.DATE_MED)}

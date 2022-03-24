@@ -1,7 +1,7 @@
 import styles from '../../styles/forumLayout/layout_bubble.module.css'
 import ProfilePicture from '../User/ProfilePicture/ProfilePicture'
 import disableScroll from 'disable-scroll';
-import { DateTime, Interval } from "luxon";
+import { DateTime } from "luxon";
 
 export default function BubbleBasicLayout({children, mirror, color, profile, postDate, isReplyActive, makeScroll, isInTheBackground}){
     

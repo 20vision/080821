@@ -54,3 +54,42 @@
     display:flex;
     flex-direction: column; */
 }
+
+.dependentsList{
+    border-top: 1px solid var(--grey);
+    padding: 15px 25px;
+}
+
+.dependentsList div{
+    display:flex;
+    align-items: center;
+}
+
+.dependent{
+    display: flex;
+    opacity: 0.8;
+}
+
+.dependent .header{
+    height: 54px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin: 10px;
+}
+
+.dependent .info{
+    flex-grow: 1;
+}
+
+.dependent .header h3{
+    line-height: 18px;
+}
+.dependent .footer{
+    margin: 15px 10px;
+}
+
+.dependent img{
+    width: 100px;
+    height: 100px;
+    border-radius: 15px;
+}

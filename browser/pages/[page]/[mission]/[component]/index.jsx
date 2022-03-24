@@ -4,7 +4,7 @@ import axios from 'axios'
 import config from '../../../../public/config.json';
 import style from '../../../../styles/component/index.module.css'
 import SubComponent from '../../../../components/Component/SubComponent';
-import { DateTime, Interval } from "luxon";
+import { DateTime } from "luxon";
 import Link from 'next/link'
 
 export default function Component({component, subComponents, params}){
@@ -32,7 +32,8 @@ export default function Component({component, subComponents, params}){
           </div>
           <div className={style.compFooter}>
             <div>
-              Mission · {component.mission_title.replace(/_/g, ' ')}
+              <span style={{color: component.type == 'p'?'var(--blue)':component.type == 's'?'var(--yellow)':'var(--green)'}}>{component.type == 'p'?'Product':component.type == 's'?'Service':'Result'}</span>&nbsp;
+              <span>· {component.mission_title.replace(/_/g, ' ')}</span>
             </div>
             <span>
               {DateTime.fromISO(component.created).toLocaleString(DateTime.DATE_MED)}
@@ -44,9 +45,9 @@ export default function Component({component, subComponents, params}){
       <br/>
       {subComponents && subComponents.map((sub, index) => {
         return (
-          <Link href={`/${sub.unique_pagename}/${sub.mission_title}/${sub.uid}`}>
+          <Link href={`/${sub.unique_pagename}/${sub.mission_title}/${sub.uid}`} key={index}>
             <a>
-              <SubComponent data={sub} key={index}/>
+              <SubComponent data={sub} />
             </a>
           </Link>
         )
@@ -58,7 +59,6 @@ export default function Component({component, subComponents, params}){
 export async function getServerSideProps(context) {
   try{
     const res = await axios.get(`http://localhost:4000/get/component/${context.params.component}`)
-    console.log(res.data.subComponents)
     return{
       props: {
         params: context.params,

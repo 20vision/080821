@@ -409,6 +409,48 @@ router.get("/forum/:unique_pagename/components/:uid", async (req, res) => {
     res.status(404).send('not ready yet')
 })
 
+router.get("/component/:uid/dependents/count", async (req, res) => {
+    pool.query(
+        `SELECT count(cc.component_connection_id) as dependentsCount from ComponentConnection cc 
+        join Component c on c.component_id = cc.child_component_id
+        where c.uid = ?`,
+        [req.params.uid],
+        function(err, count) {
+            if (err){
+                res.status(500).send('An error occurred')
+                console.log(err)
+            }else{
+                res.json({
+                    count: count[0].dependentsCount
+                })
+            }
+        }
+    );
+})
+router.get("/component/:uid/dependents/:offset", async (req, res) => {
+    pool.query(
+        `SELECT p.unique_pagename, m.title as mission_title, p.page_icon, c.uid, c.header, c.type, c.created from Component c
+        join ComponentConnection cc on c.component_id = cc.component_id
+        join Component c1 on c1.component_id = cc.child_component_id
+        join Mission m on m.mission_id = c1.mission_id join Page p on p.page_id = m.page_id
+        where c1.uid = ?
+        group by c.uid
+        limit ?,3`,
+        [req.params.uid, parseInt(req.params.offset)],
+        function(err, dependents) {
+            if (err){
+                res.status(500).send('An error occurred')
+                console.log(err)
+            }else{
+                console.log(dependents)
+                res.json({
+                    dependents: dependents
+                })
+            }
+        }
+    );
+})
+
 router.get("/component/:uid", async (req, res) => {
     //console.log('okk')
     pool.getConnection(async function(err, conn) {
