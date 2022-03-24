@@ -22,9 +22,13 @@ export default function PageInfo({page}) {
             </div>
             
 
-            <div className={styles.vision}>
-                {page.vision}
-            </div>
+            {page.vision?
+                <div className={styles.vision}>
+                    {page.vision}
+                </div>
+            :
+                null
+            }
         </div>
 
         </>

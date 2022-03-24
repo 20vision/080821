@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import TextareaAutosize from 'react-textarea-autosize';
-import styles from '../../styles/paperEditLayout/edit.module.css'
+import styles from '../../styles/paper/editModal.module.css'
 import { FilePond, registerPlugin } from 'react-filepond';
 import 'filepond/dist/filepond.min.css';
 import FilePondPluginFileValidateType from 'filepond-plugin-file-validate-type';
