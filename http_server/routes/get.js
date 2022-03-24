@@ -416,7 +416,7 @@ router.get("/component/:uid", async (req, res) => {
             res.status(500).send('An error occurred')
             console.log(err)
         }else{
-            conn.query(`SELECT c.component_id, c.uid, c.header, c.body, c.type from Component c where c.uid = ? and c.status = 0`,
+            conn.query(`SELECT c.component_id, m.title as mission_title, c.uid, c.header, c.body, c.type, c.created from Component c join Mission m on m.mission_id = c.mission_id where c.uid = ? and c.status = 0`,
                 [req.params.uid],
                 async function(err, component) {
                     if (err || component.length > 1){
@@ -427,7 +427,13 @@ router.get("/component/:uid", async (req, res) => {
                     }else{
                         component = component[0]
                         conn.query(
-                        `SELECT c.uid, c.header, c.body, c.type from Component c join ComponentConnection cc on cc.child_component_id = c.component_id and cc.component_id = ?`,
+                        `SELECT c.uid, c.header, c.body, c.type, m.title as mission_title, c.created, count(cc1.component_connection_id) as subcomponents, p.unique_pagename
+                        from Component c
+                        join ComponentConnection cc on cc.child_component_id = c.component_id and cc.component_id = ?
+                        join Mission m on m.mission_id = c.mission_id join Page p on m.page_id = p.page_id
+                        left join ComponentConnection cc1 on cc1.component_id = c.component_id
+                        group by c.component_id
+                        `,
                         [component.component_id], async function(err, subs) {
                                 if (err){
                                     console.log(err)

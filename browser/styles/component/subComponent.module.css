@@ -1,0 +1,29 @@
+.container{
+    border-radius: 35px;
+    background-color: var(--white);
+    filter: drop-shadow(0px 3px 26px rgba(0, 0, 0, 0.4));
+    margin: 35px 0px;
+    display:flex;
+    flex-direction: column;
+}
+
+.container img{
+    border-radius: 35px 35px 0px 0px;
+}
+
+.child{
+    margin: 35px;
+}
+
+.child div{
+    margin-top: 25px;
+}
+
+.compFooter div{
+    margin-top: 35px;
+    font-weight: bold;
+}
+
+.compFooter span{
+    color: var(--dark_grey);
+}

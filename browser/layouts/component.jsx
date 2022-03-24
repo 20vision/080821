@@ -34,7 +34,7 @@ var Panel = onClickOutside(({children, page}) => {
                 {page?<PageInfo page={page} type='paper'/>:<div style={{margin: 'auto auto'}}><Loading/></div>}
             </div>
 
-            <div className={styles.previewContainer}>
+            <div className={`hideScrollBar ${styles.previewContainer}`} style={{overflowY: 'scroll'}}>
                 <div className={styles.previewChild}>
                     <main>
                         {children}

@@ -3,6 +3,9 @@ import ComponentLayout from '../../../../layouts/component'
 import axios from 'axios'
 import config from '../../../../public/config.json';
 import style from '../../../../styles/component/index.module.css'
+import SubComponent from '../../../../components/Component/SubComponent';
+import { DateTime, Interval } from "luxon";
+import Link from 'next/link'
 
 export default function Component({component, subComponents, params}){
   const [page, setPage] = useState(null)
@@ -19,19 +22,33 @@ export default function Component({component, subComponents, params}){
     <ComponentLayout page={page}>
       <div className={style.compContainer}>
         <img
-        src={config.FILE_SERVER_URL+'comp_images/'+component.uid.substring(0,params.component.length-8)+'/'+component.uid.substring(params.component.length-8)+'/512x512'+'.webp'}/>
-        <h2>
-          {component.header}
-        </h2>
-        <div>
-          {component.body}
-        </div>
-      </div>
-      {subComponents && subComponents.map((sub, index) => {
-        return(
-          <div key={index}>
-            {sub.header}
+        src={config.FILE_SERVER_URL+'comp_images/'+component.uid.substring(0,component.uid.length-8)+'/'+component.uid.substring(component.uid.length-8)+'/512x512'+'.webp'}/>
+        <div style={{margin: '0px 35px'}}>
+          <h1>
+            {component.header}
+          </h1>
+          <div>
+            {component.body}
           </div>
+          <div className={style.compFooter}>
+            <div>
+              Mission · {component.mission_title.replace(/_/g, ' ')}
+            </div>
+            <span>
+              {DateTime.fromISO(component.created).toLocaleString(DateTime.DATE_MED)}
+            </span>
+          </div>
+        </div>
+
+      </div>
+      <br/>
+      {subComponents && subComponents.map((sub, index) => {
+        return (
+          <Link href={`/${sub.unique_pagename}/${sub.mission_title}/${sub.uid}`}>
+            <a>
+              <SubComponent data={sub} key={index}/>
+            </a>
+          </Link>
         )
       })}
     </ComponentLayout>

@@ -15,12 +15,13 @@
     /*background-color: var(--lighter_black);*/
     filter: drop-shadow( 0px 3px 54px rgb(0, 0, 0, 0.20));
     border-radius: 35px;
+    position: relative;
 }
 
 .pageInfo{
     border-top-left-radius: 35px;
     border-bottom-left-radius: 35px;
-    position: sticky;
+    position: absolute;
     left: 0;
     top: 0;
     bottom: 0;
@@ -41,13 +42,15 @@
 
 .previewChild{
     width: 600px;
-    height: 100%;
+    /* height: 100%; */
 }
 
 .overview{
-    position: sticky;
-    margin: 35px;
+    position: absolute;
+    right: 35px;
+    bottom: 35px;
+    /* margin: 35px;
     height: auto;
     display:flex;
-    flex-direction: column;
+    flex-direction: column; */
 }
