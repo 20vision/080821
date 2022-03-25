@@ -9,7 +9,7 @@ import Link from 'next/link'
 
 export default function Component({component, subComponents, params}){
   const [page, setPage] = useState(null)
-
+  
   useEffect(async() => {
     try{
       setPage((await axios.get(`http://localhost:4000/get/page/${params.page}?missions=false`)).data.page)
@@ -20,7 +20,7 @@ export default function Component({component, subComponents, params}){
 
   return(
     <ComponentLayout page={page} comp={component} subs={subComponents}>
-      <div className={style.compContainer}>
+      <div id='main' className={style.compContainer}>
         <img
         src={config.FILE_SERVER_URL+'comp_images/'+component.uid.substring(0,component.uid.length-8)+'/'+component.uid.substring(component.uid.length-8)+'/512x512'+'.webp'}/>
         <div style={{margin: '0px 35px'}}>
@@ -45,11 +45,13 @@ export default function Component({component, subComponents, params}){
       <br/>
       {subComponents && subComponents.map((sub, index) => {
         return (
-          <Link href={`/${sub.unique_pagename}/${sub.mission_title}/${sub.uid}`} key={index}>
-            <a>
-              <SubComponent data={sub} />
-            </a>
-          </Link>
+          <div id={`sub_${sub.child_component_index}`} key={index}>
+            <Link href={`/${sub.unique_pagename}/${sub.mission_title}/${sub.uid}`}>
+              <a>
+                <SubComponent data={sub} />
+              </a>
+            </Link>
+          </div>
         )
       })}
     </ComponentLayout>

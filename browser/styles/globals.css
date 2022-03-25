@@ -18,6 +18,7 @@
   /*Canvas*/
   --max_width: 1800px;
   --radius_large: 25px;
+  scroll-behavior: smooth;
 }
 
 html, body, #__next{
@@ -29,7 +30,8 @@ html, body, #__next{
   margin:0px;
   padding:0px;
   font-size:16px;
-  color: var(--lighter_black)
+  color: var(--lighter_black);
+  scroll-behavior: smooth;
 }
 
 h1{

@@ -14,6 +14,8 @@ import config from '../public/config.json';
 import Link from 'next/link'
 import PageIcon from '../assets/PageIcon/PageIcon'
 import Overview from "../components/Component/Overview";
+import {animateScroll} from 'react-scroll';
+import { useRef } from "react";
 
 export default function PageLayout( {children, page, comp, subs} ) {
     return (
@@ -33,6 +35,7 @@ var Panel = onClickOutside(({children, page, subs, comp}) => {
     const router = useRouter()
     const [dependents, setDependents] = useState([])
     const [dependentsCount, setDependentsCount] = useState(null)
+    const [scrollPercentage, setScrollPercentage] = useState(0)
 
     useEffect(async() => {
         try{
@@ -43,13 +46,11 @@ var Panel = onClickOutside(({children, page, subs, comp}) => {
         }
     }, [router.query.component])
 
-    useEffect(()=>{
-        console.log(dependents)
-    }, [dependents])
-
     Panel.handleClickOutside = () => {
         router.push(`/`)
     };
+
+    const overviewRef = useRef()
 
     return(
         <div className={styles.child} style={{backgroundColor: 'var(--white)'}}>
@@ -77,7 +78,7 @@ var Panel = onClickOutside(({children, page, subs, comp}) => {
                             >
                                 {dependents.map((dependent, index) => {
                                     return(
-                                        <Link key={index} href={`/${dependent.unique_pagename}/${dependent.mission_title}/${dependent.uid}`}>
+                                        <Link href={`/${dependent.unique_pagename}/${dependent.mission_title}/${dependent.uid}`}>
                                             <a>
                                                 <div className={styles.dependent}>
                                                     <div className={styles.info}>
@@ -112,7 +113,7 @@ var Panel = onClickOutside(({children, page, subs, comp}) => {
                 </div>
             </div>
 
-            <div className={`hideScrollBar ${styles.previewContainer}`} style={{overflowY: 'scroll'}}>
+            <div onScroll={arg => setScrollPercentage((arg.target.scrollTop/arg.target.scrollTopMax)*100)} className={`hideScrollBar ${styles.previewContainer}`} style={{scrollBehavior: 'smooth',overflowY: 'scroll'}}>
                 <div className={styles.previewChild}>
                     <main>
                         {children}
@@ -121,10 +122,20 @@ var Panel = onClickOutside(({children, page, subs, comp}) => {
             </div>
 
             <div className={styles.overviewParent}>
-                <div className={styles.overviewChild}>
-                    <Overview subs={subs} comp={comp}/>
+                <div onMouseEnter={() => animateScroll.scrollTo(overviewRef.current.scrollTopMax*scrollPercentage/100, {
+                        smooth: true,
+                        duration: 400,
+                        ignoreCancelEvents: false,
+                        containerId: 'overviewId'
+                    })} className={`hideScrollBar ${styles.overviewChild}`} id='overviewId' ref={overviewRef} style={{scrollBehavior: 'inherit!important'}}>
+                    <Overview subs={subs} comp={comp} scrollPercentage={scrollPercentage}/>
                 </div>
-                <NavPanel/>
+                <div style={{filter: `
+                drop-shadow( 0px -10px 10px rgb(250, 250, 250, 1)) 
+                drop-shadow( 0px -10px 10px rgb(250, 250, 250, 1))
+                drop-shadow( 0px -10px 10px rgb(250, 250, 250, 1))`}}>
+                    <NavPanel/>
+                </div>
             </div>
 
         </div>

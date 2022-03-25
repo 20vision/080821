@@ -1,7 +1,3 @@
-.parent{
-    max-width: 350px;
-}
-
 .componentParent{
     border-bottom: 1px solid var(--grey);
     margin-left: 15px;
@@ -10,6 +6,5 @@
 
 .subParent{
     margin-top: 15px;
-    border-bottom: 1px solid var(--lighter_grey);
     flex-grow:1;
 }

@@ -469,14 +469,15 @@ router.get("/component/:uid", async (req, res) => {
                     }else{
                         component = component[0]
                         conn.query(
-                        `SELECT c.uid, c.header, c.body, c.type, m.title as mission_title, c.created, count(cc1.component_connection_id) as subcomponents, p.unique_pagename
-                        from Component c
-                        join ComponentConnection cc on cc.child_component_id = c.component_id and cc.component_id = ?
-                        join Mission m on m.mission_id = c.mission_id join Page p on m.page_id = p.page_id
-                        left join ComponentConnection cc1 on cc1.component_id = c.component_id
-                        group by c.component_id
-                        `,
-                        [component.component_id], async function(err, subs) {
+                            `SELECT cc.child_component_index, c.uid, cc.child_component_index, c.header, c.body, c.type, m.title as mission_title, c.created, count(cc1.component_connection_id) as subcomponents, p.unique_pagename from ComponentConnection cc 
+                            join Component c on c.component_id = cc.child_component_id
+                            join Mission m on m.mission_id = c.mission_id join Page p on m.page_id = p.page_id
+                            left join ComponentConnection cc1 on cc1.component_id = c.component_id
+                            where cc.component_id = ?
+                            group by cc.component_connection_id
+                            order by cc.child_component_index
+                            `,
+                            [component.component_id], async function(err, subs) {
                                 if (err){
                                     console.log(err)
                                     res.status(400).send('An error occurred')

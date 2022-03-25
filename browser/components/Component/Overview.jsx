@@ -1,79 +1,87 @@
 import styles from '../../styles/component/overview.module.css'
 import pageLayoutStyle from "../../styles/pageLayout/index.module.css"
-import Link from 'next/link'
 import config from '../../public/config.json';
 import { useEffect } from 'react';
+import Link from 'next/link';
+import { useRef } from 'react';
 
-export default function Overview({comp, subs}){
+export default function Overview({comp, subs, scrollPercentage}){
 
-    useEffect(() => {
-        console.log(subs)
-    })
+    // useEffect(() => {
+    //     scroll.scrollTo(500, {
+    //         smooth: true,
+    //         containerId: 'overviewId'
+    //     })
+    // }, [scrollPercentage])
 
     return(
         <div className={styles.parent}>
-            <div style={{display:'flex'}}>
-                {subs.length>0?
-                    <div style={{display: 'flex', flexDirection: 'column'}}>
-                        <div style={{flexGrow: '1'}}/>
-                        <Start type={comp.type}/>
-                        <Branch type={comp.type}/>
-                    </div>
-                :
-                    null
-                }
-                <div className={`${styles.componentParent}`}>
-                    <ContentRow data={comp}/>
-                </div>
-            </div>
-            {subs && subs.map((sub, index) => {
-                return(
-                    <div key={index} style={{display:'flex'}}>
-                        {index == subs.length-1?
-                            <div style={{display: 'flex', flexDirection: 'column'}}>
-                                <Branch type={comp.type}/>
-                                <div style={{marginTop: '-7px'}}>
-                                    <Split type={comp.type}/>
-                                </div>
+            <Link href={`#main`}>
+                <a>
+                    <div style={{display:'flex'}}>
+                        {subs.length>0?
+                            <div style={{display: 'flex', flexDirection: 'column',width: '8px', paddingLeft: '3px'}}>
                                 <div style={{flexGrow: '1'}}/>
+                                <Start type={comp.type}/>
+                                <Branch type={comp.type}/>
                             </div>
                         :
-                            <div style={{display: 'flex', flexDirection: 'column'}}>
-                                <Branch type={comp.type}/>
-                                <div style={{marginTop: '-7px'}}>
-                                    <Split type={comp.type}/>
-                                </div>
-                                <div style={{flexGrow: '1'}}/>
-                            </div>
+                            null
                         }
-                        <div className={`${styles.subParent}`}>
-                            <ContentRow data={sub}/>
+                        <div className={`${styles.componentParent}`}>
+                            <ContentRow data={comp} subcomponents={subs.length}/>
                         </div>
                     </div>
+                </a>
+            </Link>
+            {subs && subs.map((sub, index) => {
+                return(
+                    <Link href={`#sub_${sub.child_component_index}`} key={index}>
+                        <a>
+                            <div style={{display:'flex',marginLeft:'3px'}} key={index}>
+                                {index == subs.length-1?
+                                    <div style={{display: 'flex', flexDirection: 'column'}}>
+                                        <Branch type={comp.type}/>
+                                        <div style={{marginTop: '-7px'}}>
+                                            <Split type={comp.type}/>
+                                        </div>
+                                        <div style={{flexGrow: '1'}}/>
+                                    </div>
+                                :
+                                    <div style={{display: 'flex', flexDirection: 'column', position: 'relative', marginRight: 15}}>
+                                        <Branch type={comp.type}/>
+                                        <div style={{position: 'absolute',top:'calc(50% - 12px)'}}>
+                                            <Split type={comp.type}/>
+                                        </div>
+                                    </div>
+                                }
+                                <div className={`${styles.subParent}`} style={{borderBottom: index!=subs.length-1?'1px solid var(--lighter_grey)':null}}>
+                                    <ContentRow data={sub} pagination={subs.length-index}/>
+                                </div>
+                            </div>
+                        </a>
+                    </Link>
                 )
             })}
+            <div style={{width: '100%', height: '35px'}}/>
         </div>
     )
 }
 
-const ContentRow = ({data}) => {
+const ContentRow = ({data, subcomponents, pagination}) => {
     return(
-        <Link href={`/${data.unique_pagename}/${data.mission_title}/${data.uid}`}>
-            <a>
-                <div className={pageLayoutStyle.dependent}>
-                    <div className={pageLayoutStyle.info}>
-                        <div className={pageLayoutStyle.header}>
-                            <h3>{data.header}</h3>
-                        </div>
-                        <div className={pageLayoutStyle.footer}>
-                            <span style={{fontSize: 12,color: data.type == 'p'?'var(--blue)':data.type == 's'?'var(--yellow)':'var(--green)'}}>{data.type == 'p'?'Product':data.type == 's'?'Service':'Result'}</span>&nbsp;
-                            <span style={{fontSize: 12}}>· /{data.unique_pagename}</span>
-                        </div>
-                    </div>
-                    <img  src={config.FILE_SERVER_URL+'comp_images/'+data.uid.substring(0,data.uid.length-8)+'/'+data.uid.substring(data.uid.length-8)+'/512x512'+'.webp'}/>
+        <div className={pageLayoutStyle.dependent}>
+            <div className={pageLayoutStyle.info}>
+                <div className={pageLayoutStyle.header}>
+                    <h3>{pagination?<span style={{color: 'var(--grey)'}}>-{pagination}|&nbsp;</span>:null}<span>{data.header}</span></h3>
                 </div>
-            </a>
-        </Link>
+                <div className={pageLayoutStyle.footer}>
+                    <span style={{fontSize: 12,color: data.type == 'p'?'var(--blue)':data.type == 's'?'var(--yellow)':'var(--green)'}}>{data.type == 'p'?'Product':data.type == 's'?'Service':'Result'}</span>&nbsp;
+                    <span style={{fontSize: 12}}>· {subcomponents!=null?subcomponents:data.subcomponents} Components</span>
+                </div>
+            </div>
+            <img src={config.FILE_SERVER_URL+'comp_images/'+data.uid.substring(0,data.uid.length-8)+'/'+data.uid.substring(data.uid.length-8)+'/512x512'+'.webp'}/>
+        </div>
     )
 }
 
