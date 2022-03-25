@@ -12,12 +12,14 @@ import axios from "axios";
 import DownloadCloud from '../assets/DownloadCloud'
 import config from '../public/config.json';
 import Link from 'next/link'
+import PageIcon from '../assets/PageIcon/PageIcon'
+import Overview from "../components/Component/Overview";
 
-export default function PageLayout( {children, page} ) {
+export default function PageLayout( {children, page, comp, subs} ) {
     return (
         <>  
             <div className={styles.container} style={{color: 'var(--lighter_black)'}}>
-                <Panel children={children} page={page} outsideClickIgnoreClass={'ignore_click_outside_page'}/>
+                <Panel children={children} page={page} subs={subs} comp={comp} outsideClickIgnoreClass={'ignore_click_outside_page'}/>
             </div>
         </>
     )
@@ -27,7 +29,7 @@ const clickOutsideConfig = {
     handleClickOutside: () => Panel.handleClickOutside
 }
 
-var Panel = onClickOutside(({children, page}) => {
+var Panel = onClickOutside(({children, page, subs, comp}) => {
     const router = useRouter()
     const [dependents, setDependents] = useState([])
     const [dependentsCount, setDependentsCount] = useState(null)
@@ -75,9 +77,9 @@ var Panel = onClickOutside(({children, page}) => {
                             >
                                 {dependents.map((dependent, index) => {
                                     return(
-                                        <Link href={`/${dependent.unique_pagename}/${dependent.mission_title}/${dependent.uid}`}>
+                                        <Link key={index} href={`/${dependent.unique_pagename}/${dependent.mission_title}/${dependent.uid}`}>
                                             <a>
-                                                <div key={index} className={styles.dependent}>
+                                                <div className={styles.dependent}>
                                                     <div className={styles.info}>
                                                         <div className={styles.header}>
                                                             <h3>{dependent.header}</h3>
@@ -88,6 +90,13 @@ var Panel = onClickOutside(({children, page}) => {
                                                         </div>
                                                     </div>
                                                     <img  src={config.FILE_SERVER_URL+'comp_images/'+dependent.uid.substring(0,dependent.uid.length-8)+'/'+dependent.uid.substring(dependent.uid.length-8)+'/512x512'+'.webp'}/>
+                                                    <div className={styles.page_icon}>
+                                                        {(dependent.page_icon.length < 7) ?
+                                                            <PageIcon color={'#'+dependent.page_icon}/>
+                                                        :
+                                                            <img src={dependent.page_icon}/>
+                                                        }
+                                                    </div>
                                                 </div>
                                             </a>
                                         </Link>
@@ -98,7 +107,7 @@ var Panel = onClickOutside(({children, page}) => {
                             null}
                     </div>
                     <div className={styles.dependentsList}>
-                        <div><DownloadCloud/>&nbsp;&nbsp;<h3>{dependentsCount}&nbsp;Dependents</h3></div>
+                        <div><DownloadCloud/>&nbsp;&nbsp;<h3>{dependentsCount}&nbsp;{(dependentsCount>1)?'Dependents':'Dependent'}</h3></div>
                     </div>
                 </div>
             </div>
@@ -111,10 +120,11 @@ var Panel = onClickOutside(({children, page}) => {
                 </div>
             </div>
 
-            <div className={styles.overview}>
-                <div style={{marginTop: 'auto'}}>
-                    <NavPanel/>
+            <div className={styles.overviewParent}>
+                <div className={styles.overviewChild}>
+                    <Overview subs={subs} comp={comp}/>
                 </div>
+                <NavPanel/>
             </div>
 
         </div>

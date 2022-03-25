@@ -19,7 +19,7 @@ export default function Component({component, subComponents, params}){
   }, [])
 
   return(
-    <ComponentLayout page={page}>
+    <ComponentLayout page={page} comp={component} subs={subComponents}>
       <div className={style.compContainer}>
         <img
         src={config.FILE_SERVER_URL+'comp_images/'+component.uid.substring(0,component.uid.length-8)+'/'+component.uid.substring(component.uid.length-8)+'/512x512'+'.webp'}/>

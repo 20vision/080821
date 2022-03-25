@@ -45,14 +45,21 @@
     /* height: 100%; */
 }
 
-.overview{
+.overviewParent{
     position: absolute;
     right: 35px;
     bottom: 35px;
+    top: 35px;
+    display:flex;
+    flex-direction: column;
     /* margin: 35px;
     height: auto;
     display:flex;
     flex-direction: column; */
+}
+
+.overviewChild{
+    flex-grow: 1;
 }
 
 .dependentsList{
@@ -68,6 +75,8 @@
 .dependent{
     display: flex;
     opacity: 0.8;
+    position:relative;
+    overflow: hidden;
 }
 
 .dependent .header{
@@ -92,4 +101,14 @@
     width: 100px;
     height: 100px;
     border-radius: 15px;
+    margin-right:6px;
+}
+
+.page_icon{
+    width: 45px;
+    height: 45px;
+    transform: scale(0.6);
+    position:absolute;
+    right:-9px;
+    bottom: 0;
 }
