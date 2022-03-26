@@ -82,6 +82,47 @@ router.get("/user_profile", check.AuthOptional, async (req, res) => {
 
 // PUBLIC //////////////////////////////////////////////////
 
+router.get("/page/:page_name/components/:offset", check.AuthOptional, async (req, res) => {
+    pool.getConnection(async function(err, conn) {
+        if (err){
+            res.status(500).send('An error occurred')
+            console.log(err)
+        }else{
+            try{
+                conn.query(
+                    `SELECT
+                    c.uid,
+                    c.header,
+                    c.body,
+                    c.type,
+                    m.title as mission_title,
+                    c.created,
+                    count(cc1.component_connection_id) as subcomponents
+                    from Component c
+                    join Mission m on m.mission_id = c.mission_id join Page p on m.page_id = p.page_id and p.unique_pagename = ?
+                    left join ComponentConnection cc1 on cc1.component_id = c.component_id
+                    group by c.component_id 
+                    order by subcomponents desc, c.created desc
+                    limit ?,3`,
+                    [req.params.page_name, parseInt(req.params.offset)],
+                    function(err, components) {
+                        if (err){
+                            res.status(500).send('An error occurred')
+                            console.log(err)
+                        }else{
+                            res.json(components)
+                        }
+                    }
+                );
+            }catch(err){
+                console.log(err)
+                res.status(err.status).send(err.message)
+            }
+        }
+        pool.releaseConnection(conn);
+    })
+})
+
 router.get("/page/:page_name", check.AuthOptional, async (req, res) => {
     pool.getConnection(async function(err, conn) {
         if (err){
@@ -469,7 +510,7 @@ router.get("/component/:uid", async (req, res) => {
                     }else{
                         component = component[0]
                         conn.query(
-                            `SELECT cc.child_component_index, c.uid, cc.child_component_index, c.header, c.body, c.type, m.title as mission_title, c.created, count(cc1.component_connection_id) as subcomponents, p.unique_pagename from ComponentConnection cc 
+                            `SELECT cc.child_component_index, c.uid, c.header, c.body, c.type, m.title as mission_title, c.created, count(cc1.component_connection_id) as subcomponents, p.unique_pagename from ComponentConnection cc 
                             join Component c on c.component_id = cc.child_component_id
                             join Mission m on m.mission_id = c.mission_id join Page p on m.page_id = p.page_id
                             left join ComponentConnection cc1 on cc1.component_id = c.component_id

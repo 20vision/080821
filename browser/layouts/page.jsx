@@ -5,12 +5,13 @@ import Missions from '../components/PageLayout/Missions'
 import onClickOutside from "react-onclickoutside";
 import NavPanel from "../components/NavPanel/Index"
 import { useRouter } from "next/router";
+import Overview from "../components/Component/Overview";
 
-export default function PageLayout( {children, page, missions} ) {
+export default function PageLayout( {children, page, comp, missions} ) {
     return (
         <>  
             <div className={styles.container} style={{color: 'var(--white)'}}>
-                <Panel children={children} page={page} missions={missions} outsideClickIgnoreClass={'ignore_click_outside_page'}/>
+                <Panel children={children} comp={comp} page={page} missions={missions} outsideClickIgnoreClass={'ignore_click_outside_page'}/>
             </div>
         </>
     )
@@ -20,7 +21,7 @@ const clickOutsideConfig = {
     handleClickOutside: () => Panel.handleClickOutside
 }
 
-var Panel = onClickOutside(({children, page, missions}) => {
+var Panel = onClickOutside(({children, page, missions, comp}) => {
     const router = useRouter()
 
     Panel.handleClickOutside = () => {
@@ -43,8 +44,12 @@ var Panel = onClickOutside(({children, page, missions}) => {
                 </div>
             </div>
 
-            <div className={styles.overview}>
-                <div style={{marginTop: 'auto'}}>
+            <div className={styles.overviewParent}>
+                <div className={`hideScrollBar ${styles.overviewChild}`} id='overviewId' style={{scrollBehavior: 'inherit!important'}}>
+                    {comp?<Overview subs={subs} comp={comp}/>:null}
+                </div>
+                <div style={{filter: `
+                drop-shadow( 0px -20px 5px rgb(46, 46, 46, 1))`}}>
                     <NavPanel/>
                 </div>
             </div>

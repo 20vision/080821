@@ -128,12 +128,10 @@ var Panel = onClickOutside(({children, page, subs, comp}) => {
                         ignoreCancelEvents: false,
                         containerId: 'overviewId'
                     })} className={`hideScrollBar ${styles.overviewChild}`} id='overviewId' ref={overviewRef} style={{scrollBehavior: 'inherit!important'}}>
-                    <Overview subs={subs} comp={comp} scrollPercentage={scrollPercentage}/>
+                    <Overview subs={subs} comp={comp}/>
                 </div>
                 <div style={{filter: `
-                drop-shadow( 0px -10px 10px rgb(250, 250, 250, 1)) 
-                drop-shadow( 0px -10px 10px rgb(250, 250, 250, 1))
-                drop-shadow( 0px -10px 10px rgb(250, 250, 250, 1))`}}>
+                drop-shadow( 0px -20px 5px rgb(250, 250, 250, 1))`}}>
                     <NavPanel/>
                 </div>
             </div>

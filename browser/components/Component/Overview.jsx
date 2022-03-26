@@ -5,21 +5,14 @@ import { useEffect } from 'react';
 import Link from 'next/link';
 import { useRef } from 'react';
 
-export default function Overview({comp, subs, scrollPercentage}){
-
-    // useEffect(() => {
-    //     scroll.scrollTo(500, {
-    //         smooth: true,
-    //         containerId: 'overviewId'
-    //     })
-    // }, [scrollPercentage])
+export default function Overview({comp, subs}){
 
     return(
         <div className={styles.parent}>
             <Link href={`#main`}>
                 <a>
                     <div style={{display:'flex'}}>
-                        {subs.length>0?
+                        {subs && subs.length>0?
                             <div style={{display: 'flex', flexDirection: 'column',width: '8px', paddingLeft: '3px'}}>
                                 <div style={{flexGrow: '1'}}/>
                                 <Start type={comp.type}/>
