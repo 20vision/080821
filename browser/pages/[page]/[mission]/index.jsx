@@ -1,43 +1,8 @@
-import PageLayout from '../../../layouts/page'
+import PagePanel from "../../../components/DefaultLayout/PagePanel"
 import axios from 'axios'
-import {useInfiniteQuery} from 'react-query'
-import {usePageSelectedStore} from '../../../store/pageSelected'
-import { useRouter } from 'next/router'
-import { useEffect } from 'react'
 
 export default function index({page, missions}) {
-  const setPageSelection = usePageSelectedStore(state => state.setPageSelection)
-
-  useEffect(() => {
-    if(page){
-      setPageSelection(page)
-    }
-  }, [page])
-
-  const router = useRouter()
-
-  const components = useInfiniteQuery(
-    `components/${page.unique_pagename}`,
-    async () => {
-        const res = await axios.get(`http://localhost:4000/get/components/${page.unique_pagename}/${router.query.mission}`)
-        return res.data
-    },
-    {
-        refetchOnWindowFocus: false,
-        refetchOnmount: false,
-        refetchOnReconnect: false,
-        retry: false,
-        staleTime: 1000 * 60 * 60 * 24,
-        onError: (error) => {
-          console.error(error)
-        },
-    }
-  )
-
-  return (
-    <PageLayout page={page} missions={missions}>
-    </PageLayout>
-  )
+  return <PagePanel page={page} missions={missions}/>
 }
 
 
@@ -51,9 +16,9 @@ export async function getServerSideProps(context) {
       }
     }
   }catch(error){
+    console.log(error)
     return {
       notFound: true
     }
   }
 }
-
