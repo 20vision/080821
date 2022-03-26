@@ -22,7 +22,7 @@ export default function Overview({comp, subs}){
                             null
                         }
                         <div className={`${styles.componentParent}`}>
-                            <ContentRow data={comp} subcomponents={subs.length}/>
+                            <ContentRow data={comp} subcomponents={subs && subs.length}/>
                         </div>
                     </div>
                 </a>
@@ -92,7 +92,7 @@ const Split = ({type, width}) => {
     let color = typeToColor(type)
     return (
         <svg width="24" height="24" fill="none" strokeLinecap="round" strokeLinejoin="round" version="1.1" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path d="m0.98061 0.97828c0.019391 19.022 11.029 17.019 11.029 17.019" fill="none" stroke={color?color:"#444"} stroke-linecap="round" stroke-linejoin="miter" stroke-width={width?width:'3'}/>
+            <path d="m0.98061 0.97828c0.019391 19.022 11.029 17.019 11.029 17.019" fill="none" stroke={color?color:"#444"} strokeLinecap="round" strokeLinejoin="miter" strokeWidth={width?width:'3'}/>
         </svg>
     )
 }

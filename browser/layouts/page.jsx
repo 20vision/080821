@@ -7,11 +7,11 @@ import NavPanel from "../components/NavPanel/Index"
 import { useRouter } from "next/router";
 import Overview from "../components/Component/Overview";
 
-export default function PageLayout( {children, page, comp, missions} ) {
+export default function PageLayout( {children, page, comp, subs, missions} ) {
     return (
         <>  
             <div className={styles.container} style={{color: 'var(--white)'}}>
-                <Panel children={children} comp={comp} page={page} missions={missions} outsideClickIgnoreClass={'ignore_click_outside_page'}/>
+                <Panel children={children} comp={comp} subs={subs} page={page} missions={missions} outsideClickIgnoreClass={'ignore_click_outside_page'}/>
             </div>
         </>
     )
@@ -21,7 +21,7 @@ const clickOutsideConfig = {
     handleClickOutside: () => Panel.handleClickOutside
 }
 
-var Panel = onClickOutside(({children, page, missions, comp}) => {
+var Panel = onClickOutside(({children, page, missions, comp, subs}) => {
     const router = useRouter()
 
     Panel.handleClickOutside = () => {

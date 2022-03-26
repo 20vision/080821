@@ -28,6 +28,19 @@ export default function index({page, missions}) {
   }, [])
 
   useEffect(async() => {
+    if(components[highlightIndex] && (components[highlightIndex].subs == null)){
+      axios.get(`http://localhost:4000/get/component/${components[highlightIndex].uid}/subs`)
+      .then(response => {
+        setComponents([
+          ...components.slice(0, highlightIndex),
+          {...components[highlightIndex],subs: response.data},
+          ...components.slice(highlightIndex+1)
+        ])
+      })
+      .catch(err => {
+        console.error(err)
+      })
+    }
     await controls.start(() => {
       return({
         opacity: 1,
@@ -35,7 +48,7 @@ export default function index({page, missions}) {
       })
     })
     setIsInWheelTransition(false)
-  }, [highlightIndex])
+  }, [highlightIndex, components])
 
   const getComponents = async() => {
     if(!componentsQueryLimitReached){
@@ -50,7 +63,7 @@ export default function index({page, missions}) {
   }
 
   return (
-    <PageLayout page={page} missions={missions}>
+    <PageLayout page={page} missions={missions} comp={components[highlightIndex]?components[highlightIndex]:null} subs={components[highlightIndex]?components[highlightIndex].subs:null}>
       <div style={{position: 'relative', height: 'calc(90vh - 70px)', maxHeight: '935px', marginTop: 35}}>
         {components[highlightIndex]!=null?
           <motion.img 

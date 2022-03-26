@@ -492,6 +492,34 @@ router.get("/component/:uid/dependents/:offset", async (req, res) => {
     );
 })
 
+router.get("/component/:uid/subs", async (req, res) => {
+    pool.getConnection(async function(err, conn) {
+        if (err){
+            res.status(500).send('An error occurred')
+            console.log(err)
+        }else{
+            conn.query(
+                `SELECT cc.child_component_index, c.uid, c.header, c.body, c.type, m.title as mission_title, c.created, count(cc1.component_connection_id) as subcomponents, p.unique_pagename from ComponentConnection cc 
+                join Component c on c.component_id = cc.child_component_id
+                join Mission m on m.mission_id = c.mission_id join Page p on m.page_id = p.page_id
+                join Component c1 on c1.component_id = cc.component_id and c1.uid = ?
+                left join ComponentConnection cc1 on cc1.component_id = c.component_id
+                group by cc.component_connection_id
+                order by cc.child_component_index
+                `,
+                [req.params.uid], async function(err, subs) {
+                    if (err){
+                        console.log(err)
+                        res.status(400).send('An error occurred')
+                    }else{
+                        res.json(subs)
+                    }
+                }
+            );
+        }
+    })
+})
+
 router.get("/component/:uid", async (req, res) => {
     //console.log('okk')
     pool.getConnection(async function(err, conn) {
