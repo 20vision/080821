@@ -44,7 +44,9 @@ export default function index({page, missions}) {
     await controls.start(() => {
       return({
         opacity: 1,
-        transition: { duration: 0.35}
+        y: 0,
+        scale: 1,
+        transition: { duration: 0.15}
       })
     })
     setIsInWheelTransition(false)
@@ -83,6 +85,8 @@ export default function index({page, missions}) {
                   await controls.start(() => {
                     return({
                         opacity: 0,
+                        y: 15,
+                        scale: 0.95,
                         transition: { duration: 0.1}
                     })
                   })
@@ -92,6 +96,8 @@ export default function index({page, missions}) {
                   await controls.start(() => {
                     return({
                         opacity: 0,
+                        y: 15,
+                        scale: 0.95, 
                         transition: { duration: 0.1}
                     })
                   })
