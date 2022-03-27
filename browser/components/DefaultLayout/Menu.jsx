@@ -35,10 +35,11 @@ export default function Index() {
 
     const variants = {
         opened: {
-            height: 'calc(100% - 70px)'
+            height: 'calc(100% - 70px)' //100% - padding/radius of panel if page/comp opened
         },
         closed: {
-            height: (typeof window !== 'undefined')?(((35 * 100) / window.screen.height)+'%'):null
+            height: '26px'
+            // height: (typeof window !== 'undefined')?(((35 * 100) / window.screen.height)+'%'):null
         }
     }
     return (
@@ -143,47 +144,39 @@ export function Menu({opened, setMenu, pathname}) {
 
             <div className={`${!profile.username? 'no_click': null} ${styles.selectionContainer}`}>
                 <a onClick={() => {setMenu('/portfolio')}}>
-                    <a>
-                        <div className={`${styles.selectionChild} ${(pathname == '/portfolio')?styles.highlight:null}`}>
-                            <div className={styles.icon}>
-                                <Portfolio color={(pathname == '/portfolio')?"#3a3a3a":"#FAFAFA"}/>
-                            </div>
-                            <h2>My Portfolio</h2>
+                    <div className={`${styles.selectionChild} ${(pathname == '/portfolio')?styles.highlight:null}`}>
+                        <div className={styles.icon}>
+                            <Portfolio color={(pathname == '/portfolio')?"#3a3a3a":"#FAFAFA"}/>
                         </div>
-                    </a>
+                        <h2>My Portfolio</h2>
+                    </div>
                 </a>
 
                 <a onClick={() => {setMenu('/')}}>
-                    <a>
-                        <div className={`${styles.selectionChild} ${(pathname == '/')?styles.highlight:null}`}>
-                            <div className={styles.icon}>
-                                <Discover color={(pathname == '/')?"#3a3a3a":"#FAFAFA"}/>
-                            </div>
-                            <h2>Discover</h2>
+                    <div className={`${styles.selectionChild} ${(pathname == '/')?styles.highlight:null}`}>
+                        <div className={styles.icon}>
+                            <Discover color={(pathname == '/')?"#3a3a3a":"#FAFAFA"}/>
                         </div>
-                    </a>
+                        <h2>Discover</h2>
+                    </div>
                 </a>
 
                 <a onClick={() => {setMenu('/following')}}>
-                    <a>
-                        <div className={`${styles.selectionChild} ${(pathname == '/following')?styles.highlight:null}`}>
-                            <div className={styles.icon}>
-                                <Following color={(pathname == '/following')?"#3a3a3a":"#FAFAFA"}/>
-                            </div>
-                            <h2>Following</h2>
+                    <div className={`${styles.selectionChild} ${(pathname == '/following')?styles.highlight:null}`}>
+                        <div className={styles.icon}>
+                            <Following color={(pathname == '/following')?"#3a3a3a":"#FAFAFA"}/>
                         </div>
-                    </a>
+                        <h2>Following</h2>
+                    </div>
                 </a>
 
                 <a onClick={() => {setMenu('/saved')}}>
-                    <a>
-                        <div className={`${styles.selectionChild} ${(pathname == '/saved')?styles.highlight:null}`}>
-                            <div className={styles.icon}>
-                                <Saved color={(pathname == '/saved')?"#3a3a3a":"#FAFAFA"}/>
-                            </div>
-                            <h2>Saved</h2>
+                    <div className={`${styles.selectionChild} ${(pathname == '/saved')?styles.highlight:null}`}>
+                        <div className={styles.icon}>
+                            <Saved color={(pathname == '/saved')?"#3a3a3a":"#FAFAFA"}/>
                         </div>
-                    </a>
+                        <h2>Saved</h2>
+                    </div>
                 </a>
             </div>
 

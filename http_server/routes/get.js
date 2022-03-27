@@ -181,6 +181,9 @@ router.get("/page/components/:offset", check.AuthOptional, async (req, res) => {
                     c.type,
                     m.title as mission_title,
                     p.unique_pagename,
+                    p.pagename,
+                    p.vision,
+                    p.page_icon,
                     c.created,
                     count(cc1.component_connection_id) as subcomponents
                     from Component c

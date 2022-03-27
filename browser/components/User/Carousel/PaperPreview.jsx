@@ -118,7 +118,7 @@ export default function PaperPreview({setSelectedComponent}){
                         <div className={styles.compFooter}>
                           <div>
                             <span style={{color: component.type == 'p'?'var(--blue)':component.type == 's'?'var(--yellow)':'var(--green)'}}>{component.type == 'p'?'Product':component.type == 's'?'Service':'Result'}</span>&nbsp;
-                            <span>· {router.query.page?component.mission_title.replace(/_/g, ' '):'/'+component.unique_pagename}</span>
+                            <span>· {component.mission_title.replace(/_/g, ' ')}</span>
                           </div>
                           <span>
                             {DateTime.fromISO(component.created).toLocaleString(DateTime.DATE_MED)}

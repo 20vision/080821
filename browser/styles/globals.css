@@ -137,7 +137,7 @@ textarea:focus, input:focus{
 }
 
 .user_shadow_large{
-  filter: drop-shadow( 0px 10px 20px rgb(0, 0, 0, 0.2));
+  filter: drop-shadow( 0px 10px 10px rgb(0, 0, 0, 0.2));
 }
 .shadow_small_transition{
   transition: filter 0.3s;
