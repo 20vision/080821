@@ -12,6 +12,7 @@ export default function Carousel({children, index, highlightIndex}){
                 bottom: index==highlightIndex?'5%':index>highlightIndex?'0%':'15%', 
                 right: index==highlightIndex?'0%':'10%', 
                 left: index==highlightIndex?'0%':'10%',
+                fontSize: index==highlightIndex?'100%':'80%',
                 opacity: index==highlightIndex?1:0.1,
                 transition: { duration: 0.35}
             })
@@ -28,6 +29,7 @@ export default function Carousel({children, index, highlightIndex}){
             bottom: index==highlightIndex?'5%':index>highlightIndex?'0%':'15%', 
             right: index==highlightIndex?'0%':'10%', 
             left: index==highlightIndex?'0%':'10%',
+            fontSize: index==highlightIndex?'100%':'80%',
             opacity: index==highlightIndex?1:0.1,
         }}>
             {children}

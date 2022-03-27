@@ -101,7 +101,7 @@ export default function PagePanel({page, missions}) {
                     return({
                         opacity: 0,
                         y: 15,
-                        scale: 0.95, 
+                        scale: 0.95,
                         transition: { duration: 0.1}
                     })
                   })
