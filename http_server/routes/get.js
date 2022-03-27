@@ -94,6 +94,7 @@ router.get("/page/:page_name/components/:offset/:mission_title", check.AuthOptio
                     c.uid,
                     c.header,
                     c.body,
+                    p.unique_pagename,
                     c.type,
                     m.title as mission_title,
                     c.created,
@@ -135,6 +136,7 @@ router.get("/page/:page_name/components/:offset", check.AuthOptional, async (req
                     c.uid,
                     c.header,
                     c.body,
+                    p.unique_pagename,
                     c.type,
                     m.title as mission_title,
                     c.created,
@@ -146,6 +148,48 @@ router.get("/page/:page_name/components/:offset", check.AuthOptional, async (req
                     order by subcomponents desc, c.created desc
                     limit ?,3`,
                     [req.params.page_name, parseInt(req.params.offset)],
+                    function(err, components) {
+                        if (err){
+                            res.status(500).send('An error occurred')
+                            console.log(err)
+                        }else{
+                            res.json(components)
+                        }
+                    }
+                );
+            }catch(err){
+                console.log(err)
+                res.status(err.status).send(err.message)
+            }
+        }
+        pool.releaseConnection(conn);
+    })
+})
+
+router.get("/page/components/:offset", check.AuthOptional, async (req, res) => {
+    pool.getConnection(async function(err, conn) {
+        if (err){
+            res.status(500).send('An error occurred')
+            console.log(err)
+        }else{
+            try{
+                conn.query(
+                    `SELECT
+                    c.uid,
+                    c.header,
+                    c.body,
+                    c.type,
+                    m.title as mission_title,
+                    p.unique_pagename,
+                    c.created,
+                    count(cc1.component_connection_id) as subcomponents
+                    from Component c
+                    join Mission m on m.mission_id = c.mission_id join Page p on m.page_id = p.page_id
+                    left join ComponentConnection cc1 on cc1.component_id = c.component_id
+                    group by c.component_id 
+                    order by subcomponents desc, c.created desc
+                    limit ?,3`,
+                    [parseInt(req.params.offset)],
                     function(err, components) {
                         if (err){
                             res.status(500).send('An error occurred')

@@ -45,7 +45,7 @@ var Panel = onClickOutside(({children, page, missions, comp, subs}) => {
             </div>
 
             <div className={styles.overviewParent}>
-                <div className={`hideScrollBar ${styles.overviewChild}`} id='overviewId' style={{scrollBehavior: 'inherit!important'}}>
+                <div className={`hideScrollBar ${styles.overviewChild}`} id='overviewId'>
                     {comp?<Overview subs={subs} comp={comp}/>:null}
                 </div>
                 <div style={{filter: `

@@ -5,7 +5,7 @@ import useUserProfile from '../../hooks/User/useUserProfile'
 import ProfilePicture from '../User/ProfilePicture/ProfilePicture'
 
 import {useInfiniteQuery} from 'react-query'
-import styles from '../../styles/defaultLayout/menu.module.css'
+import styles from '../../styles/pageLayout/menu.module.css'
 import { motion } from "framer-motion"
 import { useRouter } from 'next/router'
 import Link from 'next/link'
@@ -35,7 +35,7 @@ export default function Index() {
 
     const variants = {
         opened: {
-            height: '100%'
+            height: 'calc(100% - 70px)'
         },
         closed: {
             height: (typeof window !== 'undefined')?(((35 * 100) / window.screen.height)+'%'):null

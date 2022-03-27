@@ -8,7 +8,7 @@ import { useRef } from 'react';
 export default function Overview({comp, subs}){
 
     return(
-        <div className={styles.parent}>
+        <div>
             <Link href={`#main`}>
                 <a>
                     <div style={{display:'flex'}}>
