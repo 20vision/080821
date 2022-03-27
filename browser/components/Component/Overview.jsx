@@ -66,10 +66,10 @@ const ContentRow = ({data, subcomponents, pagination}) => {
         <div className={pageLayoutStyle.dependent}>
             <div className={pageLayoutStyle.info}>
                 <div className={pageLayoutStyle.header}>
-                    <h3>{pagination?<span style={{color: 'var(--grey)'}}>-{pagination}|&nbsp;</span>:null}<span>{data.header}</span></h3>
+                    <h3>{pagination?<span style={{opacity: '0.75'}}>-{pagination}|&nbsp;</span>:null}<span>{data.header}</span></h3>
                 </div>
                 <div className={pageLayoutStyle.footer}>
-                    <span style={{fontSize: 12,color: data.type == 'p'?'var(--blue)':data.type == 's'?'var(--yellow)':'var(--green)'}}>{data.type == 'p'?'Product':data.type == 's'?'Service':'Result'}</span>&nbsp;
+                    <span style={{fontSize: 12,fontWeight: 'bold',color: data.type == 'p'?'var(--blue)':data.type == 's'?'var(--yellow)':'var(--green)'}}>{data.type == 'p'?'Product':data.type == 's'?'Service':'Result'}</span>&nbsp;
                     <span style={{fontSize: 12}}>· {subcomponents!=null?subcomponents:data.subcomponents} Components</span>
                 </div>
             </div>
