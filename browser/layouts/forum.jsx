@@ -1,5 +1,5 @@
 import styles from "../styles/forumLayout/index.module.css"
-import menuStyle from "../styles/defaultLayout/menu.module.css"
+import menuStyle from "../styles/pageLayout/menu.module.css"
 import {Menu} from "../components/DefaultLayout/Menu"
 import onClickOutside from "react-onclickoutside";
 import { useRouter } from "next/router";

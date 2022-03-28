@@ -30,7 +30,7 @@ export default function PageLayout( {children, comp, subs} ) {
                                             }
                                         </a>
                                         <h1>{comp.pagename}</h1>
-                                        <span>/{comp.unique_pagename} · {comp.mission_title}</span>
+                                        <span>/{comp.unique_pagename} · {comp.mission_title.replace(/_/g, ' ')}</span>
                                         <div className={styles.vision}>{comp.vision}</div>
                                     </>
                                 :
