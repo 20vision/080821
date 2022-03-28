@@ -16,6 +16,7 @@ import PageIcon from '../assets/PageIcon/PageIcon'
 import Overview from "../components/Component/Overview";
 import {animateScroll} from 'react-scroll';
 import { useRef } from "react";
+import { motion } from 'framer-motion';
 
 export default function PageLayout( {children, page, comp, subs} ) {
     return (
@@ -53,10 +54,22 @@ var Panel = onClickOutside(({children, page, subs, comp}) => {
     const overviewRef = useRef()
 
     return(
-        <div className={styles.child} style={{backgroundColor: 'var(--white)'}}>
+        <motion.div 
+        initial={{
+            scale: 0.5
+        }}
+        animate={{scale: 1}}
+        exit={{scale: 0.5}}
+        className={styles.child} style={{backgroundColor: 'var(--white)'}}>
 
             <div className={styles.pageInfo} style={{backgroundColor: 'var(--white)'}}>
-                {page?<PageInfo page={page} type='paper'/>:<div style={{margin: 'auto auto'}}><Loading/></div>}
+                {page?
+                <Link href={`/${page.unique_pagename}`}>
+                    <a>
+                        <PageInfo page={page} type='paper'/>
+                    </a>
+                </Link>
+                :<div style={{margin: 'auto auto'}}><Loading/></div>}
 
                 <div style={{margin: '35px', flexGrow: '1', display: 'flex', flexDirection: 'column'}}>
                     <div style={{flexGrow: '1'}}>
@@ -136,6 +149,6 @@ var Panel = onClickOutside(({children, page, subs, comp}) => {
                 </div>
             </div>
 
-        </div>
+        </motion.div>
     )
 }, clickOutsideConfig)

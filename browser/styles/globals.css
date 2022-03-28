@@ -32,6 +32,7 @@ html, body, #__next{
   font-size:16px;
   color: var(--lighter_black);
   scroll-behavior: smooth;
+  overflow: hidden;
 }
 
 h1{

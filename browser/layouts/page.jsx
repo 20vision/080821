@@ -6,14 +6,17 @@ import onClickOutside from "react-onclickoutside";
 import NavPanel from "../components/NavPanel/Index"
 import { useRouter } from "next/router";
 import Overview from "../components/Component/Overview";
+import { motion } from 'framer-motion';
 
 export default function PageLayout( {children, page, comp, subs, missions} ) {
     return (
-        <>  
-            <div className={styles.container} style={{color: 'var(--white)'}}>
-                <Panel children={children} comp={comp} subs={subs} page={page} missions={missions} outsideClickIgnoreClass={'ignore_click_outside_page'}/>
-            </div>
-        </>
+        <motion.div 
+        initial={{scale: 0.5}}
+        animate={{scale: 1}}
+        exit={{scale: 0.5}}
+        className={styles.container} style={{color: 'var(--white)', overflow: 'hidden'}}>
+            <Panel children={children} comp={comp} subs={subs} page={page} missions={missions} outsideClickIgnoreClass={'ignore_click_outside_page'}/>
+        </motion.div>
     )
 }
 
