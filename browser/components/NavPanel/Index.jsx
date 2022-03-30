@@ -3,7 +3,6 @@ import styles from '../../styles/navPanel/index.module.css'
 import Plus from '../../assets/Plus'
 import DollarSign from '../../assets/DollarSign'
 import Check from '../../assets/Check'
-import MessageCircle from '../../assets/MessageCircle'
 import Info from '../../assets/Info'
 import Tool from '../../assets/Tool'
 import Share from '../../assets/Share'
@@ -14,6 +13,8 @@ import { useRouter } from 'next/router'
 import AddSub from '../../assets/AddSub'
 import Loading from '../../assets/Loading/Loading'
 import Link from 'next/link'
+import ZoomOut from '../../assets/ZoomOut'
+import ZoomIn from '../../assets/ZoomIn'
 
 import { useEffect, useState } from 'react'
 import { usePageSelectedStore } from '../../store/pageSelected'
@@ -68,10 +69,10 @@ function MissionNavWithRole({router}){
                 <div>Token</div>
             </a>
 
-            <Link href={`/forum/${router.query.page}/mission/${router.query.mission}`}>
+            <Link href={`/zoomout/${router.query.page}/mission/${router.query.mission}`}>
                 <a>
-                    <MessageCircle color="#FAFAFA"/>
-                    <div>Forum</div>
+                    <ZoomOut color="#FAFAFA"/>
+                    <div>Zoom Out</div>
                 </a>
             </Link>
 
@@ -97,10 +98,10 @@ function PageNavWithRole({router}){
                 <div>Token</div>
             </a>
 
-            <Link href={`/forum/${router.query.page}/page`}>
+            <Link href={`/zoomout/${router.query.page}/page`}>
                 <a>
-                    <MessageCircle color="#FAFAFA"/>
-                    <div>Forum</div>
+                    <ZoomOut color="#FAFAFA"/>
+                    <div>Zoom Out</div>
                 </a>
             </Link>
 
@@ -126,10 +127,10 @@ function PageNav({router}){
                 <div>Trade</div>
             </a>
 
-            <Link href={`/forum/${router.query.page}/page`}>
+            <Link href={`/zoomout/${router.query.page}/page`}>
                 <a>
-                    <MessageCircle color="#FAFAFA"/>
-                    <div>Forum</div>
+                    <ZoomOut color="#FAFAFA"/>
+                    <div>Zoom Out</div>
                 </a>
             </Link>
 

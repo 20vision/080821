@@ -269,274 +269,286 @@ router.get("/page/:page_name/trade_info", check.AuthOptional, async (req, res) =
 
 // Discover
 router.get("/forum", async (req, res) => {
-    console.log('route not ready yet')
-    res.status(404).send('not ready yet')
+    pool.getConnection(async function(err, conn) {
+        if (err){
+            res.status(500).send('An error occurred')
+            console.log(err)
+        }else{
+            try{
+
+            }catch(err){
+                console.log(err)
+                res.status(err.status).send(err.message)
+            }
+        }
+        pool.releaseConnection(conn);
+    })
 })
 
 // Only Page related
-router.get("/forum/:unique_pagename/page", check.AuthOptional, async (req, res) => {
-    pool.getConnection(async function(err, conn) {
-        if (err){
-            res.status(500).send('An error occurred')
-            console.log(err)
-        }else{
-            try{
-                const pageByName = await gets.getPageByName(conn, req.params.unique_pagename)
-                let tree_count = 0
-                let content = []
-                conn.query(`SELECT count(forumpost_parent_id) as tree_count from ForumPost_Parent where parent_id = ? and parent_type = 'p'`,
-                    [pageByName.page_id],
-                    async function(err, query_tree_count) {
-                        if (err){
-                            console.log(err)
-                            res.status(400).send('An error occurred')
-                        }else{
-                            tree_count = query_tree_count[0].tree_count
-                            if(!tree_count) return res.json({content: [[pageByName]],tree_count: 0})
-                            try{
-                                let new__main_content = await gets.getForumPost({conn: conn, user_id: req.user_id, page_id: pageByName.page_id, 
-                                    depth: 0, 
-                                    left: null,
-                                    right: null})
-                                if(new__main_content.length == 0){
-                                    return res.json({content: [[pageByName]],tree_count: tree_count?tree_count:0})
-                                }else{
-                                    content.push(new__main_content)
-                                    for(var i = 0; i <= 5; i++){
-                                        const new_content_array = await gets.getForumPost({
-                                            conn: conn,
-                                            user_id: req.user_id,
-                                            forumpost_parent_id: new__main_content[0].forumpost_parent_id,
-                                            depth: i+1,
-                                            left: content[content.length-1][0].left,
-                                            right: content[content.length-1][0].right
-                                        })
-                                        if(new_content_array.length == 0) break
-                                        new_content_array.forEach(function (new_content){
-                                            if(new_content.right + 1 == content[i][0].right){
-                                                new_content.next = false
-                                            }else{
-                                                new_content.next = true
-                                            }
-                                        })
-                                        content.push(new_content_array)
-                                    }
-                                }
-                            }catch{
-                                console.log(err)
-                                res.status(err.status).send(err.message)
-                            }
-                            res.json({
-                                content: [
-                                    [pageByName],
-                                    ...content
-                                ],
-                                tree_count: tree_count?tree_count:0
-                            })
-                        }
-                    }
-                );
-            }catch(err){
-                console.log(err)
-                res.status(err.status).send(err.message)
-            }
-        }
-        pool.releaseConnection(conn);
-    })
-})
+// router.get("/forum/:unique_pagename/page", check.AuthOptional, async (req, res) => {
+//     pool.getConnection(async function(err, conn) {
+//         if (err){
+//             res.status(500).send('An error occurred')
+//             console.log(err)
+//         }else{
+//             try{
+//                 const pageByName = await gets.getPageByName(conn, req.params.unique_pagename)
+//                 let tree_count = 0
+//                 let content = []
+//                 conn.query(`SELECT count(forumpost_parent_id) as tree_count from ForumPost_Parent where parent_id = ? and parent_type = 'p'`,
+//                     [pageByName.page_id],
+//                     async function(err, query_tree_count) {
+//                         if (err){
+//                             console.log(err)
+//                             res.status(400).send('An error occurred')
+//                         }else{
+//                             tree_count = query_tree_count[0].tree_count
+//                             if(!tree_count) return res.json({content: [[pageByName]],tree_count: 0})
+//                             try{
+//                                 let new__main_content = await gets.getForumPost({conn: conn, user_id: req.user_id, page_id: pageByName.page_id, 
+//                                     depth: 0, 
+//                                     left: null,
+//                                     right: null})
+//                                 if(new__main_content.length == 0){
+//                                     return res.json({content: [[pageByName]],tree_count: tree_count?tree_count:0})
+//                                 }else{
+//                                     content.push(new__main_content)
+//                                     for(var i = 0; i <= 5; i++){
+//                                         const new_content_array = await gets.getForumPost({
+//                                             conn: conn,
+//                                             user_id: req.user_id,
+//                                             forumpost_parent_id: new__main_content[0].forumpost_parent_id,
+//                                             depth: i+1,
+//                                             left: content[content.length-1][0].left,
+//                                             right: content[content.length-1][0].right
+//                                         })
+//                                         if(new_content_array.length == 0) break
+//                                         new_content_array.forEach(function (new_content){
+//                                             if(new_content.right + 1 == content[i][0].right){
+//                                                 new_content.next = false
+//                                             }else{
+//                                                 new_content.next = true
+//                                             }
+//                                         })
+//                                         content.push(new_content_array)
+//                                     }
+//                                 }
+//                             }catch{
+//                                 console.log(err)
+//                                 res.status(err.status).send(err.message)
+//                             }
+//                             res.json({
+//                                 content: [
+//                                     [pageByName],
+//                                     ...content
+//                                 ],
+//                                 tree_count: tree_count?tree_count:0
+//                             })
+//                         }
+//                     }
+//                 );
+//             }catch(err){
+//                 console.log(err)
+//                 res.status(err.status).send(err.message)
+//             }
+//         }
+//         pool.releaseConnection(conn);
+//     })
+// })
 
-// Responds back one depth reply, but multiple versions depending on offset (3)
-router.get("/forum/:unique_pagename/posts/:forumpost_parent_id", check.AuthOptional, async (req, res) => {
-    // queries -> depth, offset
-    if(((req.query.depth == null) || isNaN(req.query.depth)) ||
-    (req.query.offset && isNaN(req.query.offset)) ||
-    ((parseInt(req.query.depth) == 0 && req.query.parent_id == null) || req.query.parent_id && isNaN(req.query.parent_id))
-    ){
-        return res.status(422).send('Invalid query parameter')
-    }
+// // Responds back one depth reply, but multiple versions depending on offset (3)
+// router.get("/forum/:unique_pagename/posts/:forumpost_parent_id", check.AuthOptional, async (req, res) => {
+//     // queries -> depth, offset
+//     if(((req.query.depth == null) || isNaN(req.query.depth)) ||
+//     (req.query.offset && isNaN(req.query.offset)) ||
+//     ((parseInt(req.query.depth) == 0 && req.query.parent_id == null) || req.query.parent_id && isNaN(req.query.parent_id))
+//     ){
+//         return res.status(422).send('Invalid query parameter')
+//     }
 
-    console.log(req.query)
+//     console.log(req.query)
 
-    pool.getConnection(async function(err, conn) {
-        try{
-            new_content = await gets.getForumPost({
-                conn: conn,
-                user_id: req.user_id,
-                forumpost_parent_id: parseInt(req.params.forumpost_parent_id),
-                depth: parseInt(req.query.depth),
-                offset: req.query.offset?parseInt(req.query.offset):null,
-                parent_id: req.query.parent_id?parseInt(req.query.parent_id):null
-            })
-            res.json(new_content)
-        }catch(err){
-            console.log(err)
-            res.status(err.status).send(err.message)
-        }
-        pool.releaseConnection(conn);
-    })
-})
+//     pool.getConnection(async function(err, conn) {
+//         try{
+//             new_content = await gets.getForumPost({
+//                 conn: conn,
+//                 user_id: req.user_id,
+//                 forumpost_parent_id: parseInt(req.params.forumpost_parent_id),
+//                 depth: parseInt(req.query.depth),
+//                 offset: req.query.offset?parseInt(req.query.offset):null,
+//                 parent_id: req.query.parent_id?parseInt(req.query.parent_id):null
+//             })
+//             res.json(new_content)
+//         }catch(err){
+//             console.log(err)
+//             res.status(err.status).send(err.message)
+//         }
+//         pool.releaseConnection(conn);
+//     })
+// })
 
 
-// Responds back multi depth replies (5) x (3)
-router.get("/forum/:unique_pagename/replies/:parent_post_id", check.AuthOptional, async (req, res) => {
-    pool.getConnection(async function(err, conn) {
-        let content = []
-        const post_parent_info = await gets.getForumPostParentInfo(conn, req.params.parent_post_id)
+// // Responds back multi depth replies (5) x (3)
+// router.get("/forum/:unique_pagename/replies/:parent_post_id", check.AuthOptional, async (req, res) => {
+//     pool.getConnection(async function(err, conn) {
+//         let content = []
+//         const post_parent_info = await gets.getForumPostParentInfo(conn, req.params.parent_post_id)
 
-        try{
-            for(var i = 0; i <= 5; i++){
-                const new_content = await gets.getForumPost({
-                    conn: conn,
-                    user_id: req.user_id,
-                    forumpost_parent_id: post_parent_info.forumpost_parent_id,
-                    depth: post_parent_info.depth+i+1,
-                    left: ((content.length > 0)?content[content.length-1][0].left:post_parent_info.left),
-                    right: ((content.length > 0)?content[content.length-1][0].right:post_parent_info.right)
-                })
-                if(new_content.length == 0){
-                    break
-                }else{
-                    content.push(new_content)
-                }
-            }
-        }catch(err){
-            console.log(err)
-            res.status(err.status).send(err.message)
-        }
+//         try{
+//             for(var i = 0; i <= 5; i++){
+//                 const new_content = await gets.getForumPost({
+//                     conn: conn,
+//                     user_id: req.user_id,
+//                     forumpost_parent_id: post_parent_info.forumpost_parent_id,
+//                     depth: post_parent_info.depth+i+1,
+//                     left: ((content.length > 0)?content[content.length-1][0].left:post_parent_info.left),
+//                     right: ((content.length > 0)?content[content.length-1][0].right:post_parent_info.right)
+//                 })
+//                 if(new_content.length == 0){
+//                     break
+//                 }else{
+//                     content.push(new_content)
+//                 }
+//             }
+//         }catch(err){
+//             console.log(err)
+//             res.status(err.status).send(err.message)
+//         }
 
-        res.json(content)
-        pool.releaseConnection(conn);
-    })
-})
+//         res.json(content)
+//         pool.releaseConnection(conn);
+//     })
+// })
 
-// Only Mission related
-router.get("/forum/:unique_pagename/mission/:mission_title", async (req, res) => {
-    res.status(404).send('Not finished yet')
-    console.log('Route not finished')
-    // pool.getConnection(async function(err, conn) {
-    //     if (err){
-    //         res.status(500).send('An error occurred')
-    //         console.log(err)
-    //     }else{
-    //         try{
-    //             const pageByName = await gets.getPageByName(conn, req.params.unique_pagename)
-    //             const mission_s = await gets.getMission_s(conn, req.params.unique_pagename, req.params.mission_title)
-    //             conn.query(
-    //                 `SELECT fp.forumpost_id, fp.message, u.username, u.profilePicture FROM ForumPost fp 
-    //                 join User u on u.user_id = fp.user_id 
-    //                 join ForumPost_Parent fpp on fp.forumpost_parent_id = fpp.forumpost_parent_id and fpp.parent_type = 'm' and fpp.parent_id = ?;`,
-    //                 [mission_s.mission_id],
-    //                 function(err, content) {
-    //                     if (err){
-    //                         res.status(500).send('An error occurred')
-    //                         console.log(err)
-    //                     }else{
-    //                         res.json({
-    //                             page: pageByName,
-    //                             mission: mission_s.mission,
-    //                             content: content
-    //                         })
-    //                     }
-    //                 }
-    //             );
-    //         }catch(err){
-    //             console.log(err)
-    //             res.status(err.status).send(err.message)
-    //         }
-    //     }
-    //     pool.releaseConnection(conn);
-    // })
-})
-// Only Topic related
-router.get("/forum/:unique_pagename/topics", async (req, res) => {
-    pool.getConnection(async function(err, conn) {
-        if (err){
-            res.status(500).send('An error occurred')
-            console.log(err)
-        }else{
-            try{
-                const pageByName = await gets.getPageByName(conn, req.params.unique_pagename)
-                let topics = await gets.getTopic_s({conn: conn, unique_pagename: req.params.unique_pagename});
-                if(topics.length == 0) return(res.json({content: [[pageByName]],tree_count: tree_count?tree_count:0}))
-                let tree_count = 0
-                let content = []
-                conn.query(`SELECT count(fpp.forumpost_parent_id) as tree_count from ForumPost_Parent fpp 
-                join Topic t on fpp.parent_type = 't' and fpp.parent_id = t.topic_id and t.page_id = ?`,
-                    [pageByName.page_id],
-                    async function(err, query_tree_count) {
-                        if (err){
-                            console.log(err)
-                            res.status(400).send('An error occurred')
-                        }else{
-                            tree_count = query_tree_count[0].tree_count
-                            console.log(tree_count)
-                            if(!tree_count){
-                                return res.json({
-                                    content: [[pageByName],topics],
-                                    tree_count: 0
-                                })
-                            }
-                            try{
-                                let new__main_content = await gets.getForumPost({
-                                    conn: conn, 
-                                    user_id: req.user_id, 
-                                    topic_id: topics[0].topic_id, 
-                                    depth: 0})
-                                if(new__main_content.length == 0){
-                                    return res.json({
-                                        content: [[pageByName]],
-                                        tree_count: tree_count?tree_count:0,
-                                    });
-                                }else{
-                                    content.push(new__main_content)
-                                    for(var i = 0; i <= 5; i++){
-                                        const new_content_array = await gets.getForumPost({
-                                            conn: conn,
-                                            user_id: req.user_id,
-                                            forumpost_parent_id: new__main_content[0].forumpost_parent_id,
-                                            depth: i+1,
-                                            left: content[content.length-1][0].left,
-                                            right: content[content.length-1][0].right
-                                        })
-                                        if(new_content_array.length == 0) break
-                                        new_content_array.forEach(function (new_content){
-                                            if(new_content.right + 1 == content[i][0].right){
-                                                new_content.next = false
-                                            }else{
-                                                new_content.next = true
-                                            }
-                                        })
-                                        content.push(new_content_array)
-                                    }
-                                }
-                            }catch{
-                                console.log(err)
-                                res.status(err.status).send(err.message)
-                            }
-                            res.json({
-                                content: [
-                                    [pageByName],
-                                    topics,
-                                    ...content
-                                ],
-                                tree_count: tree_count?tree_count:0,
-                            })
-                        }
-                    }
-                );
-            }catch(err){
-                console.log(err)
-                res.status(err.status).send(err.message)
-            }
-        }
-        pool.releaseConnection(conn);
-    })
-})
+// // Only Mission related
+// router.get("/forum/:unique_pagename/mission/:mission_title", async (req, res) => {
+//     res.status(404).send('Not finished yet')
+//     console.log('Route not finished')
+//     // pool.getConnection(async function(err, conn) {
+//     //     if (err){
+//     //         res.status(500).send('An error occurred')
+//     //         console.log(err)
+//     //     }else{
+//     //         try{
+//     //             const pageByName = await gets.getPageByName(conn, req.params.unique_pagename)
+//     //             const mission_s = await gets.getMission_s(conn, req.params.unique_pagename, req.params.mission_title)
+//     //             conn.query(
+//     //                 `SELECT fp.forumpost_id, fp.message, u.username, u.profilePicture FROM ForumPost fp 
+//     //                 join User u on u.user_id = fp.user_id 
+//     //                 join ForumPost_Parent fpp on fp.forumpost_parent_id = fpp.forumpost_parent_id and fpp.parent_type = 'm' and fpp.parent_id = ?;`,
+//     //                 [mission_s.mission_id],
+//     //                 function(err, content) {
+//     //                     if (err){
+//     //                         res.status(500).send('An error occurred')
+//     //                         console.log(err)
+//     //                     }else{
+//     //                         res.json({
+//     //                             page: pageByName,
+//     //                             mission: mission_s.mission,
+//     //                             content: content
+//     //                         })
+//     //                     }
+//     //                 }
+//     //             );
+//     //         }catch(err){
+//     //             console.log(err)
+//     //             res.status(err.status).send(err.message)
+//     //         }
+//     //     }
+//     //     pool.releaseConnection(conn);
+//     // })
+// })
+// // Only Topic related
+// router.get("/forum/:unique_pagename/topics", async (req, res) => {
+//     pool.getConnection(async function(err, conn) {
+//         if (err){
+//             res.status(500).send('An error occurred')
+//             console.log(err)
+//         }else{
+//             try{
+//                 const pageByName = await gets.getPageByName(conn, req.params.unique_pagename)
+//                 let topics = await gets.getTopic_s({conn: conn, unique_pagename: req.params.unique_pagename});
+//                 if(topics.length == 0) return(res.json({content: [[pageByName]],tree_count: tree_count?tree_count:0}))
+//                 let tree_count = 0
+//                 let content = []
+//                 conn.query(`SELECT count(fpp.forumpost_parent_id) as tree_count from ForumPost_Parent fpp 
+//                 join Topic t on fpp.parent_type = 't' and fpp.parent_id = t.topic_id and t.page_id = ?`,
+//                     [pageByName.page_id],
+//                     async function(err, query_tree_count) {
+//                         if (err){
+//                             console.log(err)
+//                             res.status(400).send('An error occurred')
+//                         }else{
+//                             tree_count = query_tree_count[0].tree_count
+//                             console.log(tree_count)
+//                             if(!tree_count){
+//                                 return res.json({
+//                                     content: [[pageByName],topics],
+//                                     tree_count: 0
+//                                 })
+//                             }
+//                             try{
+//                                 let new__main_content = await gets.getForumPost({
+//                                     conn: conn, 
+//                                     user_id: req.user_id, 
+//                                     topic_id: topics[0].topic_id, 
+//                                     depth: 0})
+//                                 if(new__main_content.length == 0){
+//                                     return res.json({
+//                                         content: [[pageByName]],
+//                                         tree_count: tree_count?tree_count:0,
+//                                     });
+//                                 }else{
+//                                     content.push(new__main_content)
+//                                     for(var i = 0; i <= 5; i++){
+//                                         const new_content_array = await gets.getForumPost({
+//                                             conn: conn,
+//                                             user_id: req.user_id,
+//                                             forumpost_parent_id: new__main_content[0].forumpost_parent_id,
+//                                             depth: i+1,
+//                                             left: content[content.length-1][0].left,
+//                                             right: content[content.length-1][0].right
+//                                         })
+//                                         if(new_content_array.length == 0) break
+//                                         new_content_array.forEach(function (new_content){
+//                                             if(new_content.right + 1 == content[i][0].right){
+//                                                 new_content.next = false
+//                                             }else{
+//                                                 new_content.next = true
+//                                             }
+//                                         })
+//                                         content.push(new_content_array)
+//                                     }
+//                                 }
+//                             }catch{
+//                                 console.log(err)
+//                                 res.status(err.status).send(err.message)
+//                             }
+//                             res.json({
+//                                 content: [
+//                                     [pageByName],
+//                                     topics,
+//                                     ...content
+//                                 ],
+//                                 tree_count: tree_count?tree_count:0,
+//                             })
+//                         }
+//                     }
+//                 );
+//             }catch(err){
+//                 console.log(err)
+//                 res.status(err.status).send(err.message)
+//             }
+//         }
+//         pool.releaseConnection(conn);
+//     })
+// })
 // Only component related
-router.get("/forum/:unique_pagename/components/:uid", async (req, res) => {
-    console.log('route not ready yet')
-    res.status(404).send('not ready yet')
-})
+// router.get("/forum/:unique_pagename/components/:uid", async (req, res) => {
+//     console.log('route not ready yet')
+//     res.status(404).send('not ready yet')
+// })
 
 router.get("/component/:uid/dependents/count", async (req, res) => {
     pool.query(
@@ -654,24 +666,6 @@ router.get("/component/:uid", async (req, res) => {
         pool.releaseConnection(conn);
     })
 })
-
-// router.get("/forum/post/:offset", async (req, res) => {
-//     console.log(req.params.forumpost_parent_OR_post_id)
-//     pool.getConnection(async function(err, conn) {
-//         if (err){
-//             res.status(500).send('An error occurred')
-//             console.log(err)
-//         }else{
-//             try{
-//                 const root = await getForumRootElements(conn,req)
-//                 const content = await getContent(conn, root.parentId)
-//             }catch(err){
-
-//             }
-//         }
-//         pool.releaseConnection(conn);
-//     })
-// })
 
 
 
