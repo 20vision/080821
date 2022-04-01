@@ -1,5 +1,6 @@
 import axios from "axios"
 import { useState } from "react"
+import ZoomoutLayout from '../../layouts/zoomout'
 
 export default function index({ssrContent, ssrTreeCount}) {
     const [data, setData] = useState([
@@ -50,9 +51,9 @@ export default function index({ssrContent, ssrTreeCount}) {
     */])
 
     return(
-        <div>
+        <ZoomoutLayout>
             <Bubble data={data[0]} setData={setData}/>
-        </div>
+        </ZoomoutLayout>
     )
 
 }

@@ -37,7 +37,7 @@ export default function Index() {
                         <>
                             {router.pathname.split('/')[4] == 'edit'?
                                 <ComponentEdit router={router}/>  
-                            :router.pathname.split('/')[1] == 'forum'?     
+                            :router.pathname.split('/')[1] == 'zoomout'?     
                                 <ForumNav router={router}/>
                             :router.query.mission?
                                 <MissionNavWithRole router={router}/>
@@ -136,7 +136,7 @@ function PageNav({router}){
 
             <a>
                 <Info color="#FAFAFA"/>
-                <div>Info ? or just display on left panel ?</div>
+                <div>Info</div>
             </a>
         </>
     )
