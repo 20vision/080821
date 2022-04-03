@@ -192,23 +192,23 @@ const getTopic_s = ({conn, unique_pagename}) => new Promise((resolve, reject) =>
 //         base_parameters.push(right)
 //     }
 
-//     const base_query = `
-//         SELECT
-//             fp2.depth
-//             ,fp2.left
-//             ,fp2.right
-//             ,fp2.forumpost_id
-//             ,fpp.parent_id
-//             ,fpp.parent_type
-//             ,fp2.forumpost_parent_id
-//             ,fp2.hex_color
-//             ,fp2.message
-//             ,fp2.created
-//             ,if(count(fpl2.forum_post_like_id)>0, true, false) as multipleLikes
-//             ,u.username
-//             ,u.profilePicture
-//             ${user_id != null?',if(count(fpl2.user_id = ?) > 0, true, false) as mylike':''}
-//         from ForumPost fp2
+    // const base_query = `
+    //     SELECT
+    //         fp2.depth
+    //         ,fp2.left
+    //         ,fp2.right
+    //         ,fp2.forumpost_id
+    //         ,fpp.parent_id
+    //         ,fpp.parent_type
+    //         ,fp2.forumpost_parent_id
+    //         ,fp2.hex_color
+    //         ,fp2.message
+    //         ,fp2.created
+    //         ,if(count(fpl2.forum_post_like_id)>0, true, false) as multipleLikes
+    //         ,u.username
+    //         ,u.profilePicture
+    //         ${user_id != null?',if(count(fpl2.user_id = ?) > 0, true, false) as mylike':''}
+    //     from ForumPost fp2
 //         join User u on u.user_id = fp2.user_id
 //         join (
 //             SELECT ((count(fpl3.forum_post_like_id) + 1) / POW((SUM(TIMESTAMPDIFF(HOUR, fp3.created, now()))/count(fp3.forumpost_id))+2, 1.5)) as value, fp.forumpost_id from ForumPost fp

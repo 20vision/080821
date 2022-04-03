@@ -60,34 +60,41 @@ export default function index({ssrContent, ssrTreeCount}) {
 
 
 const Bubble = ({data, setData}) => {
-    const [loading, setLoading] = useState(false)
+    const [loadingVertical, setLoadingVertical] = useState(false)
+    const [loadingHorizonal, setLoadingHorizontal] = useState(false)
+    const [highlightSubIndex, setHighlightSubIndex] = useState(0)
 
-    // if(
-    //     (data.target_fp_uid != data.fp_uid) ||
-    //     (data.previously_selected_index == null) || 
-    //     (!data.sub || (data.sub.length == 0))
-    // ){
-    //     //await axios.get(``)
-    //     console.log('fetch carousel')
-    // }
+    const minLeft = data.sub?Math.min(...data.sub.map(su => {
+        return su.left
+    })):null
 
+    const maxRight = data.sub?Math.max(...data.sub.map(su => {
+        return su.right
+    })):null
 
-    // if( /* Fetch Depth */
-    //     (data.target_fp_uid != data.fp_uid)/* Is not chosen sub */ 
-    //     && !data.sub[0] /* Not fetched yet */
-    // ){
-    //     console.log('fetch depth')
-    // }else if( /* Fetch Carousel */
-    //     !loading && 
-    //     (data.sub.length >= (data.sub_selected_index-2))
-    // ){
-    //     //await axios.get(``)
-    //     console.log('fetch carousel')
-    // }
+    // Vertical fetching
+    if(
+        (data.target_fp_uid != data.fp_uid) &&
+        data.sub &&
+        (data.sub[0] == null) &&
+        !loadingVertical
+    ){
+        setLoadingVertical(true)
+        console.log('fetching vertical')
+    }
 
-
-    // Fetch Carousel
-    
+    // Horizonal fetching
+    if( !loadingHorizonal &&
+        data.sub &&
+        (data.sub.length < (highlightSubIndex + 2)) &&
+        (   
+            (data.left+1 != data.right) ||
+            ((data.left+1 != minLeft) && (data.right - 1 != maxRight))
+        )
+    ){
+        setLoadingHorizontal(true)
+        console.log('fetching horizonal')
+    }    
 
     return(
         <div>

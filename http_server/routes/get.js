@@ -3,6 +3,8 @@ const input_validation = require('../middleware/input_validation');
 const check = require('../middleware/check')
 let pool = require('../config/db');
 let gets = require('../utils/gets');
+const res = require("express/lib/response");
+const req = require("express/lib/request");
 
 
 
@@ -276,6 +278,63 @@ router.get("/forum", async (req, res) => {
         }else{
             try{
 
+            }catch(err){
+                console.log(err)
+                res.status(err.status).send(err.message)
+            }
+        }
+        pool.releaseConnection(conn);
+    })
+})
+
+router.get("/forum/:target_uid/:offset", () => {
+    pool.getConnection(function(err, conn) {
+        if (err){
+            res.status(500).send('An error occurred')
+            console.log(err)
+        }else{
+            try{
+                conn.query(
+                    `SELECT left, right, depth, forumpost_parent_id from ForumPost where fp_uid = ?`,
+                    [req.params.target_uid], async function(err, target) {
+                        if (err){
+                            console.log(err)
+                            res.status(400).send('An error occurred')
+                        }else{
+                            if(target.length != 1) return res.status(404).send('Target Forum Post not found')
+                            conn.query(
+                                `
+                                SELECT
+                                    fp2.depth
+                                    ,fp2.left
+                                    ,fp2.right
+                                    ,fp2.forumpost_id
+                                    ,fpp.parent_id
+                                    ,fpp.parent_type
+                                    ,fp2.forumpost_parent_id
+                                    ,fp2.hex_color
+                                    ,fp2.message
+                                    ,fp2.created
+                                    ,u.username
+                                    ,u.profilePicture
+                                from ForumPost fp2
+                                join ForumPost_Parent fpp
+                                where fp2.left < ? and fp2.right > ? and fp2.forumpost_parent_id = ?
+                                order by fp2.depth desc
+                                limit ?,3 
+                                `,
+                                [target[0].left,target[0].right,target[0].forumpost_parent_id,req.params.offset?req.params.offset:0], async function(err, verticallyFetched) {
+                                    if (err){
+                                        console.log(err)
+                                        res.status(400).send('An error occurred')
+                                    }else{
+                                        res.json(verticallyFetched)
+                                    }
+                                }
+                            );
+                        }
+                    }
+                );
             }catch(err){
                 console.log(err)
                 res.status(err.status).send(err.message)
