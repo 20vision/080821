@@ -49,9 +49,10 @@ export default function PaperPreview({setSelectedComponent}){
             opacity: 1,
             y: 0,
             scale: 1,
-            transition: { duration: 0.15}
+            transition: { duration: 0.25}
         })
       })
+      await new Promise(r => setTimeout(r, 800));
       setIsInWheelTransition(false)
   }, [highlightIndex, components])
 
@@ -89,7 +90,7 @@ export default function PaperPreview({setSelectedComponent}){
                       opacity: 0,
                       y: 15,
                       scale: 0.95,
-                      transition: { duration: 0.1}
+                      transition: { duration: 0.25}
                   })
                 })
                 setHighlightIndex(highlightIndex-1)
@@ -100,7 +101,7 @@ export default function PaperPreview({setSelectedComponent}){
                       opacity: 0,
                       y: 15,
                       scale: 0.95,
-                      transition: { duration: 0.1}
+                      transition: { duration: 0.25}
                   })
                 })
                 setHighlightIndex(highlightIndex+1)
