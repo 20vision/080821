@@ -4,6 +4,7 @@ import ZoomoutLayout from '../../layouts/zoomout'
 import BubbleEdit from '../../components/Forum/BubbleEdit'
 import BubbleBasicLayout from "../../components/Forum/BubbleBasicLayout"
 import useUserProfile from "../../hooks/User/useUserProfile"
+import { toast } from "react-toastify"
 
 export default function index() {
     const [editHexColor, setEditHexColor] = useState()
@@ -14,38 +15,48 @@ export default function index() {
     })
 
     const [data, setData] = useState([
-        {
-            fp_uid: 0,
-            target_fp_uid: 114,
-            message: 'hello',
-            sub_selected_index: 0, 
-            sub: [
-                {
-                    target_fp_uid: 17,
-                    fp_uid: 15,
-                    message: 'okk', 
-                    sub_selected_index: 0,
-                    sub: [
-                        {
-                            target_fp_uid: 5165,
-                            fp_uid: 143,
-                            message: 'lol'
-                        }
-                    ]
-                }
-            ]
-        }
+        // {
+        //     fp_uid: 0,
+        //     target_fp_uid: 114,
+        //     message: 'hello',
+        //     sub_selected_index: 0, 
+        //     sub: [
+        //         {
+        //             target_fp_uid: 17,
+        //             fp_uid: 15,
+        //             message: 'okk', 
+        //             sub_selected_index: 0,
+        //             sub: [
+        //                 {
+        //                     target_fp_uid: 5165,
+        //                     fp_uid: 143,
+        //                     message: 'lol'
+        //                 }
+        //             ]
+        //         }
+        //     ]
+        // }
     ])
 
     return(
         <ZoomoutLayout>
-            {profile.username?
+            <Bubble data={data[0]?data[0]:null} setData={setData}/>
+
+
+            {profile.username && (data.length == 0)?
                 <BubbleBasicLayout profile={profile} color={editHexColor}>
-                    <BubbleEdit setEditHexColor={setEditHexColor}/>
+                    <BubbleEdit sendPost={async forum_post => {
+                        try{
+                            await axios.post(`http://localhost:4000/post/forum/312`,
+                                {forum_post: forum_post, hex_color: editHexColor},
+                                {withCredentials: true})
+                        }catch(err){
+                            console.error(err)
+                            toast.error(err)
+                        }
+                    }} setEditHexColor={setEditHexColor} clickOutsideBubbleEdit={() => null}/>
                 </BubbleBasicLayout>
             :null}
-
-            <Bubble data={data[0]} setData={setData}/>
         </ZoomoutLayout>
     )
 
@@ -65,16 +76,17 @@ const Bubble = ({data, setData}) => {
     const [loadingHorizonal, setLoadingHorizontal] = useState(false)
     const [highlightSubIndex, setHighlightSubIndex] = useState(0)
 
-    const minLeft = data.sub?Math.min(...data.sub.map(su => {
+    const minLeft = data && data.sub?Math.min(...data.sub.map(su => {
         return su.left
     })):null
 
-    const maxRight = data.sub?Math.max(...data.sub.map(su => {
+    const maxRight = data && data.sub?Math.max(...data.sub.map(su => {
         return su.right
     })):null
 
     // Vertical fetching
     if(
+        data &&
         (data.target_fp_uid != data.fp_uid) &&
         data.sub &&
         (data.sub[0] == null) &&
@@ -86,6 +98,7 @@ const Bubble = ({data, setData}) => {
 
     // Horizonal fetching
     if( !loadingHorizonal &&
+        data &&
         data.sub &&
         (data.sub.length < (highlightSubIndex + 2)) &&
         (   
@@ -99,8 +112,8 @@ const Bubble = ({data, setData}) => {
 
     return(
         <div>
-            {data.message}
-            {data.target_fp_uid != data.fp_uid?
+            {data?data.message:null}
+            {data && data.target_fp_uid != data.fp_uid?
                 <div>
                     {(data.sub&&data.sub)?<Bubble 
                     data={data.sub[0]} 

@@ -1,4 +1,6 @@
-/*const forumpost_parent = (conn, id, type) => new Promise((resolve, reject) => {
+const { random_string } = require("./random");
+
+const forumpost_parent = (conn, id, type) => new Promise((resolve, reject) => {
     conn.query(
         `INSERT into ForumPost_Parent values(?,?,?);`,
         [null,id,type],
@@ -16,10 +18,22 @@
     );
 })
 
-const forumpost = (conn, forumpost_parent_id, left, right, depth, message, user_id, hex_color, user_token_impact_per_mission) => new Promise((resolve, reject) => {
+const forumpost = ({conn, forumpost_parent_id, left, right, depth, message, user_id, hex_color}) => new Promise(async (resolve, reject) => {
+    let random = await random_string(8)
+
     conn.query(
         `INSERT into ForumPost values(?,?,?,?,?,?,?,?,?,now());`,
-        [null,forumpost_parent_id, left, right, depth, message, user_id, hex_color, user_token_impact_per_mission],
+        [
+            null, 
+            ((new Date()).getTime().toString()+random),
+            forumpost_parent_id, 
+            left, 
+            right, 
+            depth, 
+            message, 
+            user_id, 
+            hex_color
+        ],
         function(err, insert) {
             if (err){
                 console.log(err)
@@ -38,4 +52,4 @@ const forumpost = (conn, forumpost_parent_id, left, right, depth, message, user_
 module.exports = {
     forumpost_parent,
     forumpost
-}*/
+}

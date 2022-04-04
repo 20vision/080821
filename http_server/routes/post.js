@@ -242,33 +242,111 @@ router.post("/fundPageToken", check.AuthRequired, check.fundTransaction, async (
     }
 });
 
-router.post("/forum/:fp_uid", check.AuthRequired, async (req, res) => {
-    if(req.params.fp_uid){
-        pool.getConnection(function(err, conn) {
-            if (err){
-                res.status(500).send('An error occurred')
-                console.log(err)
-            }else{
-                conn.query(
-                    'SELECT left, right from ForumPost where fp_uid = ?;',
-                    [req.params.fp_uid],
-                    function(err, results) {
-                        if (err){
-                            res.status(500).send('An error occurred')
-                            console.log(err)
-                        }else{
-                            if(results.length != 1) return
-                            console.log('okk 1')
-                        }
+router.post("/forum/reply/:fp_uid", check.AuthRequired, input_validation.missionBody_topicBody_forumPost, input_validation.hex_color, async (req, res) => {
+    pool.getConnection(function(err, conn) {
+        if (err){
+            res.status(500).send('An error occurred')
+            console.log(err)
+        }else{
+            conn.query(
+                'SELECT fp.left, fp.right, fp.forumpost_parent_id from ForumPost fp where fp.fp_uid = ?;',
+                [req.params.fp_uid],
+                function(err, results) {
+                    if (err){
+                        res.status(500).send('An error occurred')
+                        console.log(err)
+                    }else{
+                        if(results.length != 1) return
                     }
-                );
-                console.log('okk 2')
-            }
-            pool.releaseConnection(conn);
-        })
-    }else{
+                }
+            );
+            console.log('okk 2')
+        }
+        pool.releaseConnection(conn);
+    })
+});
 
-    }
+router.post("/forum/post/:unique_pagename/:mission_title/:component_uid", check.AuthRequired, input_validation.missionBody_topicBody_forumPost, input_validation.hex_color, (req, res) => {
+    if(!req.params.component_uid && !req.params.mission_title && !req.params.unique_username) return res.status(404).send('Not found')
+    
+    pool.getConnection(async function(err, conn) {
+        if (err){
+            res.status(500).send('An error occurred')
+            console.log(err)
+        }else{
+            if(req.params.component_uid){
+                conn.query('SELECT component_id from Component where uid = ?',
+                    [req.params.component_uid],
+                    async function(err, results){
+                        if(results.length != 1) return res.status(404).send('Component not found')
+                        const forumpost_parent_id = await inserts.forumpost_parent(conn, results[0].component_id, 'c')
+                        const forumpost_id = await inserts.forumpost(
+                                {
+                                    conn: conn,
+                                    forumpost_parent_id: forumpost_parent_id, 
+                                    left: 0, 
+                                    right: 1, 
+                                    depth: 0, 
+                                    message: req.body.forum_post, 
+                                    user_id: req.user_id, 
+                                    hex_color: req.body.hex_color
+                                }
+                            )
+                        res.json({
+                            forumpost_id: forumpost_id
+                        })
+                    }
+                )
+            }else if(req.params.mission_title){
+                conn.query('SELECT m.mission_id from Mission m join Page p on m.page_id = m.page_id where m.title = ? and p.unique_pagename = ?',
+                    [req.params.mission_title, req.params.unique_pagename],
+                    async function(err, results){
+                        if(results.length != 1) return res.status(404).send('Mission not found')
+                        const forumpost_parent_id = await inserts.forumpost_parent(conn, results[0].mission_id, 'm')
+                        const forumpost_id = await inserts.forumpost(
+                                {
+                                    conn: conn,
+                                    forumpost_parent_id: forumpost_parent_id, 
+                                    left: 0, 
+                                    right: 1, 
+                                    depth: 0, 
+                                    message: req.body.forum_post, 
+                                    user_id: req.user_id, 
+                                    hex_color: req.body.hex_color
+                                }
+                            )
+                        res.json({
+                            forumpost_id: forumpost_id
+                        })
+                    }
+                )
+            }else if(req.params.unique_username){
+                conn.query('SELECT p.page_id from Page p where p.unique_pagename = ?',
+                    [req.params.unique_pagename],
+                    async function(err, results){
+                        if(results.length != 1) return res.status(404).send('Mission not found')
+                        const forumpost_parent_id = await inserts.forumpost_parent(conn, results[0].page_id, 'p')
+                        const forumpost_id = await inserts.forumpost(
+                                {
+                                    conn: conn,
+                                    forumpost_parent_id: forumpost_parent_id, 
+                                    left: 0, 
+                                    right: 1, 
+                                    depth: 0, 
+                                    message: req.body.forum_post, 
+                                    user_id: req.user_id, 
+                                    hex_color: req.body.hex_color
+                                }
+                            )
+                        res.json({
+                            forumpost_id: forumpost_id
+                        })
+                    }
+                )
+            }
+        }
+        pool.releaseConnection(conn);
+    })
 });
 
 /*
