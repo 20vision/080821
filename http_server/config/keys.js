@@ -1,5 +1,5 @@
 const MYSQL = {
-    MYSQL_URI: 'localhost',
+    MYSQL_URI: '127.0.0.1',
     MYSQL_USER: 'root',
     MYSQL_PASS: 'password',
     MYSQL_DATABASE: '20Vision'

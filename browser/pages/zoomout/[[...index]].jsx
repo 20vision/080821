@@ -1,8 +1,18 @@
 import axios from "axios"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import ZoomoutLayout from '../../layouts/zoomout'
+import BubbleEdit from '../../components/Forum/BubbleEdit'
+import BubbleBasicLayout from "../../components/Forum/BubbleBasicLayout"
+import useUserProfile from "../../hooks/User/useUserProfile"
 
-export default function index({ssrContent, ssrTreeCount}) {
+export default function index() {
+    const [editHexColor, setEditHexColor] = useState()
+    const [profile, isLoading, setUser] = useUserProfile()
+
+    useEffect(() => {
+        fetchTarget('discover')
+    })
+
     const [data, setData] = useState([
         {
             fp_uid: 0,
@@ -25,39 +35,30 @@ export default function index({ssrContent, ssrTreeCount}) {
                 }
             ]
         }
-        /*
-        const [bubble, setBubble] = useState([
-        fp2.depth
-        fp2.fp_uid
-        ,fp2.left
-        ,fp2.right
-        ,fp2.forumpost_id
-        ,fpp.parent_id
-        ,fpp.parent_type
-        ,fp2.forumpost_parent_id
-        ,fp2.hex_color
-        ,fp2.message
-        ,fp2.created
-        ,u.username
-        ,u.profilePicture
-        ${user_id != null?',if(count(fpl2.user_id = ?) > 0, true, false) as mylike':''}// ,
-        if(count(fpl2.forum_post_like_id)>0, true, false) as multipleLikes
-
-        target_fp_uid: 
-        previously_selected_index:
-        sub: [
-
-        ]
-    */])
+    ])
 
     return(
         <ZoomoutLayout>
+            {profile.username?
+                <BubbleBasicLayout profile={profile} color={editHexColor}>
+                    <BubbleEdit setEditHexColor={setEditHexColor}/>
+                </BubbleBasicLayout>
+            :null}
+
             <Bubble data={data[0]} setData={setData}/>
         </ZoomoutLayout>
     )
 
 }
 
+const fetchTarget = async (type) => {
+    try{
+        return (await axios.get(`http://localhost:4000/get/forum/${type}`)).data
+    }catch(err){
+        console.error(err)
+        return null
+    }
+}
 
 const Bubble = ({data, setData}) => {
     const [loadingVertical, setLoadingVertical] = useState(false)

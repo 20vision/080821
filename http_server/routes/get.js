@@ -270,18 +270,30 @@ router.get("/page/:page_name/trade_info", check.AuthOptional, async (req, res) =
 // FORUM
 
 // Discover
-router.get("/forum", async (req, res) => {
+router.get("/forum/discover/:offset", async (req, res) => {
     pool.getConnection(async function(err, conn) {
         if (err){
             res.status(500).send('An error occurred')
             console.log(err)
         }else{
-            try{
-
-            }catch(err){
-                console.log(err)
-                res.status(err.status).send(err.message)
-            }
+            conn.query(
+                `
+                SELECT fp.fp_uid, count(fpl.forumpost_like_id) as tree_likes from ForumPost fp
+                join ForumPost fp2 on fp2.left <= fp.left and fp2.right >= fp.right
+                join ForumPost_Like fpl on fpl.forumpost_id = fp2.forumpost_id
+                where fp.left + 1 = fp.right
+                group by fp.forumpost_parent_id
+                order by tree_likes desc
+                `,
+                [], async function(err, verticallyFetched) {
+                    if (err){
+                        console.log(err)
+                        res.status(400).send('An error occurred')
+                    }else{
+                        res.json(verticallyFetched)
+                    }
+                }
+            );
         }
         pool.releaseConnection(conn);
     })

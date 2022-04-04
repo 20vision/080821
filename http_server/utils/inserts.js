@@ -1,4 +1,4 @@
-const forumpost_parent = (conn, id, type) => new Promise((resolve, reject) => {
+/*const forumpost_parent = (conn, id, type) => new Promise((resolve, reject) => {
     conn.query(
         `INSERT into ForumPost_Parent values(?,?,?);`,
         [null,id,type],
@@ -38,4 +38,4 @@ const forumpost = (conn, forumpost_parent_id, left, right, depth, message, user_
 module.exports = {
     forumpost_parent,
     forumpost
-}
+}*/

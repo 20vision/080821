@@ -220,20 +220,6 @@ router.post("/topic", check.AuthRequired, check.role, input_validation.checkUniq
     }
 });
 
-/*router.post("/component_image/process", check.AuthRequired, check.componentAuth, cloudStorage.component_image, async (req, res) => {
-    if(req.user_id){
-        let resObject = {url: req.imageUrl}
-
-        if(req.component_uid){
-            resObject.component_uid = req.component_uid
-        }
-
-        res.json(resObject)
-    }else{
-        res.status(401).send('Not authenticated')
-    }
-});*/
-
 router.post("/fundPageToken", check.AuthRequired, check.fundTransaction, async (req, res) => {
     const connection = new Connection('https://api.devnet.solana.com', 'confirmed')
     try{
@@ -256,6 +242,36 @@ router.post("/fundPageToken", check.AuthRequired, check.fundTransaction, async (
     }
 });
 
+router.post("/forum/:fp_uid", check.AuthRequired, async (req, res) => {
+    if(req.params.fp_uid){
+        pool.getConnection(function(err, conn) {
+            if (err){
+                res.status(500).send('An error occurred')
+                console.log(err)
+            }else{
+                conn.query(
+                    'SELECT left, right from ForumPost where fp_uid = ?;',
+                    [req.params.fp_uid],
+                    function(err, results) {
+                        if (err){
+                            res.status(500).send('An error occurred')
+                            console.log(err)
+                        }else{
+                            if(results.length != 1) return
+                            console.log('okk 1')
+                        }
+                    }
+                );
+                console.log('okk 2')
+            }
+            pool.releaseConnection(conn);
+        })
+    }else{
+
+    }
+});
+
+/*
 router.post("/forum/:unique_pagename/topic/:topic_id", check.AuthRequired, input_validation.missionBody_topicBody_forumPost, input_validation.hex_color, async (req, res) => {
     pool.getConnection(async function(err, conn) {
         if (err){
@@ -348,6 +364,6 @@ router.post("/forum/:unique_pagename/post/:parent_forumpost_id", check.AuthRequi
         pool.releaseConnection(conn);
     })
 })
-
+*/
 
 module.exports = router;
