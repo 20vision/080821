@@ -12,13 +12,12 @@ export default function index() {
     const [profile, isLoading, setUser] = useUserProfile()
     const router = useRouter()
 
-    useEffect(() => {
+    useEffect(async() => {
         const forumQuery = router.asPath.split('?')
         if(forumQuery.length == 2) {
-            console.log(fetchTarget(`discover/0?${forumQuery[1]}`))
-            return
+            fetchTarget(`discover/0?${forumQuery[1]}`)
         }else{
-            console.log(fetchTarget(`discover/0`))
+            fetchTarget(`discover/0`)
         }
     },[])
 
@@ -50,7 +49,7 @@ export default function index() {
 
 const fetchTarget = async (type) => {
     try{
-        return (await axios.get(`http://localhost:4000/get/forum/${type}`)).data
+        console.log((await axios.get(`http://localhost:4000/get/forum/${type}`)).data)
     }catch(err){
         console.error(err)
         return null

@@ -35,10 +35,10 @@ export default function Index() {
                 <div className={styles.child} style={{color: 'var(--white)'}}>
                     {profile.username?
                         <>
-                            {router.pathname.split('/')[4] == 'edit'?
-                                <ComponentEdit router={router}/>  
-                            :router.pathname.split('/')[1] == 'zoomout'?     
+                            {router.pathname.split('/')[1] == 'zoomout'?     
                                 <ForumNav router={router}/>
+                            :router.query.component?
+                                <ComponentNav router={router}/>
                             :router.query.mission?
                                 <MissionNavWithRole router={router}/>
                             :
@@ -70,6 +70,35 @@ function MissionNavWithRole({router}){
             </a>
 
             <Link href={`/zoomout?page=${router.query.page}&mission=${router.query.mission}`}>
+                <a>
+                    <ZoomOut color="#FAFAFA"/>
+                    <div>Zoom Out</div>
+                </a>
+            </Link>
+
+            <a>
+                <Tool color="#FAFAFA"/>
+                <div>Manage</div>
+            </a>
+        </>
+    )
+}
+
+function ComponentNav({router}){
+    const setModal = useModalStore(state => state.setModal)
+    return(
+        <>  
+            <a onClick={() => setModal(7)}>
+                <Plus color="#FAFAFA"/>
+                <div>Component</div>
+            </a>
+
+            <a onClick={() => setModal(5)}>
+                <DollarSign color="#FAFAFA"/>
+                <div>Token</div>
+            </a>
+
+            <Link href={`/zoomout?page=${router.query.page}&mission=${router.query.mission}&component=${router.query.component}`}>
                 <a>
                     <ZoomOut color="#FAFAFA"/>
                     <div>Zoom Out</div>
@@ -137,46 +166,6 @@ function PageNav({router}){
             <a>
                 <Info color="#FAFAFA"/>
                 <div>Info</div>
-            </a>
-        </>
-    )
-}
-
-
-function ComponentEdit({router}){
-    const [saved, setSaved] = useState()
-
-    return(
-        <>
-            <a>
-                <Plus color="#FAFAFA"/>
-                <div>Comment</div>
-            </a>
-
-            <a>
-                <AddSub color="#FAFAFA"/>
-                <div>Add Sub-</div>
-            </a>
-
-            {saved == true?
-
-                <a>
-                    <Check color="#FAFAFA"/>
-                    <div>Saved</div>
-                </a>
-
-            :
-
-                <a>
-                    <Loading color="#FAFAFA"/>
-                    <div>Saving...</div>
-                </a>
-
-            }
-
-            <a>
-                <Share color="#FAFAFA"/>
-                <div>Publish</div>
             </a>
         </>
     )

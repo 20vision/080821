@@ -268,140 +268,85 @@ router.get("/page/:page_name/trade_info", check.AuthOptional, async (req, res) =
 
 
 // Forum
-// router.get("/forum/filter/:offset", async (req, res) => {
-//     let response;
-//     let poolp = pool.promise()
-
-//     try{
-//         if(req.query.component_uid){
-            
-//         }
-
-//         response.target_uids = await poolp.query(`
-//             SELECT fp.fp_uid, count(fpl.forumpost_like_id) as tree_likes from ForumPost fp
-//             join ForumPost fp2 on fp2.left <= fp.left and fp2.right >= fp.right
-//             join ForumPost_Like fpl on fpl.forumpost_id = fp2.forumpost_id
-//             join ForumPost_Parent fpp on fpp.forumpost_parent_id = fp.forumpost_parent_id
-//             where fp.left + 1 = fp.right and fpp.parent_id = ? and fpp.parent_type = ?
-//             group by fp.forumpost_parent_id
-//             order by tree_likes desc
-//             limit ?,3`)
-        
-//     }catch(err){
-//         return res.status(400).send('An error occurred')
-//     }
-
-//     // pool.getConnection(async function(err, conn) {
-//     //     if (err){
-//     //         res.status(500).send('An error occurred')
-//     //         console.log(err)
-//     //     }else{
-//     //         if(req.query.component_uid){
-//     //             conn.query(
-                    // `SELECT fp.fp_uid, count(fpl.forumpost_like_id) as tree_likes from ForumPost fp
-                    // join ForumPost fp2 on fp2.left <= fp.left and fp2.right >= fp.right
-                    // join ForumPost_Like fpl on fpl.forumpost_id = fp2.forumpost_id
-                    // join ForumPost_Parent fpp on fpp.forumpost_parent_id = fp.forumpost_parent_id
-                    // where fp.left + 1 = fp.right and fpp.parent_id = ? and fpp.parent_type = ?
-                    // group by fp.forumpost_parent_id
-                    // order by tree_likes desc
-                    // limit ?,3`,
-//     //                 [req.query.component_uid,req.params.offset?req.params.offset:0], function(err, target_uids) {
-//     //                     if (err){
-//     //                         console.log(err)
-//     //                         res.status(400).send('An error occurred')
-//     //                     }else{
-//     //                         conn.query(
-//     //                             `SELECT `,
-//     //                             [req.query.component_uid,req.params.offset?req.params.offset:0], function(err, target_uids) {
-//     //                                 if (err){
-//     //                                     console.log(err)
-//     //                                     res.status(400).send('An error occurred')
-//     //                                 }else{
-//     //                                     res.json(target_uids)
-//     //                                 }
-//     //                             }
-//     //                         );
-//     //                     }
-//     //                 }
-//     //             );
-//     //         }else if(req.query.mission_title && req.query.unique_pagename){
-
-//     //         }else if(req.query.unique_pagename){
-
-//     //         }
-//     //     }
-//     //     pool.releaseConnection(conn);
-//     // })
-// })
 
 // Discover
 router.get("/forum/discover/:offset", async (req, res) => {
     let poolp = pool.promise()
-    let response
+    let response = []
     let targetConditions = {}
 
     try{
-        if(req.query.component_uid){
-            let queryComponent = await poolp.query('SELECT c.component_id, c.uid, c.header, c.body, c.type, c.created from Component c where c.uid = ?',[req.query.component_uid])
-            if(!queryComponent || queryComponent.length != 1) throw new Error('component not found')
-            targetConditions.component_id = queryComponent[0].component_id
-            delete queryComponent[0].component_id
-            response.component = queryComponent[0]
-        }
-
-        if(req.query.mission && req.query.page){
-            let queryMission = await poolp.query(`SELECT 
-            m.mission_id
-            m.title, 
-            m.description from Mission m 
-            join Page p on m.page_id = m.page_id and m.title = ? and p.unique_pagename = ?`,
-            [req.query.mission, req.query.page])
-            if(!queryMission || queryMission.length != 1) throw new Error('mission not found')
-            targetConditions.mission_id = queryMission[0].mission_id
-            delete queryMission[0].mission_id
-            response.mission = queryMission[0]
-        }
-
+        
         if(req.query.page){
-            let queryPage = await poolp.query(`SELECT
+            let queryPage = (await poolp.query(`SELECT
             p.page_id,
             p.page_icon,
             p.pagename,
-            p.unqiue_pagename,
-            p.vision,
-            from Page p where p.unique_pagename = ?`,[req.query.page])
-            if(!queryPage || queryPage.length != 1) throw new Error('page not found')
+            p.unique_pagename,
+            p.vision
+            from Page p where p.unique_pagename = ?`,[req.query.page]))[0]
+            if(!queryPage || queryPage.length != 1) return res.status(404).send('Page not found')
             targetConditions.mission_id = queryPage[0].page_id
             delete queryPage[0].page_id
-            response.page = queryPage[0]
+            response = [queryPage[0]]
         }
 
-        response.target_uids = await poolp.query(`SELECT fp.fp_uid, count(fpl.forumpost_like_id) as tree_likes from ForumPost fp
+        if(req.query.mission && req.query.page){
+            let queryMission = (await poolp.query(`SELECT 
+            m.mission_id,
+            m.title, 
+            m.description 
+            from Mission m 
+            join Page p on p.page_id = m.page_id and m.title = ? and p.unique_pagename = ?`,
+            [req.query.mission, req.query.page]))[0]
+            if(!queryMission || queryMission.length != 1) return res.status(404).send('Mission not found')
+            targetConditions.mission_id = queryMission[0].mission_id
+            delete queryMission[0].mission_id
+            if(response.length == 1){
+                response[0].sub = [queryMission[0]]
+            }else{
+                response = [queryMission[0]]
+            }
+        }
+
+        if(req.query.component){
+            let queryComponent = (await poolp.query('SELECT c.component_id, c.uid, c.header, c.body, c.type, c.created from Component c where c.uid = ?',[req.query.component]))[0]
+            if(!queryComponent || queryComponent.length != 1) return res.status(404).send('Component not found')
+            targetConditions.component_id = queryComponent[0].component_id
+            delete queryComponent[0].component_id
+            if(response.length == 1){
+                response[0].sub = [queryComponent[0]]
+            }else if(response.length == 2){
+                response[0].sub[0].sub = [queryMission[0]]
+            }else{
+                response = [queryComponent[0]]
+            }
+        }
+        
+        response.target_uids = (await poolp.query(`SELECT fp.fp_uid, count(fpl.forum_post_like_id) as tree_likes from ForumPost fp
         join ForumPost fp2 on fp2.left <= fp.left and fp2.right >= fp.right
         join ForumPost_Like fpl on fpl.forumpost_id = fp2.forumpost_id
         join ForumPost_Parent fpp on fpp.forumpost_parent_id = fp.forumpost_parent_id
         where fp.left + 1 = fp.right 
-        ${targetConditions.component_id?'and fpp.parent_id = ? and fpp.parent_type = c':
-        targetConditions.mission_id?`and fpp.parent_id = ? and fpp.parent_type = m`:
-        targetConditions.page_id?`and fpp.parent_id = ? and fpp.parent_type = p`:
+        ${targetConditions.component_id?`and fpp.parent_id = ? and fpp.parent_type = 'c'`:
+        targetConditions.mission_id?`and fpp.parent_id = ? and fpp.parent_type = 'm'`:
+        targetConditions.page_id?`and fpp.parent_id = ? and fpp.parent_type = 'p'`:
         null}
-        group by fp.forumpost_parent_id
+        group by fp.forumpost_parent_id, fp.forumpost_id
         order by tree_likes desc
-        limit ?,3`,...[
+        limit ?,3`,[...[
             targetConditions.component_id?
                 targetConditions.component_id:
             targetConditions.mission_id?
                 targetConditions.mission_id:
             targetConditions.page_id?
                 targetConditions.page_id
-            :null],
-            ...[req.params.offset?req.params.offset:0])
+            :null],...[req.params.offset?parseInt(req.params.offset):0]]))[0]
         
         res.json(response)
     }catch(err){
         console.log(err)
-        return res.status(400).send('An error occurred')
+        res.status(400).send('An error occurred')
     }
 })
 

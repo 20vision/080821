@@ -91,7 +91,7 @@ var Panel = onClickOutside(({children, page, subs, comp}) => {
                             >
                                 {dependents.map((dependent, index) => {
                                     return(
-                                        <Link href={`/${dependent.unique_pagename}/${dependent.mission_title}/${dependent.uid}`}>
+                                        <Link key={index} href={`/${dependent.unique_pagename}/${dependent.mission_title}/${dependent.uid}`}>
                                             <a>
                                                 <div className={styles.dependent}>
                                                     <div className={styles.info}>
