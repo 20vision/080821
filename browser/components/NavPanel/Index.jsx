@@ -69,7 +69,7 @@ function MissionNavWithRole({router}){
                 <div>Token</div>
             </a>
 
-            <Link href={`/zoomout/${router.query.page}/mission/${router.query.mission}`}>
+            <Link href={`/zoomout?page=${router.query.page}&mission=${router.query.mission}`}>
                 <a>
                     <ZoomOut color="#FAFAFA"/>
                     <div>Zoom Out</div>
@@ -98,7 +98,7 @@ function PageNavWithRole({router}){
                 <div>Token</div>
             </a>
 
-            <Link href={`/zoomout/${router.query.page}/page`}>
+            <Link href={`/zoomout?page=${router.query.page}`}>
                 <a>
                     <ZoomOut color="#FAFAFA"/>
                     <div>Zoom Out</div>
@@ -127,7 +127,7 @@ function PageNav({router}){
                 <div>Trade</div>
             </a>
 
-            <Link href={`/zoomout/${router.query.page}/page`}>
+            <Link href={`/zoomout?page=${router.query.page}`}>
                 <a>
                     <ZoomOut color="#FAFAFA"/>
                     <div>Zoom Out</div>

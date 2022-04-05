@@ -5,38 +5,24 @@ import BubbleEdit from '../../components/Forum/BubbleEdit'
 import BubbleBasicLayout from "../../components/Forum/BubbleBasicLayout"
 import useUserProfile from "../../hooks/User/useUserProfile"
 import { toast } from "react-toastify"
+import { useRouter } from "next/router"
 
 export default function index() {
     const [editHexColor, setEditHexColor] = useState()
     const [profile, isLoading, setUser] = useUserProfile()
+    const router = useRouter()
 
     useEffect(() => {
-        fetchTarget('discover')
-    })
+        const forumQuery = router.asPath.split('?')
+        if(forumQuery.length == 2) {
+            console.log(fetchTarget(`discover/0?${forumQuery[1]}`))
+            return
+        }else{
+            console.log(fetchTarget(`discover/0`))
+        }
+    },[])
 
-    const [data, setData] = useState([
-        // {
-        //     fp_uid: 0,
-        //     target_fp_uid: 114,
-        //     message: 'hello',
-        //     sub_selected_index: 0, 
-        //     sub: [
-        //         {
-        //             target_fp_uid: 17,
-        //             fp_uid: 15,
-        //             message: 'okk', 
-        //             sub_selected_index: 0,
-        //             sub: [
-        //                 {
-        //                     target_fp_uid: 5165,
-        //                     fp_uid: 143,
-        //                     message: 'lol'
-        //                 }
-        //             ]
-        //         }
-        //     ]
-        // }
-    ])
+    const [data, setData] = useState([])
 
     return(
         <ZoomoutLayout>

@@ -52,7 +52,7 @@ export default function PaperPreview({setSelectedComponent}){
             transition: { duration: 0.25}
         })
       })
-      await new Promise(r => setTimeout(r, 800));
+      await new Promise(r => setTimeout(r, 1200));
       setIsInWheelTransition(false)
   }, [highlightIndex, components])
 
@@ -85,23 +85,25 @@ export default function PaperPreview({setSelectedComponent}){
               if(isInWheelTransition) return
               if((scrollInfo.deltaY < 0) && (0 != highlightIndex)){
                 setIsInWheelTransition(true)
+                console.log('scroll')
                 await controls.start(() => {
                   return({
                       opacity: 0,
                       y: 15,
                       scale: 0.95,
-                      transition: { duration: 0.25}
+                      transition: { duration: 0.01}
                   })
                 })
                 setHighlightIndex(highlightIndex-1)
               }else if((scrollInfo.deltaY > 0) && (components.length > (highlightIndex+1))){
                 setIsInWheelTransition(true)
+                console.log('scroll')
                 await controls.start(() => {
                   return({
                       opacity: 0,
                       y: 15,
                       scale: 0.95,
-                      transition: { duration: 0.25}
+                      transition: { duration: 0.01}
                   })
                 })
                 setHighlightIndex(highlightIndex+1)

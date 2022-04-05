@@ -146,7 +146,7 @@ router.post("/component", check.AuthRequired, async (req, res) => {
                     for(var i=0; i<ratio.length;i++){
                         await sharp(Buffer.from(image[1], 'base64'))
                         .resize({ fit: sharp.fit.contain, width: ratio[i], height: ratio[i] })
-                        .webp({ quality: 70 })
+                        .webp({ quality: 80 })
                         .toBuffer()
                         .then(async response => {
                             data.buffer = response,
@@ -320,7 +320,7 @@ router.post("/forum/post/:unique_pagename/:mission_title/:component_uid", check.
                         })
                     }
                 )
-            }else if(req.params.unique_username){
+            }else if(req.params.unique_pagename){
                 conn.query('SELECT p.page_id from Page p where p.unique_pagename = ?',
                     [req.params.unique_pagename],
                     async function(err, results){
