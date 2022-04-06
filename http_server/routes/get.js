@@ -302,11 +302,7 @@ router.get("/forum/discover/:offset", async (req, res) => {
             if(!queryMission || queryMission.length != 1) return res.status(404).send('Mission not found')
             targetConditions.mission_id = queryMission[0].mission_id
             delete queryMission[0].mission_id
-            if(response.length == 1){
-                response[0].sub = [queryMission[0]]
-            }else{
-                response = [queryMission[0]]
-            }
+            response[0].sub = [queryMission[0]]
         }
 
         if(req.query.component){
@@ -314,10 +310,10 @@ router.get("/forum/discover/:offset", async (req, res) => {
             if(!queryComponent || queryComponent.length != 1) return res.status(404).send('Component not found')
             targetConditions.component_id = queryComponent[0].component_id
             delete queryComponent[0].component_id
-            if(response.length == 1){
+            if(req.query.page && req.query.mission){
+                response[0].sub[0].sub = [queryComponent[0]]
+            }else if(req.query.page){
                 response[0].sub = [queryComponent[0]]
-            }else if(response.length == 2){
-                response[0].sub[0].sub = [queryMission[0]]
             }else{
                 response = [queryComponent[0]]
             }

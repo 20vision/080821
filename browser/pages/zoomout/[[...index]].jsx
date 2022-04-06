@@ -15,9 +15,9 @@ export default function index() {
     useEffect(async() => {
         const forumQuery = router.asPath.split('?')
         if(forumQuery.length == 2) {
-            fetchTarget(`discover/0?${forumQuery[1]}`)
+            fetchTarget(setData,`discover/0?${forumQuery[1]}`)
         }else{
-            fetchTarget(`discover/0`)
+            fetchTarget(setData,`discover/0`)
         }
     },[])
 
@@ -25,8 +25,7 @@ export default function index() {
 
     return(
         <ZoomoutLayout>
-            <Bubble data={data[0]?data[0]:null} setData={setData}/>
-
+            <Bubble data={data} setData={setData}/>
 
             {profile.username && (data.length == 0)?
                 <BubbleBasicLayout profile={profile} color={editHexColor}>
@@ -47,76 +46,108 @@ export default function index() {
 
 }
 
-const fetchTarget = async (type) => {
+const fetchTarget = async (setData, type) => {
     try{
-        console.log((await axios.get(`http://localhost:4000/get/forum/${type}`)).data)
+        setData((await axios.get(`http://localhost:4000/get/forum/${type}`)).data)
     }catch(err){
         console.error(err)
         return null
     }
 }
 
-const Bubble = ({data, setData}) => {
+const Bubble = ({data, target_fp_uid, setData}) => {
+    const [highlightIndex, setHighlightIndex] = useState(0)
     const [loadingVertical, setLoadingVertical] = useState(false)
-    const [loadingHorizonal, setLoadingHorizontal] = useState(false)
-    const [highlightSubIndex, setHighlightSubIndex] = useState(0)
+    const [loadingHorizontal, setLoadingHorizontal] = useState(false)
 
-    const minLeft = data && data.sub?Math.min(...data.sub.map(su => {
-        return su.left
-    })):null
-
-    const maxRight = data && data.sub?Math.max(...data.sub.map(su => {
-        return su.right
-    })):null
-
-    // Vertical fetching
-    if(
-        data &&
-        (data.target_fp_uid != data.fp_uid) &&
-        data.sub &&
-        (data.sub[0] == null) &&
-        !loadingVertical
+    // Horizontal Fetching
+    if( 
+        !loadingHorizontal &&
+        data && 
+        (data.length < (highlightIndex+2))
     ){
-        setLoadingVertical(true)
-        console.log('fetching vertical')
+        setLoadingHorizontal(false)
+        console.log('fetch horizontal')
     }
 
-    // Horizonal fetching
-    if( !loadingHorizonal &&
-        data &&
-        data.sub &&
-        (data.sub.length < (highlightSubIndex + 2)) &&
-        (   
-            (data.left+1 != data.right) ||
-            ((data.left+1 != minLeft) && (data.right - 1 != maxRight))
-        )
+    // Vertical Fetching
+    if(
+        !loadingVertical &&
+        (target_fp_uid != data[highlightIndex].fp_uid)
     ){
-        setLoadingHorizontal(true)
-        console.log('fetching horizonal')
-    }    
+        setLoadingVertical(false)
+        console.log('fetch horizontal')
+    }
 
     return(
         <div>
-            {data?data.message:null}
-            {data && data.target_fp_uid != data.fp_uid?
-                <div>
-                    {(data.sub&&data.sub)?<Bubble 
-                    data={data.sub[0]} 
-                    setData={arg => setData(
-                        [
-                            ...data,
-                            {sub: 
-                                [
-                                    ...data.sub,
-                                    ...arg
-                                ]
-                            }
-                        ]
-                    )}/>:null}
-                </div>
-            :null}
+            Hello
+            {data[highlightIndex] && (data[highlightIndex].left + 1) != data[highlightIndex].left?
+                <Bubble data={data[highlightIndex].sub}/>
+            :null
+            }
         </div>
     )
+    // const [loadingVertical, setLoadingVertical] = useState(false)
+    // const [loadingHorizonal, setLoadingHorizontal] = useState(false)
+    // const [highlightIndex, setHighlightIndex] = useState(0)
+
+    // const minLeft = data[highlightIndex] && data[highlightIndex].sub?Math.min(...data.sub.map(su => {
+    //     return su.left
+    // })):null
+
+    // const maxRight = data && data.sub?Math.max(...data.sub.map(su => {
+    //     return su.right
+    // })):null
+
+    // // Vertical fetching
+    // if(
+    //     data &&
+    //     (data.target_fp_uid != data.fp_uid) &&
+    //     data.sub &&
+    //     (data.sub[0] == null) &&
+    //     !loadingVertical
+    // ){
+    //     setLoadingVertical(true)
+    //     console.log('fetching vertical')
+    // }
+
+    // // Horizonal fetching
+    // if( !loadingHorizonal &&
+    //     data &&
+    //     data.sub &&
+    //     (data.sub.length < (highlightSubIndex + 2)) &&
+    //     (   
+    //         (data.left+1 != data.right) ||
+    //         ((data.left+1 != minLeft) && (data.right - 1 != maxRight))
+    //     )
+    // ){
+    //     setLoadingHorizontal(true)
+    //     console.log('fetching horizonal')
+    // }    
+
+    // return(
+    //     <div>
+    //         {data?data.message:null}
+    //         {data && data.target_fp_uid != data.fp_uid?
+    //             <div>
+    //                 {(data.sub&&data.sub)?<Bubble 
+    //                 data={data.sub[0]} 
+    //                 setData={arg => setData(
+    //                     [
+    //                         ...data,
+    //                         {sub: 
+    //                             [
+    //                                 ...data.sub,
+    //                                 ...arg
+    //                             ]
+    //                         }
+    //                     ]
+    //                 )}/>:null}
+    //             </div>
+    //         :null}
+    //     </div>
+    // )
 }
 
 // import { useState, useEffect, useRef, useCallback, createRef } from 'react'
