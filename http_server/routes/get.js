@@ -288,7 +288,7 @@ router.get("/forum/discover/:offset", async (req, res) => {
             if(!queryPage || queryPage.length != 1) return res.status(404).send('Page not found')
             targetConditions.mission_id = queryPage[0].page_id
             delete queryPage[0].page_id
-            response = [queryPage[0]]
+            response = [{page: queryPage[0]}]
         }
 
         if(req.query.mission && req.query.page){
@@ -302,7 +302,7 @@ router.get("/forum/discover/:offset", async (req, res) => {
             if(!queryMission || queryMission.length != 1) return res.status(404).send('Mission not found')
             targetConditions.mission_id = queryMission[0].mission_id
             delete queryMission[0].mission_id
-            response[0].sub = [queryMission[0]]
+            response[0].sub = [{mission: queryMission[0]}]
         }
 
         if(req.query.component){
@@ -311,11 +311,11 @@ router.get("/forum/discover/:offset", async (req, res) => {
             targetConditions.component_id = queryComponent[0].component_id
             delete queryComponent[0].component_id
             if(req.query.page && req.query.mission){
-                response[0].sub[0].sub = [queryComponent[0]]
+                response[0].sub[0].sub = [{component: queryComponent[0]}]
             }else if(req.query.page){
-                response[0].sub = [queryComponent[0]]
+                response[0].sub = [{component: queryComponent[0]}]
             }else{
-                response = [queryComponent[0]]
+                response = [{component: queryComponent[0]}]
             }
         }
         

@@ -6,10 +6,10 @@ import BubbleBasicLayout from "../../components/Forum/BubbleBasicLayout"
 import useUserProfile from "../../hooks/User/useUserProfile"
 import { toast } from "react-toastify"
 import { useRouter } from "next/router"
+import Square from "../../components/Forum/Square"
+import BubbleView from "../../components/Forum/BubbleView"
 
 export default function index() {
-    const [editHexColor, setEditHexColor] = useState()
-    const [profile, isLoading, setUser] = useUserProfile()
     const router = useRouter()
 
     useEffect(async() => {
@@ -26,21 +26,6 @@ export default function index() {
     return(
         <ZoomoutLayout>
             <Bubble data={data} setData={setData}/>
-
-            {profile.username && (data.length == 0)?
-                <BubbleBasicLayout profile={profile} color={editHexColor}>
-                    <BubbleEdit sendPost={async forum_post => {
-                        try{
-                            await axios.post(`http://localhost:4000/post/forum/312`,
-                                {forum_post: forum_post, hex_color: editHexColor},
-                                {withCredentials: true})
-                        }catch(err){
-                            console.error(err)
-                            toast.error(err)
-                        }
-                    }} setEditHexColor={setEditHexColor} clickOutsideBubbleEdit={() => null}/>
-                </BubbleBasicLayout>
-            :null}
         </ZoomoutLayout>
     )
 
@@ -55,99 +40,75 @@ const fetchTarget = async (setData, type) => {
     }
 }
 
-const Bubble = ({data, target_fp_uid, setData}) => {
+const Bubble = ({data, setData}) => {
     const [highlightIndex, setHighlightIndex] = useState(0)
     const [loadingVertical, setLoadingVertical] = useState(false)
     const [loadingHorizontal, setLoadingHorizontal] = useState(false)
+    const [selected, setSelected] = useState(false)
+    const [editHexColor, setEditHexColor] = useState()
+    const [profile, isLoading, setUser] = useUserProfile()
 
-    // Horizontal Fetching
-    if( 
-        !loadingHorizontal &&
-        data && 
-        (data.length < (highlightIndex+2))
-    ){
-        setLoadingHorizontal(false)
-        console.log('fetch horizontal')
-    }
+    useEffect(() => {
+        // Horizontal Fetching
+        if( 
+            !loadingHorizontal &&
+            data && 
+            (data.length < (highlightIndex+2))
+        ){
+            setLoadingHorizontal(false)
+            console.log('fetch horizontal')
+        }
+    }, [data, highlightIndex])
 
-    // Vertical Fetching
-    if(
-        !loadingVertical &&
-        (target_fp_uid != data[highlightIndex].fp_uid)
-    ){
-        setLoadingVertical(false)
-        console.log('fetch horizontal')
-    }
+    useEffect(() => {
+        // Vertical Fetching
+        if(
+            !loadingVertical &&
+            data &&
+            data[highlightIndex] &&
+            data[highlightIndex].fp_uid &&
+            (data[highlightIndex].target_fp_uid != data[highlightIndex].fp_uid)
+        ){
+            setLoadingVertical(false)
+            console.log('fetch horizontal')
+        }
+    }, [highlightIndex])
 
     return(
-        <div>
-            Hello
-            {data[highlightIndex] && (data[highlightIndex].left + 1) != data[highlightIndex].left?
+        <>
+            <div style={{marginBottom: 50}}>
+                {data[highlightIndex] && data[highlightIndex].page && !selected?
+                    <Square content={data[highlightIndex]}/>
+                :data[highlightIndex] && data[highlightIndex].mission  && !selected?
+                    <a style={{marginTop: 40}} onClick={() => setSelected(true)}><Square content={data[highlightIndex]}/></a>
+                :data[highlightIndex] && data[highlightIndex].component  && !selected?
+                    <a style={{marginTop: 40}} onClick={() => setSelected(true)}><Square content={data[highlightIndex]}/></a>
+                :data[highlightIndex] && data[highlightIndex].forumpost  && !selected?
+                    <a style={{marginTop: 40}} onClick={() => setSelected(true)}><BubbleView/></a>
+                :null}
+            </div>
+
+            {(data[highlightIndex] && data[highlightIndex].sub && ((data[highlightIndex].left + 1) != data[highlightIndex].right))  && !selected?
                 <Bubble data={data[highlightIndex].sub}/>
-            :null
-            }
-        </div>
+            :profile.username?
+                <div style={{marginTop: -20}}>
+                    <BubbleBasicLayout profile={profile} color={editHexColor}>
+                        <BubbleEdit sendPost={async forum_post => {
+                            try{
+                                await axios.post(`http://localhost:4000/post/forum/312`,
+                                    {forum_post: forum_post, hex_color: editHexColor},
+                                    {withCredentials: true})
+                            }catch(err){
+                                console.error(err)
+                                toast.error(err)
+                            }
+                        }} setEditHexColor={setEditHexColor} clickOutsideBubbleEdit={() => setSelected(false)}/>
+                    </BubbleBasicLayout>
+                </div>
+                
+            :null}
+        </>
     )
-    // const [loadingVertical, setLoadingVertical] = useState(false)
-    // const [loadingHorizonal, setLoadingHorizontal] = useState(false)
-    // const [highlightIndex, setHighlightIndex] = useState(0)
-
-    // const minLeft = data[highlightIndex] && data[highlightIndex].sub?Math.min(...data.sub.map(su => {
-    //     return su.left
-    // })):null
-
-    // const maxRight = data && data.sub?Math.max(...data.sub.map(su => {
-    //     return su.right
-    // })):null
-
-    // // Vertical fetching
-    // if(
-    //     data &&
-    //     (data.target_fp_uid != data.fp_uid) &&
-    //     data.sub &&
-    //     (data.sub[0] == null) &&
-    //     !loadingVertical
-    // ){
-    //     setLoadingVertical(true)
-    //     console.log('fetching vertical')
-    // }
-
-    // // Horizonal fetching
-    // if( !loadingHorizonal &&
-    //     data &&
-    //     data.sub &&
-    //     (data.sub.length < (highlightSubIndex + 2)) &&
-    //     (   
-    //         (data.left+1 != data.right) ||
-    //         ((data.left+1 != minLeft) && (data.right - 1 != maxRight))
-    //     )
-    // ){
-    //     setLoadingHorizontal(true)
-    //     console.log('fetching horizonal')
-    // }    
-
-    // return(
-    //     <div>
-    //         {data?data.message:null}
-    //         {data && data.target_fp_uid != data.fp_uid?
-    //             <div>
-    //                 {(data.sub&&data.sub)?<Bubble 
-    //                 data={data.sub[0]} 
-    //                 setData={arg => setData(
-    //                     [
-    //                         ...data,
-    //                         {sub: 
-    //                             [
-    //                                 ...data.sub,
-    //                                 ...arg
-    //                             ]
-    //                         }
-    //                     ]
-    //                 )}/>:null}
-    //             </div>
-    //         :null}
-    //     </div>
-    // )
 }
 
 // import { useState, useEffect, useRef, useCallback, createRef } from 'react'

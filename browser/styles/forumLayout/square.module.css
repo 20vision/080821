@@ -29,3 +29,13 @@
     margin-top: 0px;
     margin-left: 50px;
 }
+
+.component{
+    display: flex;
+}
+
+.component img{
+    height: 200px;
+    width: 200px;
+    border-radius: 15px;
+}

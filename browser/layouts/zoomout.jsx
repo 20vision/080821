@@ -5,21 +5,20 @@ import NavPanel from "../components/NavPanel/Index"
 import Overview from "../components/Component/Overview";
 import PageIcon from '../assets/PageIcon/PageIcon'
 import { useRouter } from "next/router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function PageLayout( {children, comp, subs} ) {
     const [menu, setMenu] = useState('/')
 
     return (
-        <div className={stylesDefault.container} style={{color: 'var(--white)'}}>
-            <div className={stylesDefault.child}>
+        <div style={{color: 'var(--white)'}}>
+            <div className={stylesDefault.zoomcontainer}>
 
-                <div className={stylesDefault.pageInfo}>
+                <div className={stylesDefault.pageInfo} style={{height: '90vh'}}>
                     <div className={stylesDefault.homescreen}>
-                        <div className={stylesDefault.menu} style={{width: 350, marginRight: 'auto', marginLeft: 'auto'}}>
+                        <div className={stylesDefault.menu} style={{width: 350, marginRight: 'auto', marginLeft: 'auto', marginTop: 0}}>
                             <Menu opened={true} setMenu={setMenu} pathname={menu}/>
                         </div>
-                        
                     </div>
                 </div>
 
@@ -32,11 +31,7 @@ export default function PageLayout( {children, comp, subs} ) {
                 </div>
 
                 <div className={stylesDefault.overviewParent}>
-                    <div className={`hideScrollBar ${stylesDefault.overviewChild}`} id='overviewId'>
-                        {comp?<Overview subs={subs} comp={comp}/>:null}
-                    </div>
-                    <div style={{filter: `
-                    drop-shadow( 0px -20px 5px rgb(46, 46, 46, 1))`}}>
+                    <div style={{filter: `drop-shadow( 0px -20px 5px rgb(46, 46, 46, 1))`, marginTop: 'auto'}}>
                         <NavPanel/>
                     </div>
                 </div>

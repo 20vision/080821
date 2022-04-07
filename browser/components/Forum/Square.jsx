@@ -8,6 +8,7 @@ import { Token, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/sp
 import { getBigNumber, connection, MINT_LAYOUT, ACCOUNT_LAYOUT, VISION_PROGRAM_ID } from '../../hooks/web3/useContract';
 import millify from "millify";
 import disableScroll from 'disable-scroll';
+import config from '../../public/config.json';
 
 export default function Square({content, makeScroll, isInTheBackground}){
     const [mint, setMint] = useState(content.page?content.page.token_mint_address:null)
@@ -52,7 +53,7 @@ export default function Square({content, makeScroll, isInTheBackground}){
 
 
     return(
-        <div onMouseEnter={e => disableScroll.on()} onMouseLeave={() => disableScroll.off()} onWheel={info => makeScroll(info)} className={styles.container} style={{backgroundColor: `${content.page?'#FAFAFA':content.mission?'#696969ce':content.topic?'#CECECE':null}`}}>
+        <div onMouseEnter={e => disableScroll.on()} onMouseLeave={() => disableScroll.off()} onWheel={info => makeScroll(info)} className={styles.container} id='bubble' style={{backgroundColor: `${content.page?'var(--light_grey)':content.mission?'var(--lighter_grey)':content.component?'var(--white)':null}`}}>
             {content.page?
                 <div className={styles.header} style={{display: 'flex'}}>
                     {(content.page.page_icon.length < 7) ?
@@ -74,14 +75,7 @@ export default function Square({content, makeScroll, isInTheBackground}){
                 </div>
             :content.mission?
                 <div style={{display: 'flex'}} className={`${styles.header}`}>
-                    <h2>Mission · {content.mission.title}</h2>
-                </div>
-            :content.topic?
-                <div className={`${styles.header}`}>
-                    <h2 style={{color: '#444'}}>Topic · {content.topic.name}</h2>
-                    <div style={{display: 'flex', alignItems: 'center', marginTop: '5px'}}>
-                        <Lock size='16' stroke='3' color='#696969ce'/>&nbsp;<span style={{color: '#696969ce', fontWeight: 'bold', marginTop: '2px'}}>{content.topic.threshold} Token</span>
-                    </div>
+                    <h2 style={{color: '#444'}}>Mission · {content.mission.title.replace(/_/g, ' ')}</h2>
                 </div>
             :
                 null
@@ -93,8 +87,16 @@ export default function Square({content, makeScroll, isInTheBackground}){
                     content.page.vision
                 :content.mission?
                     content.mission.description
-                :content.topic?
-                    content.topic.description
+                :content.component?
+                    <div className={styles.component}>
+                        <div>
+                            <div className={`${styles.header}`}>
+                                <h2 style={{color: '#444'}}>{content.component.header}</h2>
+                            </div>
+                            {content.component.body}
+                        </div>
+                        <img src={config.FILE_SERVER_URL+'comp_images/'+content.component.uid.substring(0,content.component.uid.length-8)+'/'+content.component.uid.substring(content.component.uid.length-8)+'/512x512'+'.webp'}/>
+                    </div>
                 :
                     null
                 }
