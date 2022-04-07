@@ -109,7 +109,6 @@
     background-color: var(--red);
     padding: 15px 25px;
     border-radius: 15px;
-    margin-bottom:25px;
     display: flex;
     justify-content: center;
 }

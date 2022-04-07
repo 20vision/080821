@@ -5,7 +5,6 @@ export default function index({page, missions}) {
   return <PagePanel page={page} missions={missions}/>
 }
 
-
 export async function getServerSideProps(context) {
   try{
     const res = await axios.get(`http://localhost:4000/get/page/${context.params.page}?missions=true`)

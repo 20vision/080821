@@ -168,6 +168,17 @@ router.get("/page/:page_name/components/:offset", check.AuthOptional, async (req
     })
 })
 
+router.get("/page/:unique_pagename/component/count", async (req, res) => {
+    pool.query('SELECT count(c.component_id) as components_count from Page p join Mission m on m.page_id = p.page_id join Component c on c.mission_id = m.mission_id where p.unique_pagename = ?',[req.params.unique_pagename], function(err, result) {
+        if (err){
+            res.status(500).send('An error occurred')
+            console.log(err)
+        }else{
+            res.json(result[0] && result[0].components_count?result[0].components_count:0)
+        }
+    })
+})
+
 router.get("/page/components/:offset", check.AuthOptional, async (req, res) => {
     pool.getConnection(async function(err, conn) {
         if (err){

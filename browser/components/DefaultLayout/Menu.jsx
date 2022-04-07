@@ -137,9 +137,6 @@ export function Menu({opened, setMenu, pathname}) {
                 <h3>
                     {profile.username ? '@'+profile.username : 'Guest'}
                 </h3>
-                <span>
-                    Portfolio · $0 USD
-                </span>
             </div>
 
             <div className={`${!profile.username? 'no_click': null} ${styles.selectionContainer}`}>
@@ -196,7 +193,7 @@ export function Menu({opened, setMenu, pathname}) {
                 }
             />
 
-            <div className={styles.policy}>
+            {/* <div className={styles.policy}>
                 <span><a>Privacy</a></span>
                 <span>·</span>
                 <span><a>Terms</a></span>
@@ -204,7 +201,7 @@ export function Menu({opened, setMenu, pathname}) {
                 <span><a>Cookies</a></span>
                 <span>·</span>
                 <span><a>About</a></span>
-            </div>
+            </div> */}
         </motion.div>
     )
 }

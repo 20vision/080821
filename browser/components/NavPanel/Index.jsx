@@ -28,7 +28,7 @@ export default function Index() {
 
     return (
         <>
-        {isLoading?
+        {isLoading || !profile.username?
             null
         :
             <div className={styles.container}>
@@ -175,7 +175,7 @@ function ForumNav({router}){
     const setModal = useModalStore(state => state.setModal)
     return(
         <>  
-            <a onClick={() => setModal(6)}>
+            {/* <a onClick={() => setModal(6)}>
                 <Plus color="#FAFAFA"/>
                 <div>Topic</div>
             </a>
@@ -183,7 +183,7 @@ function ForumNav({router}){
             <a onClick={() => setModal(5)}>
                 <DollarSign color="#FAFAFA"/>
                 <div>Token</div>
-            </a>
+            </a> */}
         </>
     )
 }

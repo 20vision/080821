@@ -112,7 +112,7 @@ export default function PaperPreview({setSelectedComponent}){
               }
             }}>
               {((index == highlightIndex+1) || (index == highlightIndex-1) || (index == highlightIndex))?
-                <div style={{cursor: 'pointer'}} onClick={() => router.push((index == highlightIndex)?`${component.unique_pagename}/${components[index].mission_title}/${components[index].uid}`:null)}>
+                <div style={{cursor: 'pointer'}} onClick={() => router.push((index == highlightIndex)?`/${component.unique_pagename}/${components[index].mission_title}/${components[index].uid}`:null)}>
                   <CarouselItem index={index} highlightIndex={highlightIndex}>
                     <motion.div 
                     initial={{
