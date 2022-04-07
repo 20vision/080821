@@ -128,7 +128,7 @@ var Panel = onClickOutside(({children, page, subs, comp}) => {
                         </div>
                     </div>
                 :
-                    <div style={{width: 350, margin:'auto', marginBottom: 25, overflowY: 'scroll'}}>
+                    <div style={{width: 350, margin:'0px auto auto auto', marginBottom: 25, overflowY: 'scroll'}}>
                         <Overview subs={subs} comp={comp}/>
                     </div>
                 }
