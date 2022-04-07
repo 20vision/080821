@@ -33,7 +33,7 @@ export default function index() {
 
 const fetchTarget = async (setData, type) => {
     try{
-        setData((await axios.get(`http://localhost:4000/get/forum/${type}`)).data)
+        console.log((await axios.get(`http://localhost:4000/get/forum/${type}`)).data)
     }catch(err){
         console.error(err)
         return null
@@ -47,6 +47,7 @@ const Bubble = ({data, setData}) => {
     const [selected, setSelected] = useState(false)
     const [editHexColor, setEditHexColor] = useState()
     const [profile, isLoading, setUser] = useUserProfile()
+    const router = useRouter()
 
     useEffect(() => {
         // Horizontal Fetching
@@ -74,6 +75,24 @@ const Bubble = ({data, setData}) => {
         }
     }, [highlightIndex])
 
+    const sendPostFunction = async(forum_post_param, editHexColor_param) => {
+        try{
+            await axios.post(`http://localhost:4000/post/forum/post/${
+                data[highlightIndex].component?
+                    '_/_/'+data[highlightIndex].component.uid
+                :data[highlightIndex].mission?
+                    data[highlightIndex].mission.unqiue_pagename+'/'+data[highlightIndex].mission.title+'/_'
+                :
+                    data[highlightIndex].page+'/_/_'
+            }`,
+                {forum_post: forum_post_param, hex_color: editHexColor_param},
+                {withCredentials: true})
+        }catch(err){
+            console.error(err)
+            toast.error(err)
+        }
+    }
+
     return(
         <>
             <div style={{marginBottom: 50}}>
@@ -93,16 +112,7 @@ const Bubble = ({data, setData}) => {
             :profile.username?
                 <div style={{marginTop: -20}}>
                     <BubbleBasicLayout profile={profile} color={editHexColor}>
-                        <BubbleEdit sendPost={async forum_post => {
-                            try{
-                                await axios.post(`http://localhost:4000/post/forum/312`,
-                                    {forum_post: forum_post, hex_color: editHexColor},
-                                    {withCredentials: true})
-                            }catch(err){
-                                console.error(err)
-                                toast.error(err)
-                            }
-                        }} setEditHexColor={setEditHexColor} clickOutsideBubbleEdit={() => setSelected(false)}/>
+                        <BubbleEdit sendPost={forum_post => sendPostFunction(forum_post,editHexColor)} setEditHexColor={setEditHexColor} clickOutsideBubbleEdit={() => setSelected(false)}/>
                     </BubbleBasicLayout>
                 </div>
                 

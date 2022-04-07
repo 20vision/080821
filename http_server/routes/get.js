@@ -295,7 +295,8 @@ router.get("/forum/discover/:offset", async (req, res) => {
             let queryMission = (await poolp.query(`SELECT 
             m.mission_id,
             m.title, 
-            m.description 
+            m.description,
+            p.unique_pagename
             from Mission m 
             join Page p on p.page_id = m.page_id and m.title = ? and p.unique_pagename = ?`,
             [req.query.mission, req.query.page]))[0]
@@ -319,10 +320,10 @@ router.get("/forum/discover/:offset", async (req, res) => {
             }
         }
         
-        response.target_uids = (await poolp.query(`SELECT fp.fp_uid, count(fpl.forum_post_like_id) as tree_likes from ForumPost fp
+        response[0].page.target_uid = (await poolp.query(`SELECT fp.fp_uid, count(fpl.forum_post_like_id) as tree_likes from ForumPost fp
         join ForumPost fp2 on fp2.left <= fp.left and fp2.right >= fp.right
-        join ForumPost_Like fpl on fpl.forumpost_id = fp2.forumpost_id
         join ForumPost_Parent fpp on fpp.forumpost_parent_id = fp.forumpost_parent_id
+        left join ForumPost_Like fpl on fpl.forumpost_id = fp2.forumpost_id
         where fp.left + 1 = fp.right 
         ${targetConditions.component_id?`and fpp.parent_id = ? and fpp.parent_type = 'c'`:
         targetConditions.mission_id?`and fpp.parent_id = ? and fpp.parent_type = 'm'`:
@@ -330,14 +331,14 @@ router.get("/forum/discover/:offset", async (req, res) => {
         null}
         group by fp.forumpost_parent_id, fp.forumpost_id
         order by tree_likes desc
-        limit ?,3`,[...[
+        limit 0,1`,[...[
             targetConditions.component_id?
                 targetConditions.component_id:
             targetConditions.mission_id?
                 targetConditions.mission_id:
             targetConditions.page_id?
                 targetConditions.page_id
-            :null],...[req.params.offset?parseInt(req.params.offset):0]]))[0]
+            :null],...[req.params.offset?parseInt(req.params.offset):0]]))[0].fp_uid
         
         res.json(response)
     }catch(err){

@@ -266,17 +266,18 @@ router.post("/forum/reply/:fp_uid", check.AuthRequired, input_validation.mission
     })
 });
 
-router.post("/forum/post/:unique_pagename/:mission_title/:component_uid", check.AuthRequired, input_validation.missionBody_topicBody_forumPost, input_validation.hex_color, (req, res) => {
-    if(!req.params.component_uid && !req.params.mission_title && !req.params.unique_username) return res.status(404).send('Not found')
+
+router.post("/forum/post/:page/:mission/:component", check.AuthRequired, input_validation.missionBody_topicBody_forumPost, input_validation.hex_color, (req, res) => {
+    if(!req.params.component && !req.params.mission && !req.params.page) return res.status(404).send('Not found')
     
     pool.getConnection(async function(err, conn) {
         if (err){
             res.status(500).send('An error occurred')
             console.log(err)
         }else{
-            if(req.params.component_uid){
+            if(req.params.component && req.params.component != '_'){
                 conn.query('SELECT component_id from Component where uid = ?',
-                    [req.params.component_uid],
+                    [req.params.component],
                     async function(err, results){
                         if(results.length != 1) return res.status(404).send('Component not found')
                         const forumpost_parent_id = await inserts.forumpost_parent(conn, results[0].component_id, 'c')
@@ -297,9 +298,9 @@ router.post("/forum/post/:unique_pagename/:mission_title/:component_uid", check.
                         })
                     }
                 )
-            }else if(req.params.mission_title){
+            }else if(req.params.mission && req.params.page && req.params.mission != '_' && req.params.page != '_'){
                 conn.query('SELECT m.mission_id from Mission m join Page p on m.page_id = m.page_id where m.title = ? and p.unique_pagename = ?',
-                    [req.params.mission_title, req.params.unique_pagename],
+                    [req.params.mission, req.params.page],
                     async function(err, results){
                         if(results.length != 1) return res.status(404).send('Mission not found')
                         const forumpost_parent_id = await inserts.forumpost_parent(conn, results[0].mission_id, 'm')
@@ -320,9 +321,9 @@ router.post("/forum/post/:unique_pagename/:mission_title/:component_uid", check.
                         })
                     }
                 )
-            }else if(req.params.unique_pagename){
+            }else if(req.params.page && req.params.page != '_'){
                 conn.query('SELECT p.page_id from Page p where p.unique_pagename = ?',
-                    [req.params.unique_pagename],
+                    [req.params.page],
                     async function(err, results){
                         if(results.length != 1) return res.status(404).send('Mission not found')
                         const forumpost_parent_id = await inserts.forumpost_parent(conn, results[0].page_id, 'p')
