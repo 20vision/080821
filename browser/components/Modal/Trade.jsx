@@ -245,7 +245,7 @@ export default function Trade() {
           return
         })
       }catch(err){
-        if(error.response) toast.error(`${error.response.status?error.response.status:'400'}: ${error.response.data?error.response.data:'An error occurred'}`)
+        if(error.response) toast.error(`${error.response.status?error.response.status:`400`}: ${error.response.data?error.response.data:`An error occurred`}`)
         return
       }
     }
@@ -709,7 +709,7 @@ export default function Trade() {
           <span>
             Page Tokens create a win/win situation, where users help Pages to achieve their Vision without going empty-handed.
             <br/>
-            With uniswap and bancor being our role models, tokens are priced using the &nbsp;<a href='https://docs.bancor.network/ethereum-contracts/ethereum-api-reference/converter/bancorformula' target="_blank" style={{textDecoration: 'underline'}}>bancor formula</a>.
+            With uniswap and bancor being our role models, tokens are priced using the &nbsp;<a href='https://docs.bancor.network/ethereum-contracts/ethereum-api-reference/converter/bancorformula' target="_blank" rel="noreferrer" style={{textDecoration: 'underline'}}>bancor formula</a>.
             <br/>
             For now, Tokens can mainly be used to participate in <a 
             style={{textDecoration: 'underline'}}
@@ -728,7 +728,7 @@ export default function Trade() {
             <div style={{display: 'flex', justifyContent: 'center', minWidth: '1px'}}>
               <div><b>Mint:</b></div>&nbsp;
               {mint?
-                <div style={{flexShrink: '1', minWidth: '1px'}}><a href={`https://explorer.solana.com/address/${mint}`} target="_blank" style={{textDecoration: 'underline'}} className={'overflowTextDot'}>{mint.toString()}</a></div>
+                <div style={{flexShrink: '1', minWidth: '1px'}}><a href={`https://explorer.solana.com/address/${mint}`} target="_blank" rel="noreferrer" style={{textDecoration: 'underline'}} className={'overflowTextDot'}>{mint.toString()}</a></div>
               :
                 '-'
               }
@@ -736,16 +736,7 @@ export default function Trade() {
             </div>
             
 
-            {/* Capitalism at it's essence is a Feedback-loop. 
-            Investors allocate funds to Companies. 
-            Companies create goods or services.
-            Consumers choose upon the quality of goods and services.
-            Companies that outperformed, have proven their capability, thus should scale.
-            Investors that chose the winner, have proven their capability of choice, thus should scale in choice.
-            Although the core concept seems reasonable, money abstracts value in a large way.
-            Value should not be misinterpreted. As companies that create more worse than good, are still often profitable.
-            Humanity shouldn't loose 
-            // At it's core, value should be amount of positiveImapce x number of people impacted - amount of negative Impact x number of people impacted. */}
+            
           </span>
           <br/>
 

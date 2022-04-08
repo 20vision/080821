@@ -9,4 +9,7 @@ const withTM = require('next-transpile-modules')([
 module.exports = withTM({
   reactStrictMode: false,
   webpack5: true,
+  experimental: {
+    outputStandalone: true,
+  },
 });
