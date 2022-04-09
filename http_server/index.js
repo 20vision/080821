@@ -3,7 +3,7 @@ const express = require('express')
 const app = express()
 app.use(express.json({limit: '5mb'}));
 
-const port = 4000
+const port = 8080
 
 const cookieParser = require('cookie-parser')
     app.use(cookieParser())
@@ -12,14 +12,6 @@ const cookieParser = require('cookie-parser')
 const useragent = require('express-useragent');
     app.use(useragent.express());
 
-const cors = require("cors");
-    app.use(
-        cors({
-            origin: "http://localhost:3000",
-            methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
-            credentials: true
-        })
-    );
 
 app.disable('x-powered-by');
 

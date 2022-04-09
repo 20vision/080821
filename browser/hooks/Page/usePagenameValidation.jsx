@@ -30,7 +30,7 @@ const usePagenameValidation = () => {
                     setPagenameError('/'+newPagename.toLowerCase()+' is not available')
                     setValidPagenameLoading(false)
                 }else{
-                    axios.post('http://localhost:4000/get/pagename_unique',{pagename: newPagename}
+                    axios.post('http://localhost:8080/get/pagename_unique',{pagename: newPagename}
                     ).then(response => {
                         setPagename(newPagename)
                     })
