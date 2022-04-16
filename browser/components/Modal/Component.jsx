@@ -7,7 +7,7 @@ import FilePondPluginFileValidateType from 'filepond-plugin-file-validate-type';
 import FilePondPluginFilePoster from 'filepond-plugin-file-poster';
 import FilePondPluginFileEncode from 'filepond-plugin-file-encode';
 import 'filepond-plugin-file-poster/dist/filepond-plugin-file-poster.css';
-import FilePondPluginImageEditor from '../../local_modules/filepond-plugin-image-editor/FilePondPluginImageEditor';
+import FilePondPluginImageEditor from 'filepond-plugin-image-editor';
 import { useRouter } from 'next/router'
 import { toast } from 'react-toastify'
 import axios from 'axios'
@@ -45,7 +45,7 @@ import {
     markup_editor_defaults,
     plugin_finetune_defaults,
 
-} from '../../local_modules/pintura/pintura'
+} from 'pintura'
 //import Checkbox from '../User/Checkbox/Checkbox';
 
 setPlugins(plugin_crop, plugin_finetune, plugin_annotate, plugin_sticker);
@@ -212,7 +212,7 @@ export default function Edit(){
                 const base64Image = pond.getFile().getFileEncodeDataURL()
                 try{
                     setLoading(true)
-                    const response = await axios.post(`http://localhost:8080/post/component`,{
+                    const response = await axios.post(`http://localhost:4000/post/component`,{
                         image: base64Image, 
                         type: type,
                         header: header, 
