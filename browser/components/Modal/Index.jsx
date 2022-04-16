@@ -65,11 +65,7 @@ const ClickOutside = onClickOutside(() =>{
             >
 
                 {modal == 1 ?
-                    <div>
-                        <h1 style={{marginBottom: 10}}>Coming soon</h1>
-                        <div>This feature is currently in developent but will be available soon.</div>
-                    </div>
-                    //<ConnectWallet/>
+                    <ConnectWallet/>
                 :modal == 2 ?
                     <User/>
                 :modal == 3 ?
