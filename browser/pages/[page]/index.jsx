@@ -7,7 +7,7 @@ export default function index({page, missions}) {
 
 export async function getServerSideProps(context) {
   try{
-    const res = await axios.get(`https://http-server-vkp2ityhga-ew.a.run.app/get/page/${context.params.page}?missions=true`)
+    const res = await axios.get(`https://api.20.vision/get/page/${context.params.page}?missions=true`)
     return{
       props: {
         page: res.data.page,

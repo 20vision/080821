@@ -14,7 +14,7 @@ const useUsernameValidation = () => {
     function publishNewUsername(){
         if((valid == true )&&(username != profile.username)){
             setLoading(true)
-            axios.post('https://http-server-vkp2ityhga-ew.a.run.app/update/username',{username: username},{
+            axios.post('https://api.20.vision/update/username',{username: username},{
             withCredentials: true
             }).then(response => {
                 let newProfile = profile
@@ -52,7 +52,7 @@ const useUsernameValidation = () => {
                         setErrorMsg('@'+username+' is not a valid username')
                         setLoading(false)
                     }else{
-                        axios.post('https://http-server-vkp2ityhga-ew.a.run.app/get/username_unique',{username: username}
+                        axios.post('https://api.20.vision/get/username_unique',{username: username}
                         ).then(response => {
                             setValid(true)
                         })

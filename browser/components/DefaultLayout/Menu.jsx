@@ -92,7 +92,7 @@ export function Menu({opened, setMenu, pathname}) {
     const myPages = useInfiniteQuery(
         'my_pages',
         async () => {
-            const res = await axios.get(`https://http-server-vkp2ityhga-ew.a.run.app/get/my_pages/0`,{withCredentials: true})
+            const res = await axios.get(`https://api.20.vision/get/my_pages/0`,{withCredentials: true})
             return res.data
         },
         {

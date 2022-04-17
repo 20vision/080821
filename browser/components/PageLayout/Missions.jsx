@@ -13,7 +13,7 @@ export default function Missions({missions}) {
 
     useEffect(async() => {
         try{
-            setComponentCount((await axios.get('https://http-server-vkp2ityhga-ew.a.run.app/get/page/'+router.query.page+'/component/count')).data)
+            setComponentCount((await axios.get('https://api.20.vision/get/page/'+router.query.page+'/component/count')).data)
         }catch(err){
             console.error(err)
         }

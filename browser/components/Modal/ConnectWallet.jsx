@@ -58,7 +58,7 @@ export default function ConnectWallet() {
             return
         }
 
-        axios.post('https://http-server-vkp2ityhga-ew.a.run.app/wallet/connect',{username: username, publicKey: publicKey.toString(), signature: signature},{
+        axios.post('https://api.20.vision/wallet/connect',{username: username, publicKey: publicKey.toString(), signature: signature},{
             withCredentials: true
         }
         ).then(async response => {
@@ -106,7 +106,7 @@ export default function ConnectWallet() {
             return
         }
 
-        axios.post('https://http-server-vkp2ityhga-ew.a.run.app/wallet/connect',{publicKey: publicKey.toString(), signature: signature},{
+        axios.post('https://api.20.vision/wallet/connect',{publicKey: publicKey.toString(), signature: signature},{
             withCredentials: true
         }
         ).then(async response => {
@@ -143,7 +143,7 @@ export default function ConnectWallet() {
 
     useEffect(() => {
         if(publicKey && connected && (step == 1)){
-            axios.post('https://http-server-vkp2ityhga-ew.a.run.app/wallet/check_existing',{publicKey: publicKey.toString()}
+            axios.post('https://api.20.vision/wallet/check_existing',{publicKey: publicKey.toString()}
             ).then(async response => {
                 if(response.data.new == true){
                     setStep(2)
