@@ -212,7 +212,7 @@ export default function Edit(){
                 const base64Image = pond.getFile().getFileEncodeDataURL()
                 try{
                     setLoading(true)
-                    const response = await axios.post(`http://localhost:4000/post/component`,{
+                    const response = await axios.post(`http://localhost:8080/post/component`,{
                         image: base64Image, 
                         type: type,
                         header: header, 
@@ -224,7 +224,7 @@ export default function Edit(){
                 }catch(err){
                     console.log(err)
                     setLoading(false)
-                    if(err.response.status && (err.response.status != 500)) return toast.error(err.response.data)
+                    if(err && err.response && err.response.status && (err.response.status != 500)) return toast.error(err.response.data)
                     toast.error('An error occurred')
                 }
             }} 
