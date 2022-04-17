@@ -15,7 +15,7 @@ const useragent = require('express-useragent');
 const cors = require("cors");
     app.use(
         cors({
-            origin: "http://localhost:3000",
+            origin: true,
             methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
             credentials: true
         })
