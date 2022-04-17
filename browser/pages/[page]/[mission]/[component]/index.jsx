@@ -12,7 +12,7 @@ export default function Component({component, subComponents, params}){
   
   useEffect(async() => {
     try{
-      setPage((await axios.get(`http://localhost:8080/get/page/${params.page}?missions=false`)).data.page)
+      setPage((await axios.get(`https://http-server-vkp2ityhga-ew.a.run.app/get/page/${params.page}?missions=false`)).data.page)
     }catch(error){
       console.error(error)
     }
@@ -60,7 +60,7 @@ export default function Component({component, subComponents, params}){
 
 export async function getServerSideProps(context) {
   try{
-    const res = await axios.get(`http://localhost:8080/get/component/${context.params.component}`)
+    const res = await axios.get(`https://http-server-vkp2ityhga-ew.a.run.app/get/component/${context.params.component}`)
     return{
       props: {
         params: context.params,

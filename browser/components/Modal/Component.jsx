@@ -212,7 +212,7 @@ export default function Edit(){
                 const base64Image = pond.getFile().getFileEncodeDataURL()
                 try{
                     setLoading(true)
-                    const response = await axios.post(`http://localhost:8080/post/component`,{
+                    const response = await axios.post(`https://http-server-vkp2ityhga-ew.a.run.app/post/component`,{
                         image: base64Image, 
                         type: type,
                         header: header, 

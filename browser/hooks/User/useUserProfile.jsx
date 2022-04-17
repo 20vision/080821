@@ -14,7 +14,7 @@ const useUserProfile = () => {
     useEffect(() =>{
         if(profile.fetched == false){
             setLoading(true)
-            axios.get('http://localhost:8080/get/user_profile',{
+            axios.get('https://http-server-vkp2ityhga-ew.a.run.app/get/user_profile',{
                 withCredentials: true
             })
             .then(response => {

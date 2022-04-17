@@ -229,7 +229,7 @@ export default function Trade() {
   useEffect(async() => {
     if(queryRoute){
       try{
-        await axios.get(`http://localhost:8080/get/page/${queryRoute}/trade_info`,{
+        await axios.get(`https://http-server-vkp2ityhga-ew.a.run.app/get/page/${queryRoute}/trade_info`,{
           withCredentials: true
         }
         ).then(async response => {
@@ -329,7 +329,7 @@ export default function Trade() {
       tx.feePayer = publicKey
       tx.partialSign(new_mint_keypair);
       const signedTx = await signTransaction(tx)
-      axios.post('http://localhost:8080/post/fundPageToken',{tx: signedTx.serialize(), unique_pagename: queryRoute},{
+      axios.post('https://http-server-vkp2ityhga-ew.a.run.app/post/fundPageToken',{tx: signedTx.serialize(), unique_pagename: queryRoute},{
         withCredentials: true
       }
       ).then(async response => {

@@ -42,8 +42,8 @@ var Panel = onClickOutside(({children, page, subs, comp}) => {
 
     useEffect(async() => {
         try{
-            setDependentsCount((await axios.get(`http://localhost:8080/get/component/${router.query.component}/dependents/count`)).data.count)
-            setDependents([...(await axios.get(`http://localhost:8080/get/component/${router.query.component}/dependents/0`)).data.dependents])
+            setDependentsCount((await axios.get(`https://http-server-vkp2ityhga-ew.a.run.app/get/component/${router.query.component}/dependents/count`)).data.count)
+            setDependents([...(await axios.get(`https://http-server-vkp2ityhga-ew.a.run.app/get/component/${router.query.component}/dependents/0`)).data.dependents])
         }catch(error){
             console.error(error)
         }
@@ -83,7 +83,7 @@ var Panel = onClickOutside(({children, page, subs, comp}) => {
                                     next={
                                         async() => {
                                             try{
-                                                const data = (await axios.get(`http://localhost:8080/get/component/${router.query.component}/dependents/${dependents?(dependents.length-1):0}`)).data
+                                                const data = (await axios.get(`https://http-server-vkp2ityhga-ew.a.run.app/get/component/${router.query.component}/dependents/${dependents?(dependents.length-1):0}`)).data
                                                 setDependents([...dependents,...data])
                                             }catch(err){
                                                 console.log(err)
