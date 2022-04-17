@@ -794,7 +794,7 @@ const SelectionPageToken = ({setTokenAmt, tokenAmt, amtOut, tokenBalance, tokenD
     <div className={styles.tradePageInfoParent}>
 
       <div className={styles.pageIcon}>
-        {page.page_icon.length > 6 ?
+        {page && page.page_icon.length > 6 ?
             <img src={page.page_icon}/>
         :
             <PageIcon color={'#'+page.page_icon}/>
@@ -803,7 +803,7 @@ const SelectionPageToken = ({setTokenAmt, tokenAmt, amtOut, tokenBalance, tokenD
 
       <div className={styles.tradePageInfoChild}>
         <h3>
-          /{page.unique_pagename}
+          /{page && page.unique_pagename}
         </h3>
         <span className="smalltext">{
         (tokenBalance != null) && (tokenBalance/1000000000 < 1)?

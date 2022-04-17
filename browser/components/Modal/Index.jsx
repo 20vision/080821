@@ -73,7 +73,7 @@ const ClickOutside = onClickOutside(() =>{
                 :modal == 4 ?
                     <CreateTopicOrMission type='mission'/>
                 :modal == 5 ?
-                    null//<Trade/>
+                    <Trade/>
                 :modal == 6 ?
                     <CreateTopicOrMission type='topic'/>
                 :modal == 7 ?
