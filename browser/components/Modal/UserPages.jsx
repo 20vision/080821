@@ -58,7 +58,7 @@ function Create(props){
     const queryClient = useQueryClient()
 
     const addPageMuation = useMutation(
-        async newPage => await axios.post('http://localhost:8080/post/create_page',newPage,{withCredentials: true}),
+        async newPage => await axios.post('https://api.20.vision/post/create_page',newPage,{withCredentials: true}),
         {
             onError: (error, variables, context) => {
                 console.log(error.data)
@@ -140,7 +140,7 @@ function My_Pages(props){
     const myPages = useInfiniteQuery(
         'my_pages',
         async ({pageParam = 0}) => {
-            const res = await axios.get(`http://localhost:8080/get/my_pages/${pageParam}`,{withCredentials: true})
+            const res = await axios.get(`https://api.20.vision/get/my_pages/${pageParam}`,{withCredentials: true})
             return res.data
         },
         {   

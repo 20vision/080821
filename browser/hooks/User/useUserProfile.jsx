@@ -14,7 +14,7 @@ const useUserProfile = () => {
     useEffect(() =>{
         if(profile.fetched == false){
             setLoading(true)
-            axios.get('http://localhost:8080/get/user_profile',{
+            axios.get('https://api.20.vision/get/user_profile',{
                 withCredentials: true
             })
             .then(response => {

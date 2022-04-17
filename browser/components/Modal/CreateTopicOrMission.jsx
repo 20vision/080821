@@ -41,7 +41,7 @@ export default function CreateMission({type}) {
                     setErrorMsg(Title+' is not a valid mission')
                     setLoading(false)
                 }else{
-                    axios.get(`http://localhost:8080/get/${type=='mission'?'mission_title_unique':type=='topic'?'topic_title_unique':null}/${router.query.page}/${Title}`,{
+                    axios.get(`https://api.20.vision/get/${type=='mission'?'mission_title_unique':type=='topic'?'topic_title_unique':null}/${router.query.page}/${Title}`,{
                     withCredentials: true
                     }).then(response => {
                         setValidTitle(true)
@@ -67,7 +67,7 @@ export default function CreateMission({type}) {
 
     function addMission(){
         setLoading(true)
-        axios.post(`http://localhost:8080/post/mission`,{pagename: router.query.page, missionTitle: Title, missionBody: Body},{
+        axios.post(`https://api.20.vision/post/mission`,{pagename: router.query.page, missionTitle: Title, missionBody: Body},{
         withCredentials: true
         }).then(response => {
             router.push(`/forum/${router.query.page}/mission/${Title.replace(/ /g, '_').toLowerCase()}`)
@@ -83,7 +83,7 @@ export default function CreateMission({type}) {
 
     function addTopic(){
         setLoading(true)
-        axios.post(`http://localhost:8080/post/topic`,{pagename: router.query.index[0], topicTitle: Title, topicBody: Body, topicThreshold: topicTokenThreshold},{
+        axios.post(`https://api.20.vision/post/topic`,{pagename: router.query.index[0], topicTitle: Title, topicBody: Body, topicThreshold: topicTokenThreshold},{
         withCredentials: true
         }).then(response => {
             router.push(`/forum/${router.query.index[0]}/topic/${Title.replace(/ /g, '_').toLowerCase()}`)

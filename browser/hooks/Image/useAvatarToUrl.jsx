@@ -14,7 +14,7 @@ const useAvatarToUrl = () => {
             let formData = new FormData()
             formData.append("file", image)
 
-            axios.post('http://localhost:8080/update/profile_picture',formData,{
+            axios.post('https://api.20.vision/update/profile_picture',formData,{
                 withCredentials: true
             }
             ).then(response => {

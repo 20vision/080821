@@ -32,7 +32,7 @@ export default function PaperPreview({setSelectedComponent}){
 
   useEffect(async() => {
       if(components[highlightIndex] && (components[highlightIndex].subs == null)){
-      axios.get(`http://localhost:8080/get/component/${components[highlightIndex].uid}/subs`)
+      axios.get(`https://api.20.vision/get/component/${components[highlightIndex].uid}/subs`)
       .then(response => {
           setComponents([
           ...components.slice(0, highlightIndex),
@@ -59,7 +59,7 @@ export default function PaperPreview({setSelectedComponent}){
   const getComponents = async() => {
       if(!componentsQueryLimitReached){
       try{
-          let components_data = (await axios.get(`http://localhost:8080/get/page/${router.query.page?router.query.page+'/':''}components/${components.length}${router.query.mission?'/'+router.query.mission:null}`)).data
+          let components_data = (await axios.get(`https://api.20.vision/get/page/${router.query.page?router.query.page+'/':''}components/${components.length}${router.query.mission?'/'+router.query.mission:null}`)).data
           if(components_data.length != 3) setComponentsQueryLimitReached(true)
           setComponents([...components,...components_data])
       }catch(err){
