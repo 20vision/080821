@@ -12,6 +12,14 @@ const cookieParser = require('cookie-parser')
 const useragent = require('express-useragent');
     app.use(useragent.express());
 
+const cors = require("cors");
+    app.use(
+        cors({
+            origin: true,
+            methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
+            credentials: true
+        })
+    );
 
 app.disable('x-powered-by');
 
