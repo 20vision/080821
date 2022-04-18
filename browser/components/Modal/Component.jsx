@@ -56,7 +56,7 @@ export default function Edit(){
     const [imageExists, setImageExists] = useState(false)
     const [base64Image, setBase64Image] = useState()
     const [loading, setLoading] = useState(false)
-    const [type, setType] = useState('p')
+    const [type, setType] = useState('s')
     // const [selectedComponents, setSelectedComponents] = useState()
     // const [components, setComponents] = useState([
     //     {id:0, uid: 'ds1212af', content: 'okk'},
@@ -72,14 +72,14 @@ export default function Edit(){
     return(
         <div className={styles.parentContainer}>
             <div className={`noselect ${styles.nav}`}>
-                <h1 onClick={() => setType('p')} style={{marginLeft: '10px'}} className={`${type == 'p'?styles.highlightP:null}`}>
-                    Product
-                </h1>
                 <h1 onClick={() => setType('s')} style={{marginRight: '10px'}} className={`${type == 's'?styles.highlightS:null}`}>
                     Service
                 </h1>
                 <h1 onClick={() => setType('r')} style={{marginRight: '10px'}} className={`${type == 'r'?styles.highlightR:null}`}>
                     Result
+                </h1>
+                <h1 onClick={() => setType('p')} style={{marginLeft: '10px'}} className={`${type == 'p'?styles.highlightP:null}`}>
+                    Product
                 </h1>
                 {/* <h1 onClick={() => setType(1)} style={{marginRight: '10px'}} className={`${type == 1?styles.highlight:null}`}>
                     Sub-Components
@@ -220,6 +220,13 @@ export default function Edit(){
                         pagename: router.query.page,
                         mission: router.query.mission
                     },{withCredentials: true})
+
+                    if(router.query.component){
+                        const responseConnection = await axios.post(`https://api.20.vision/post/component`,{
+                            component_id: router.query.component,
+                            child_component_id: response,
+                        },{withCredentials: true})
+                    }
                     setModal(0)
                 }catch(err){
                     console.log(err)

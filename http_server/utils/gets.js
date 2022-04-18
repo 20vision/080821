@@ -83,6 +83,33 @@ const getTopic_s = ({conn, unique_pagename}) => new Promise((resolve, reject) =>
 })
 
 
+const getComponentIdFromUidUserPostPermission = ({conn, uid, user_id}) => new Promise((resolve, reject) => {
+    conn.query(
+        `SELECT c.component_id from Component c
+        join Mission m on m.mission_id = c.mission_id 
+        join Page p on p.page_id = m.page_id 
+        join PageUser pu on pu.page_id = p.page_id
+        where c.uid = ? and pu.user_id = ?`,
+        [uid, user_id],
+        function(err, component_id) {
+            if (err){
+                reject({
+                    status: 500,
+                    message: 'An error occurred'
+                })
+                console.log(err)
+            }else if(component_id && component_id.length == 1 && component_id[0].component_id){
+                resolve(component_id[0].component_id)
+            }else{
+                reject({
+                    status: 404,
+                    message: 'Your Component was not found'
+                })
+            }
+        }
+    );
+})
+
 
 // const getForumPostParentInfo = (conn, parent_post_id) => new Promise((resolve, reject) => {
 //     conn.query(
@@ -250,6 +277,7 @@ module.exports = {
     getPageByName,
     getMission_s,
     getTopic_s,
+    getComponentIdFromUidUserPostPermission
     // getForumPostParentInfo,
     // getForumPost
 }

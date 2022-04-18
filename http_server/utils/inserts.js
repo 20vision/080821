@@ -48,8 +48,27 @@ const forumpost = ({conn, forumpost_parent_id, left, right, depth, message, user
     );
 })
 
+const component_connection = ({conn, component_id, child_component_id, child_component_index}) => new Promise((resolve, reject) => {
+    conn.query(
+        `INSERT into ComponentConnection values(?,?,?,?);`,
+        [null,component_id,child_component_id,child_component_index],
+        function(err, insert) {
+            if (err){
+                console.log(err)
+                reject({
+                    status: 500,
+                    message: 'An error occurred'
+                })
+            }else{
+                resolve(insert.insertId)
+            }
+        }
+    );
+})
+
 
 module.exports = {
+    component_connection,
     forumpost_parent,
     forumpost
 }
