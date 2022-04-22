@@ -56,7 +56,7 @@ export default function Edit(){
     const [imageExists, setImageExists] = useState(false)
     const [base64Image, setBase64Image] = useState()
     const [loading, setLoading] = useState(false)
-    const [type, setType] = useState('s')
+    const [type, setType] = useState('r')
     // const [selectedComponents, setSelectedComponents] = useState()
     // const [components, setComponents] = useState([
     //     {id:0, uid: 'ds1212af', content: 'okk'},
@@ -72,22 +72,15 @@ export default function Edit(){
     return(
         <div className={styles.parentContainer}>
             <div className={`noselect ${styles.nav}`}>
-                <h1 onClick={() => setType('s')} style={{marginRight: '10px'}} className={`${type == 's'?styles.highlightS:null}`}>
-                    Service
-                </h1>
                 <h1 onClick={() => setType('r')} style={{marginRight: '10px'}} className={`${type == 'r'?styles.highlightR:null}`}>
                     Result
                 </h1>
                 <h1 onClick={() => setType('p')} style={{marginLeft: '10px'}} className={`${type == 'p'?styles.highlightP:null}`}>
                     Product
                 </h1>
-                {/* <h1 onClick={() => setType(1)} style={{marginRight: '10px'}} className={`${type == 1?styles.highlight:null}`}>
-                    Sub-Components
-                </h1> 
-                
-                <h1 onClick={() => setType(2)} style={{marginLeft: '10px'}} className={`${type == 2?styles.highlight:null}`}>
-                    %
-                </h1> */}
+                <h1 onClick={() => setType('s')} style={{marginRight: '10px'}} className={`${type == 's'?styles.highlightS:null}`}>
+                    Service
+                </h1>
             </div>
 
             <div className={styles.editContainer}>
@@ -164,7 +157,7 @@ export default function Edit(){
                             disabled={loading}
                             style={{overflow: 'auto'}}
                             minRows={6}
-                            placeholder="Component - What did or do you do that brings you closer towards achieving your Mission ? (products, services or results)"
+                            placeholder="Component - What did or do you do that brings you closer towards achieving your Mission ?"
                             onChange={e => {setBody(e.target.value);}}
                         />
                     </div>
