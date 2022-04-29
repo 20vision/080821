@@ -63,6 +63,13 @@ const ClickOutside = onClickOutside(() =>{
             animate={{ y: 0 }}
             className={styles.modalChild}
             >
+                {modal == 1?
+                    <div>
+                        Coming soon
+                    </div>
+                :
+                    null
+                }
                 {/* {modal == 1 ?
                     <ConnectWallet/>
                 :modal == 2 ?
