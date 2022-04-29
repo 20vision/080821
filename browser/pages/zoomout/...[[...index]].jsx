@@ -1,128 +1,125 @@
-export default function index(){
-    return new Error()
+import axios from "axios"
+import { useEffect, useState } from "react"
+import ZoomoutLayout from '../../layouts/zoomout'
+import BubbleEdit from '../../components/Forum/BubbleEdit'
+import BubbleBasicLayout from "../../components/Forum/BubbleBasicLayout"
+import useUserProfile from "../../hooks/User/useUserProfile"
+import { toast } from "react-toastify"
+import { useRouter } from "next/router"
+import Square from "../../components/Forum/Square"
+import BubbleView from "../../components/Forum/BubbleView"
+
+export default function index() {
+    const router = useRouter()
+
+    useEffect(async() => {
+        const forumQuery = router.asPath.split('?')
+        if(forumQuery.length == 2) {
+            fetchTarget(setData,`discover/0?${forumQuery[1]}`)
+        }else{
+            fetchTarget(setData,`discover/0`)
+        }
+    },[])
+
+    const [data, setData] = useState([])
+
+    return(
+        <ZoomoutLayout>
+            <Bubble data={data} setData={setData}/>
+        </ZoomoutLayout>
+    )
+
 }
-// import axios from "axios"
-// import { useEffect, useState } from "react"
-// import ZoomoutLayout from '../../layouts/zoomout'
-// import BubbleEdit from '../../components/Forum/BubbleEdit'
-// import BubbleBasicLayout from "../../components/Forum/BubbleBasicLayout"
-// import useUserProfile from "../../hooks/User/useUserProfile"
-// import { toast } from "react-toastify"
-// import { useRouter } from "next/router"
-// import Square from "../../components/Forum/Square"
-// import BubbleView from "../../components/Forum/BubbleView"
 
-// export default function index() {
-//     const router = useRouter()
+const fetchTarget = async (setData, type) => {
+    try{
+        console.log((await axios.get(`https://api.20.vision/get/forum/${type}`)).data)
+    }catch(err){
+        console.error(err)
+        return null
+    }
+}
 
-//     useEffect(async() => {
-//         const forumQuery = router.asPath.split('?')
-//         if(forumQuery.length == 2) {
-//             fetchTarget(setData,`discover/0?${forumQuery[1]}`)
-//         }else{
-//             fetchTarget(setData,`discover/0`)
-//         }
-//     },[])
+const Bubble = ({data, setData}) => {
+    const [highlightIndex, setHighlightIndex] = useState(0)
+    const [loadingVertical, setLoadingVertical] = useState(false)
+    const [loadingHorizontal, setLoadingHorizontal] = useState(false)
+    const [selected, setSelected] = useState(false)
+    const [editHexColor, setEditHexColor] = useState()
+    const [profile, isLoading, setUser] = useUserProfile()
+    const router = useRouter()
 
-//     const [data, setData] = useState([])
+    useEffect(() => {
+        // Horizontal Fetching
+        if( 
+            !loadingHorizontal &&
+            data && 
+            (data.length < (highlightIndex+2))
+        ){
+            setLoadingHorizontal(false)
+            console.log('fetch horizontal')
+        }
+    }, [data, highlightIndex])
 
-//     return(
-//         <ZoomoutLayout>
-//             <Bubble data={data} setData={setData}/>
-//         </ZoomoutLayout>
-//     )
+    useEffect(() => {
+        // Vertical Fetching
+        if(
+            !loadingVertical &&
+            data &&
+            data[highlightIndex] &&
+            data[highlightIndex].fp_uid &&
+            (data[highlightIndex].target_fp_uid != data[highlightIndex].fp_uid)
+        ){
+            setLoadingVertical(false)
+            console.log('fetch horizontal')
+        }
+    }, [highlightIndex])
 
-// }
+    const sendPostFunction = async(forum_post_param, editHexColor_param) => {
+        try{
+            await axios.post(`https://api.20.vision/post/forum/post/${
+                data[highlightIndex].component?
+                    '_/_/'+data[highlightIndex].component.uid
+                :data[highlightIndex].mission?
+                    data[highlightIndex].mission.unqiue_pagename+'/'+data[highlightIndex].mission.title+'/_'
+                :
+                    data[highlightIndex].page+'/_/_'
+            }`,
+                {forum_post: forum_post_param, hex_color: editHexColor_param},
+                {withCredentials: true})
+        }catch(err){
+            console.error(err)
+            toast.error(err)
+        }
+    }
 
-// const fetchTarget = async (setData, type) => {
-//     try{
-//         console.log((await axios.get(`https://api.20.vision/get/forum/${type}`)).data)
-//     }catch(err){
-//         console.error(err)
-//         return null
-//     }
-// }
+    return(
+        <>
+            <div style={{marginBottom: 50}}>
+                {data[highlightIndex] && data[highlightIndex].page && !selected?
+                    <Square content={data[highlightIndex]}/>
+                :data[highlightIndex] && data[highlightIndex].mission  && !selected?
+                    <a style={{marginTop: 40}} onClick={() => setSelected(true)}><Square content={data[highlightIndex]}/></a>
+                :data[highlightIndex] && data[highlightIndex].component  && !selected?
+                    <a style={{marginTop: 40}} onClick={() => setSelected(true)}><Square content={data[highlightIndex]}/></a>
+                :data[highlightIndex] && data[highlightIndex].forumpost  && !selected?
+                    <a style={{marginTop: 40}} onClick={() => setSelected(true)}><BubbleView/></a>
+                :null}
+            </div>
 
-// const Bubble = ({data, setData}) => {
-//     const [highlightIndex, setHighlightIndex] = useState(0)
-//     const [loadingVertical, setLoadingVertical] = useState(false)
-//     const [loadingHorizontal, setLoadingHorizontal] = useState(false)
-//     const [selected, setSelected] = useState(false)
-//     const [editHexColor, setEditHexColor] = useState()
-//     const [profile, isLoading, setUser] = useUserProfile()
-//     const router = useRouter()
-
-//     useEffect(() => {
-//         // Horizontal Fetching
-//         if( 
-//             !loadingHorizontal &&
-//             data && 
-//             (data.length < (highlightIndex+2))
-//         ){
-//             setLoadingHorizontal(false)
-//             console.log('fetch horizontal')
-//         }
-//     }, [data, highlightIndex])
-
-//     useEffect(() => {
-//         // Vertical Fetching
-//         if(
-//             !loadingVertical &&
-//             data &&
-//             data[highlightIndex] &&
-//             data[highlightIndex].fp_uid &&
-//             (data[highlightIndex].target_fp_uid != data[highlightIndex].fp_uid)
-//         ){
-//             setLoadingVertical(false)
-//             console.log('fetch horizontal')
-//         }
-//     }, [highlightIndex])
-
-//     const sendPostFunction = async(forum_post_param, editHexColor_param) => {
-//         try{
-//             await axios.post(`https://api.20.vision/post/forum/post/${
-//                 data[highlightIndex].component?
-//                     '_/_/'+data[highlightIndex].component.uid
-//                 :data[highlightIndex].mission?
-//                     data[highlightIndex].mission.unqiue_pagename+'/'+data[highlightIndex].mission.title+'/_'
-//                 :
-//                     data[highlightIndex].page+'/_/_'
-//             }`,
-//                 {forum_post: forum_post_param, hex_color: editHexColor_param},
-//                 {withCredentials: true})
-//         }catch(err){
-//             console.error(err)
-//             toast.error(err)
-//         }
-//     }
-
-//     return(
-//         <>
-//             <div style={{marginBottom: 50}}>
-//                 {data[highlightIndex] && data[highlightIndex].page && !selected?
-//                     <Square content={data[highlightIndex]}/>
-//                 :data[highlightIndex] && data[highlightIndex].mission  && !selected?
-//                     <a style={{marginTop: 40}} onClick={() => setSelected(true)}><Square content={data[highlightIndex]}/></a>
-//                 :data[highlightIndex] && data[highlightIndex].component  && !selected?
-//                     <a style={{marginTop: 40}} onClick={() => setSelected(true)}><Square content={data[highlightIndex]}/></a>
-//                 :data[highlightIndex] && data[highlightIndex].forumpost  && !selected?
-//                     <a style={{marginTop: 40}} onClick={() => setSelected(true)}><BubbleView/></a>
-//                 :null}
-//             </div>
-
-//             {(data[highlightIndex] && data[highlightIndex].sub && ((data[highlightIndex].left + 1) != data[highlightIndex].right))  && !selected?
-//                 <Bubble data={data[highlightIndex].sub}/>
-//             :profile.username?
-//                 <div style={{marginTop: -20}}>
-//                     <BubbleBasicLayout profile={profile} color={editHexColor}>
-//                         <BubbleEdit sendPost={forum_post => sendPostFunction(forum_post,editHexColor)} setEditHexColor={setEditHexColor} clickOutsideBubbleEdit={() => setSelected(false)}/>
-//                     </BubbleBasicLayout>
-//                 </div>
+            {(data[highlightIndex] && data[highlightIndex].sub && ((data[highlightIndex].left + 1) != data[highlightIndex].right))  && !selected?
+                <Bubble data={data[highlightIndex].sub}/>
+            :profile.username?
+                <div style={{marginTop: -20}}>
+                    <BubbleBasicLayout profile={profile} color={editHexColor}>
+                        <BubbleEdit sendPost={forum_post => sendPostFunction(forum_post,editHexColor)} setEditHexColor={setEditHexColor} clickOutsideBubbleEdit={() => setSelected(false)}/>
+                    </BubbleBasicLayout>
+                </div>
                 
-//             :null}
-//         </>
-//     )
-// }
+            :null}
+        </>
+    )
+}
 
 // // import { useState, useEffect, useRef, useCallback, createRef } from 'react'
 // // import ForumLayout from '../../layouts/forum'

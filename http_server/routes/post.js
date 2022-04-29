@@ -159,7 +159,7 @@ router.post("/component", check.AuthRequired, async (req, res) => {
                                     [null, data.timefolder+data.randomfolder, req.body.header, req.body.body, mission_id[0].mission_id, req.body.type, 0, null],
                                     function(err, results) {
                                         if (err) throw err
-                                        res.status(200).send()
+                                        res.json(data.timefolder+data.randomfolder)
                                     }
                                 );
                             }catch(error){
@@ -176,6 +176,78 @@ router.post("/component", check.AuthRequired, async (req, res) => {
             );
         }
         pool.releaseConnection(conn);
+    })
+})
+
+router.post("/component/connection", check.AuthRequired, async (req, res) => {
+    pool.getConnection(async function(err, conn) {
+        if (err){
+            res.status(500).send('An error occurred')
+            console.log(err)
+        }else{
+            try{
+                const component_id = await gets.getComponentIdFromUidUserPostPermission({conn, uid: req.body.uid, user_id: req.user_id})
+                const child_component_id = await gets.getComponentIdFromUidUserPostPermission({conn, uid: req.body.child_uid, user_id: req.user_id})
+                conn.query(
+                    `SELECT count(cc.component_connection_id) as nextIndex from
+                    ComponentConnection cc where cc.component_id = ?;`,
+                    [component_id],
+                    async function(err, results) {
+                        if (err){
+                            res.status(500).send('An error occurred')
+                            console.log(err)
+                        }else{
+                            await inserts.component_connection({
+                                conn,
+                                component_id:component_id,
+                                child_component_id:child_component_id,
+                                child_component_index: results&&(results.length == 1)&&results[0].nextIndex?results[0].nextIndex:0
+                            })
+                        }
+                    }
+                )
+            }catch(err){
+                console.log(err)
+                res.status(err.status).send(err.message)
+            }
+            
+            // conn.query(
+            //     `SELECT count(cc.component_connection_id) as nextIndex, c.component_id from Component c
+            //     join Mission m on m.mission_id = c.mission_id 
+            //     join Page p on p.page_id = m.page_id 
+            //     join PageUser pu on pu.page_id = p.page_id
+            //     left join ComponentConnection c on c.component_id = cc.component_id
+            //     where c.uid = ? and pu.user_id = ?;`,
+            //     [req.body.pagename, req.body.mission, req.user_id],
+            //     async function(err, results) {
+            //         if (err){
+            //             res.status(500).send('An error occurred')
+            //             console.log(err)
+            //         }else if(results && (results.length == 1) && results[0].component_id){
+            //             conn.query(
+            //                 `SELECT count(cc.component_connection_id) as nextIndex, c.component_id from Component c
+            //                 join Mission m on m.mission_id = c.mission_id 
+            //                 join Page p on p.page_id = m.page_id 
+            //                 join PageUser pu on pu.page_id = p.page_id
+            //                 where ;`,
+            //                 [req.body.pagename, req.body.mission, req.user_id],
+            //                 async function(err, results) {
+            //                     if (err){
+            //                         res.status(500).send('An error occurred')
+            //                         console.log(err)
+            //                     }else if(results && (results.length == 1) && results[0].component_id){
+            //                         results[0].nextIndex
+            //                     }else{
+            //                         res.status(400).send('Could not connect Components')
+            //                     }
+            //                 }
+            //             )
+            //         }else{
+            //             res.status(400).send('Could not connect Components')
+            //         }
+            //     }
+            // )
+        }
     })
 })
 

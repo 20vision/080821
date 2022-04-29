@@ -7,7 +7,7 @@ import FilePondPluginFileValidateType from 'filepond-plugin-file-validate-type';
 import FilePondPluginFilePoster from 'filepond-plugin-file-poster';
 import FilePondPluginFileEncode from 'filepond-plugin-file-encode';
 import 'filepond-plugin-file-poster/dist/filepond-plugin-file-poster.css';
-import FilePondPluginImageEditor from '../../local_modules/filepond-plugin-image-editor/FilePondPluginImageEditor';
+import FilePondPluginImageEditor from 'filepond-plugin-image-editor';
 import { useRouter } from 'next/router'
 import { toast } from 'react-toastify'
 import axios from 'axios'
@@ -45,7 +45,7 @@ import {
     markup_editor_defaults,
     plugin_finetune_defaults,
 
-} from '../../local_modules/pintura/pintura'
+} from 'pintura'
 //import Checkbox from '../User/Checkbox/Checkbox';
 
 setPlugins(plugin_crop, plugin_finetune, plugin_annotate, plugin_sticker);
@@ -56,7 +56,7 @@ export default function Edit(){
     const [imageExists, setImageExists] = useState(false)
     const [base64Image, setBase64Image] = useState()
     const [loading, setLoading] = useState(false)
-    const [type, setType] = useState('p')
+    const [type, setType] = useState('r')
     // const [selectedComponents, setSelectedComponents] = useState()
     // const [components, setComponents] = useState([
     //     {id:0, uid: 'ds1212af', content: 'okk'},
@@ -72,22 +72,15 @@ export default function Edit(){
     return(
         <div className={styles.parentContainer}>
             <div className={`noselect ${styles.nav}`}>
+                <h1 onClick={() => setType('r')} style={{marginRight: '10px'}} className={`${type == 'r'?styles.highlightR:null}`}>
+                    Result
+                </h1>
                 <h1 onClick={() => setType('p')} style={{marginLeft: '10px'}} className={`${type == 'p'?styles.highlightP:null}`}>
                     Product
                 </h1>
                 <h1 onClick={() => setType('s')} style={{marginRight: '10px'}} className={`${type == 's'?styles.highlightS:null}`}>
                     Service
                 </h1>
-                <h1 onClick={() => setType('r')} style={{marginRight: '10px'}} className={`${type == 'r'?styles.highlightR:null}`}>
-                    Result
-                </h1>
-                {/* <h1 onClick={() => setType(1)} style={{marginRight: '10px'}} className={`${type == 1?styles.highlight:null}`}>
-                    Sub-Components
-                </h1> 
-                
-                <h1 onClick={() => setType(2)} style={{marginLeft: '10px'}} className={`${type == 2?styles.highlight:null}`}>
-                    %
-                </h1> */}
             </div>
 
             <div className={styles.editContainer}>
@@ -164,7 +157,7 @@ export default function Edit(){
                             disabled={loading}
                             style={{overflow: 'auto'}}
                             minRows={6}
-                            placeholder="Component - What did or do you do that brings you closer towards achieving your Mission ? (products, services or results)"
+                            placeholder="Component - What did or do you do that brings you closer towards achieving your Mission ?"
                             onChange={e => {setBody(e.target.value);}}
                         />
                     </div>
@@ -220,11 +213,18 @@ export default function Edit(){
                         pagename: router.query.page,
                         mission: router.query.mission
                     },{withCredentials: true})
+
+                    if(router.query.component){
+                        const responseConnection = await axios.post(`https://api.20.vision/post/component/connection`,{
+                            component_id: router.query.component,
+                            child_component_id: response,
+                        },{withCredentials: true})
+                    }
                     setModal(0)
                 }catch(err){
                     console.log(err)
                     setLoading(false)
-                    if(err.response.status && (err.response.status != 500)) return toast.error(err.response.data)
+                    if(err && err.response && err.response.status && (err.response.status != 500)) return toast.error(err.response.data)
                     toast.error('An error occurred')
                 }
             }} 

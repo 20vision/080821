@@ -65,11 +65,7 @@ const ClickOutside = onClickOutside(() =>{
             >
 
                 {modal == 1 ?
-                    <div>
-                        <h1 style={{marginBottom: 10}}>Coming soon</h1>
-                        <div>This feature is currently in developent but will be available soon.</div>
-                    </div>
-                    //<ConnectWallet/>
+                    <ConnectWallet/>
                 :modal == 2 ?
                     <User/>
                 :modal == 3 ?
@@ -77,7 +73,7 @@ const ClickOutside = onClickOutside(() =>{
                 :modal == 4 ?
                     <CreateTopicOrMission type='mission'/>
                 :modal == 5 ?
-                    null//<Trade/>
+                    <Trade/>
                 :modal == 6 ?
                     <CreateTopicOrMission type='topic'/>
                 :modal == 7 ?
