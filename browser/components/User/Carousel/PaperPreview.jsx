@@ -85,7 +85,6 @@ export default function PaperPreview({setSelectedComponent}){
               if(isInWheelTransition) return
               if((scrollInfo.deltaY < 0) && (0 != highlightIndex)){
                 setIsInWheelTransition(true)
-                console.log('scroll')
                 await controls.start(() => {
                   return({
                       opacity: 0,
@@ -97,7 +96,6 @@ export default function PaperPreview({setSelectedComponent}){
                 setHighlightIndex(highlightIndex-1)
               }else if((scrollInfo.deltaY > 0) && (components.length > (highlightIndex+1))){
                 setIsInWheelTransition(true)
-                console.log('scroll')
                 await controls.start(() => {
                   return({
                       opacity: 0,

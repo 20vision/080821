@@ -63,7 +63,6 @@ const Bubble = ({data, setData}) => {
             (data.length < (highlightIndex+2))
         ){
             setLoadingHorizontal(false)
-            console.log('fetch horizontal')
         }
     }, [data, highlightIndex])
 
@@ -77,7 +76,6 @@ const Bubble = ({data, setData}) => {
             (data[highlightIndex].target_fp_uid != data[highlightIndex].fp_uid)
         ){
             setLoadingVertical(false)
-            console.log('fetch horizontal')
         }
     }, [highlightIndex])
 
