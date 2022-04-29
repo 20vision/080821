@@ -215,7 +215,7 @@ export default function Edit(){
                     },{withCredentials: true})
 
                     if(router.query.component){
-                        const responseConnection = await axios.post(`https://api.20.vision/post/component`,{
+                        const responseConnection = await axios.post(`https://api.20.vision/post/component/connection`,{
                             component_id: router.query.component,
                             child_component_id: response,
                         },{withCredentials: true})
