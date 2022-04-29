@@ -64,9 +64,9 @@ const ClickOutside = onClickOutside(() =>{
             className={styles.modalChild}
             >
                 {modal == 1?
-                    <div>
+                    <h1>
                         Coming soon
-                    </div>
+                    </h1>
                 :
                     null
                 }
