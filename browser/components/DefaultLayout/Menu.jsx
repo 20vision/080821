@@ -217,26 +217,26 @@ function UserConnection({ type, page }) {
         2 = Show "Create Page" or "Select Page" as user is authenticated
     */
 
-    if(type == 1){
-        return (
-            <a onClick={() => setModal(1)}>
-                <div className={styles.connectWallet}>
-                    <h2>Connect Wallet</h2>
-                </div>
-            </a>
-        )
-    }else if(type == 2){
-        return(
-            <a onClick={() => setModal(3)}>
-                <div className={styles.createPageContainer}>
-                        <Plus color="#FAFAFA"/>
-                    <h2>
-                        Add Page
-                    </h2>
-                </div>
-            </a>
-        )
-    }else{
+    // if(type == 1){
+    //     return (
+    //         <a onClick={() => setModal(1)}>
+    //             <div className={styles.connectWallet}>
+    //                 <h2>Connect Wallet</h2>
+    //             </div>
+    //         </a>
+    //     )
+    // }else if(type == 2){
+    //     return(
+    //         <a onClick={() => setModal(3)}>
+    //             <div className={styles.createPageContainer}>
+    //                     <Plus color="#FAFAFA"/>
+    //                 <h2>
+    //                     Add Page
+    //                 </h2>
+    //             </div>
+    //         </a>
+    //     )
+    // }else{
         return(
             <div className={styles.myPageContainer}>
                 <Link href={`/${page.unique_pagename}`}><a className={styles.pageLink}>
@@ -255,7 +255,7 @@ function UserConnection({ type, page }) {
                 <a onClick={(e) => {e.preventDefault; setModal(3);}}><Chevron color="#FAFAFA" direction="180"/></a>
             </div>
         )
-    }
+    // }
     
 }
 

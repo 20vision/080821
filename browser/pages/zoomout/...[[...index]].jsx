@@ -9,7 +9,13 @@ import { useRouter } from "next/router"
 import Square from "../../components/Forum/Square"
 import BubbleView from "../../components/Forum/BubbleView"
 
-export default function index() {
+
+//For Release
+export default function index(){
+    return null
+}
+
+export function zoomout() {
     const router = useRouter()
 
     useEffect(async() => {

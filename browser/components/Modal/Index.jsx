@@ -63,8 +63,7 @@ const ClickOutside = onClickOutside(() =>{
             animate={{ y: 0 }}
             className={styles.modalChild}
             >
-
-                {modal == 1 ?
+                {/* {modal == 1 ?
                     <ConnectWallet/>
                 :modal == 2 ?
                     <User/>
@@ -79,7 +78,7 @@ const ClickOutside = onClickOutside(() =>{
                 :modal == 7 ?
                     <Component/>
                 :
-                    null}
+                    null} */}
 
             </motion.div>
         </div>
