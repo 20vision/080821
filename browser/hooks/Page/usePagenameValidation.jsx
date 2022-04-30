@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react"
 import axios from 'axios'
+import config from '../../public/config.json'
 
 const usePagenameValidation = () => {
     const regex = /^[a-zA-Z0-9_.]*$/
@@ -30,7 +31,7 @@ const usePagenameValidation = () => {
                     setPagenameError('/'+newPagename.toLowerCase()+' is not available')
                     setValidPagenameLoading(false)
                 }else{
-                    axios.post('https://api.20.vision/get/pagename_unique',{pagename: newPagename}
+                    axios.post(`${config.HTTP_SERVER_URL}/get/pagename_unique`,{pagename: newPagename}
                     ).then(response => {
                         setPagename(newPagename)
                     })

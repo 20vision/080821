@@ -18,6 +18,7 @@ import {animateScroll} from 'react-scroll';
 import { useRef } from "react";
 import { motion } from 'framer-motion';
 import useWindowSize from "../hooks/Page/useWindowsSize";
+import config from '../public/config.json'
 
 export default function PageLayout( {children, page, comp, subs} ) {
     return (
@@ -42,8 +43,8 @@ var Panel = onClickOutside(({children, page, subs, comp}) => {
 
     useEffect(async() => {
         try{
-            setDependentsCount((await axios.get(`https://api.20.vision/get/component/${router.query.component}/dependents/count`)).data.count)
-            setDependents([...(await axios.get(`https://api.20.vision/get/component/${router.query.component}/dependents/0`)).data.dependents])
+            setDependentsCount((await axios.get(`${config.HTTP_SERVER_URL}/get/component/${router.query.component}/dependents/count`)).data.count)
+            setDependents([...(await axios.get(`${config.HTTP_SERVER_URL}/get/component/${router.query.component}/dependents/0`)).data.dependents])
         }catch(error){
             console.error(error)
         }
@@ -83,7 +84,7 @@ var Panel = onClickOutside(({children, page, subs, comp}) => {
                                     next={
                                         async() => {
                                             try{
-                                                const data = (await axios.get(`https://api.20.vision/get/component/${router.query.component}/dependents/${dependents?(dependents.length-1):0}`)).data
+                                                const data = (await axios.get(`${config.HTTP_SERVER_URL}/get/component/${router.query.component}/dependents/${dependents?(dependents.length-1):0}`)).data
                                                 setDependents([...dependents,...data])
                                             }catch(err){
                                                 console.log(err)

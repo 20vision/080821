@@ -8,12 +8,7 @@ import { toast } from "react-toastify"
 import { useRouter } from "next/router"
 import Square from "../../components/Forum/Square"
 import BubbleView from "../../components/Forum/BubbleView"
-
-
-//For Release
-export default function index(){
-    return null
-}
+import config from '../../public/config.json'
 
 export function zoomout() {
     const router = useRouter()
@@ -29,17 +24,22 @@ export function zoomout() {
 
     const [data, setData] = useState([])
 
-    return(
-        <ZoomoutLayout>
-            <Bubble data={data} setData={setData}/>
-        </ZoomoutLayout>
-    )
+    if(config.HTTP_SERVER_URL != 'https://localhost:3000'){
+        return null
+    }else{
+        return(
+            <ZoomoutLayout>
+                <Bubble data={data} setData={setData}/>
+            </ZoomoutLayout>
+        )
+    }
+    
 
 }
 
 const fetchTarget = async (setData, type) => {
     try{
-        console.log((await axios.get(`https://api.20.vision/get/forum/${type}`)).data)
+        console.log((await axios.get(`${config.HTTP_SERVER_URL}/get/forum/${type}`)).data)
     }catch(err){
         console.error(err)
         return null
@@ -81,7 +81,7 @@ const Bubble = ({data, setData}) => {
 
     const sendPostFunction = async(forum_post_param, editHexColor_param) => {
         try{
-            await axios.post(`https://api.20.vision/post/forum/post/${
+            await axios.post(`${config.HTTP_SERVER_URL}/post/forum/post/${
                 data[highlightIndex].component?
                     '_/_/'+data[highlightIndex].component.uid
                 :data[highlightIndex].mission?
@@ -177,7 +177,7 @@ const Bubble = ({data, setData}) => {
 // //     console.log(dataset)
 // //     if(profile.username != null){
 // //       try{
-// //         const query = (await axios.get(`https://api.20.vision/get${router.asPath}`,{withCredentials: true})).data
+// //         const query = (await axios.get(`${config.HTTP_SERVER_URL}/get${router.asPath}`,{withCredentials: true})).data
 // //         setTreeCount(query.tree_count)
 // //         setDataset(query.content)
 // //       }catch(err){
@@ -213,7 +213,7 @@ const Bubble = ({data, setData}) => {
         
 // //         if(filtered.length == 0){
 // //           try{
-// //             const getPosts = await axios.get(`https://api.20.vision/get/forum/_/replies/${new_dataset[y][new_selectedContent[y]].forumpost_id}`,{
+// //             const getPosts = await axios.get(`${config.HTTP_SERVER_URL}/get/forum/_/replies/${new_dataset[y][new_selectedContent[y]].forumpost_id}`,{
 // //               withCredentials: true
 // //             })
 // //             if(getPosts.data.length > 0){
@@ -247,7 +247,7 @@ const Bubble = ({data, setData}) => {
 // //       (i==0?(filteredContent[i].length<treeCount):(new_dataset[i][new_filteredContent[i].length - 1].next)) &&
 // //       (filteredContent[i].length % 3 == 0)){
 // //         console.log('LOADING')
-// //       axios.get(`https://api.20.vision/get/forum/_/posts/${new_dataset[i][new_selectedContent[i]].forumpost_parent_id}?depth=${i}${
+// //       axios.get(`${config.HTTP_SERVER_URL}/get/forum/_/posts/${new_dataset[i][new_selectedContent[i]].forumpost_parent_id}?depth=${i}${
 // //         filteredContent[i]?'&offset='+(filteredContent[i].length/3):''}${(i!=0)?'&parent_id='+new_dataset[i-1][new_selectedContent[i-1]].forumpost_id:''}`,{
 // //         withCredentials: true
 // //       }).then(response => {
@@ -269,7 +269,7 @@ const Bubble = ({data, setData}) => {
 // //   })
 
 // //   const sendPost = (post, hex, index) => {
-// //     axios.post(`https://api.20.vision/post/forum/${dataset[0][selectedContent[0]].unique_pagename}/${
+// //     axios.post(`${config.HTTP_SERVER_URL}/post/forum/${dataset[0][selectedContent[0]].unique_pagename}/${
 // //       (index == 1)?
 // //         'page'
 // //       :(dataset[index - 1][selectedContent[index - 1]].forumpost_id)?
@@ -515,7 +515,7 @@ const Bubble = ({data, setData}) => {
 // //                     inFront={idx==frontIndex}
 // //                     setLike={
 // //                       () => new Promise((resolve, reject) => {
-// //                         axios.post(`https://api.20.vision/update/forum/like`,
+// //                         axios.post(`${config.HTTP_SERVER_URL}/update/forum/like`,
 // //                         {forumpost_id: cont.forumpost_id}
 // //                         ,{withCredentials: true}
 // //                         ).then(async response => {
@@ -565,7 +565,7 @@ const Bubble = ({data, setData}) => {
 
 // // export async function getServerSideProps(context) {
 // //   try{
-// //     const res = await axios.get(`https://api.20.vision/get/${context.resolvedUrl}`)
+// //     const res = await axios.get(`${config.HTTP_SERVER_URL}/get/${context.resolvedUrl}`)
 // //     return{
 // //       props: {
 // //         ssrContent: res.data.content?res.data.content:null,

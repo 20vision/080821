@@ -5,6 +5,7 @@ import { useRouter } from 'next/router'
 import Link from 'next/link'
 import { useEffect,useState } from 'react'
 import axios from 'axios'
+import config from '../../public/config.json'
 
 export default function Missions({missions}) {
     const router = useRouter()
@@ -13,7 +14,7 @@ export default function Missions({missions}) {
 
     useEffect(async() => {
         try{
-            setComponentCount((await axios.get('https://api.20.vision/get/page/'+router.query.page+'/component/count')).data)
+            setComponentCount((await axios.get(`${config.HTTP_SERVER_URL}/get/page/`+router.query.page+'/component/count')).data)
         }catch(err){
             console.error(err)
         }

@@ -14,6 +14,7 @@ import axios from 'axios'
 import Loading from '../../assets/Loading/Loading'
 import { useModalStore } from '../../store/modal'
 //import Dragable from '../User/Dragable/Dragable'
+import config from '../../public/config.json'
 
 registerPlugin(FilePondPluginFileEncode, FilePondPluginFileValidateType, FilePondPluginFilePoster, FilePondPluginImageEditor)
 
@@ -205,7 +206,7 @@ export default function Edit(){
                 const base64Image = pond.getFile().getFileEncodeDataURL()
                 try{
                     setLoading(true)
-                    const response = await axios.post(`https://api.20.vision/post/component`,{
+                    const response = await axios.post(`${config.HTTP_SERVER_URL}/post/component`,{
                         image: base64Image, 
                         type: type,
                         header: header, 
@@ -215,7 +216,7 @@ export default function Edit(){
                     },{withCredentials: true})
 
                     if(router.query.component){
-                        const responseConnection = await axios.post(`https://api.20.vision/post/component/connection`,{
+                        const responseConnection = await axios.post(`${config.HTTP_SERVER_URL}/post/component/connection`,{
                             component_id: router.query.component,
                             child_component_id: response,
                         },{withCredentials: true})

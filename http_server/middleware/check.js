@@ -1,5 +1,6 @@
 let pool = require('../config/db');
 var keys = require('../config/keys');
+var passwords = require('../config/passwords')
 const jwt = require('jsonwebtoken');
 const { PublicKey, Transaction, SystemProgram } = require('@solana/web3.js');
 const bs58 = require('bs58')
@@ -37,7 +38,12 @@ exports.AuthOptional = function(req, res, next) {
     }
 }
 
+exports.DevMode = function(req, res, next){
+    if(passwords.express != 'password') return res.status(422).send('Not allowed')
+}
+
 exports.AuthRequired = function(req, res, next) {
+
     if(req.cookies['auth_token']){
         jwt.verify(req.cookies['auth_token'], keys.JWT_SECRET, function(err, decoded) {
             if(err){

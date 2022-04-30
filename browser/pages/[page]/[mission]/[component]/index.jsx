@@ -12,7 +12,7 @@ export default function Component({component, subComponents, params}){
   
   useEffect(async() => {
     try{
-      setPage((await axios.get(`https://api.20.vision/get/page/${params.page}?missions=false`)).data.page)
+      setPage((await axios.get(`${config.HTTP_SERVER_URL}/get/page/${params.page}?missions=false`)).data.page)
     }catch(error){
       console.error(error)
     }
@@ -60,7 +60,7 @@ export default function Component({component, subComponents, params}){
 
 export async function getServerSideProps(context) {
   try{
-    const res = await axios.get(`https://api.20.vision/get/component/${context.params.component}`)
+    const res = await axios.get(`${config.HTTP_SERVER_URL}/get/component/${context.params.component}`)
     return{
       props: {
         params: context.params,

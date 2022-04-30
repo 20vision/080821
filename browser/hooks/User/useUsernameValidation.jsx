@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react"
 import axios from 'axios'
 import useUserProfile from './useUserProfile'
+import config from '../../public/config.json'
 
 const useUsernameValidation = () => {
     const [profile, isLoading, setUser] = useUserProfile()
@@ -14,7 +15,7 @@ const useUsernameValidation = () => {
     function publishNewUsername(){
         if((valid == true )&&(username != profile.username)){
             setLoading(true)
-            axios.post('https://api.20.vision/update/username',{username: username},{
+            axios.post(`${config.HTTP_SERVER_URL}/update/username`,{username: username},{
             withCredentials: true
             }).then(response => {
                 let newProfile = profile
@@ -52,7 +53,7 @@ const useUsernameValidation = () => {
                         setErrorMsg('@'+username+' is not a valid username')
                         setLoading(false)
                     }else{
-                        axios.post('https://api.20.vision/get/username_unique',{username: username}
+                        axios.post(`${config.HTTP_SERVER_URL}/get/username_unique`,{username: username}
                         ).then(response => {
                             setValid(true)
                         })

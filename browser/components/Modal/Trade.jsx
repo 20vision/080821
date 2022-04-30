@@ -17,6 +17,7 @@ import { Token, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/sp
 import { getBigNumber, connection, MINT_LAYOUT, ACCOUNT_LAYOUT, VISION_PROGRAM_ID } from '../../hooks/web3/useContract';
 import * as BufferLayout from "buffer-layout";
 import useSolPrice from '../../hooks/web3/useSolPrice';
+import config from '../../public/config.json'
 
 const publicKey = (property = 'publicKey') => {
   return BufferLayout.blob(32, property);
@@ -229,7 +230,7 @@ export default function Trade() {
   useEffect(async() => {
     if(queryRoute){
       try{
-        await axios.get(`https://api.20.vision/get/page/${queryRoute}/trade_info`,{
+        await axios.get(`${config.HTTP_SERVER_URL}/get/page/${queryRoute}/trade_info`,{
           withCredentials: true
         }
         ).then(async response => {
@@ -329,7 +330,7 @@ export default function Trade() {
       tx.feePayer = publicKey
       tx.partialSign(new_mint_keypair);
       const signedTx = await signTransaction(tx)
-      axios.post('https://api.20.vision/post/fundPageToken',{tx: signedTx.serialize(), unique_pagename: queryRoute},{
+      axios.post(`${config.HTTP_SERVER_URL}/post/fundPageToken`,{tx: signedTx.serialize(), unique_pagename: queryRoute},{
         withCredentials: true
       }
       ).then(async response => {

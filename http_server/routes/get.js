@@ -26,7 +26,7 @@ router.get("/topic_title_unique/:pagename/:topic_title", input_validation.checkU
     res.status(200).send()
 });
 
-router.get("/my_pages/:page", check.AuthRequired, async (req, res) => {
+router.get("/my_pages/:page", check.AuthRequired, check.DevMode, async (req, res) => {
     if(req.user_id){
         pool.query(
             'SELECT p.page_icon, p.pagename, p.unique_pagename, p.vision FROM PageUser pu join Page p on pu.page_id = p.page_id where pu.user_id = ? order by pu.last_selected desc limit ?, 6;',

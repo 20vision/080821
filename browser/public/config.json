@@ -1,3 +1,4 @@
 {
-    "FILE_SERVER_URL": "https://storage.googleapis.com/"
+    "FILE_SERVER_URL": "https://storage.googleapis.com/",
+    "HTTP_SERVER_URL": "https://localhost:3000"
 }

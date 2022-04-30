@@ -1,5 +1,6 @@
 import PagePanel from "../../components/DefaultLayout/PagePanel"
 import axios from 'axios'
+import config from '../../public/config.json'
 
 export default function index({page, missions}) {
   return <PagePanel page={page} missions={missions}/>
@@ -7,7 +8,7 @@ export default function index({page, missions}) {
 
 export async function getServerSideProps(context) {
   try{
-    const res = await axios.get(`https://api.20.vision/get/page/${context.params.page}?missions=true`)
+    const res = await axios.get(`${config.HTTP_SERVER_URL}/get/page/${context.params.page}?missions=true`)
     return{
       props: {
         page: res.data.page,

@@ -10,7 +10,9 @@ import { useModalStore } from '../../store/modal'
 import { useWallet } from '@solana/wallet-adapter-react';
 import { toast } from "react-toastify"
 import bs58 from 'bs58';
+import config from '../../public/config.json'
 import { useRouter } from 'next/router'
+
 export default function ConnectWallet() {
     
     const [step, setStep] = useState(1)
@@ -58,7 +60,7 @@ export default function ConnectWallet() {
             return
         }
 
-        axios.post('https://api.20.vision/wallet/connect',{username: username, publicKey: publicKey.toString(), signature: signature},{
+        axios.post(`${config.HTTP_SERVER_URL}/wallet/connect`,{username: username, publicKey: publicKey.toString(), signature: signature},{
             withCredentials: true
         }
         ).then(async response => {
@@ -106,7 +108,7 @@ export default function ConnectWallet() {
             return
         }
 
-        axios.post('https://api.20.vision/wallet/connect',{publicKey: publicKey.toString(), signature: signature},{
+        axios.post(`${config.HTTP_SERVER_URL}/wallet/connect`,{publicKey: publicKey.toString(), signature: signature},{
             withCredentials: true
         }
         ).then(async response => {
@@ -143,7 +145,7 @@ export default function ConnectWallet() {
 
     useEffect(() => {
         if(publicKey && connected && (step == 1)){
-            axios.post('https://api.20.vision/wallet/check_existing',{publicKey: publicKey.toString()}
+            axios.post(`${config.HTTP_SERVER_URL}/wallet/check_existing`,{publicKey: publicKey.toString()}
             ).then(async response => {
                 if(response.data.new == true){
                     setStep(2)

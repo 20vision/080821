@@ -4,7 +4,7 @@ const check = require('../middleware/check')
 const pool = require('../config/db');
 const input_validation = require('../middleware/input_validation');
 
-router.post("/profile_picture", check.AuthRequired, cloudStorage.profile_picture, async (req, res) => {
+router.post("/profile_picture", check.AuthRequired, check.DevMode, cloudStorage.profile_picture, async (req, res) => {
     if(!req.user_id){
         res.status(401).send('Not authenticated')
     }else if(!req.imageUrl){
@@ -14,7 +14,7 @@ router.post("/profile_picture", check.AuthRequired, cloudStorage.profile_picture
     }
 });
 
-router.post("/username", check.AuthRequired, input_validation.checkRegexUsername, input_validation.checkUniqueUsername, async (req, res) => {
+router.post("/username", check.AuthRequired, check.DevMode, input_validation.checkRegexUsername, input_validation.checkUniqueUsername, async (req, res) => {
     if(req.user_id){
         pool.query(
             'UPDATE User set username = ? where user_id = ?;',
@@ -34,7 +34,7 @@ router.post("/username", check.AuthRequired, input_validation.checkRegexUsername
 
 })
 
-router.post("/forum/like", check.AuthRequired, async (req, res) => {
+router.post("/forum/like", check.AuthRequired, check.DevMode, async (req, res) => {
     if(!req.body.forumpost_id || !Number.isInteger(req.body.forumpost_id)){
         console.log(req.body.forumpost_id)
         return res.status(422).send('invalid post id')

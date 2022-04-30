@@ -20,6 +20,7 @@ import Saved from '../../assets/Saved'
 import Loading from '../../assets/Loading/Loading'
 import Plus from '../../assets/Plus'
 import { useEffect,useState } from 'react'
+import config from '../../public/config.json'
 
 export default function Index() {
     const opened = useMenuStore(state => state.opened)
@@ -92,7 +93,7 @@ export function Menu({opened, setMenu, pathname}) {
     const myPages = useInfiniteQuery(
         'my_pages',
         async () => {
-            const res = await axios.get(`https://api.20.vision/get/my_pages/0`,{withCredentials: true})
+            const res = await axios.get(`${config.HTTP_SERVER_URL}/get/my_pages/0`,{withCredentials: true})
             return res.data
         },
         {

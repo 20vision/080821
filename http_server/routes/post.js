@@ -16,7 +16,7 @@ const { random_string } = require("../utils/random");
 const sharp = require('sharp')
 const { uploadFile, deleteFile } = require("../config/storage");
 
-router.post("/create_page", check.AuthRequired, input_validation.checkRegexPagename, input_validation.checkUniquePagename, input_validation.vision, async (req, res) => {
+router.post("/create_page", check.AuthRequired, check.DevMode, input_validation.checkRegexPagename, input_validation.checkUniquePagename, input_validation.vision, async (req, res) => {
     if(req.user_id){
         pool.getConnection(function(err, conn) {
             if (err){
@@ -51,7 +51,7 @@ router.post("/create_page", check.AuthRequired, input_validation.checkRegexPagen
     }
 });
 
-router.post("/mission", check.AuthRequired, check.role, input_validation.checkUniqueMissionTitle, input_validation.missionBody_topicBody_forumPost, async (req, res) => {
+router.post("/mission", check.AuthRequired, check.DevMode, check.role, input_validation.checkUniqueMissionTitle, input_validation.missionBody_topicBody_forumPost, async (req, res) => {
     if(req.user_id){
         pool.getConnection(function(err, conn) {
             if (err){
@@ -88,7 +88,7 @@ router.post("/mission", check.AuthRequired, check.role, input_validation.checkUn
     }
 });
 
-router.post("/component", check.AuthRequired, async (req, res) => {
+router.post("/component", check.AuthRequired, check.DevMode, async (req, res) => {
     if(!req.body.pagename){
         return res.status(422).send('Pagename missing')
     }else if(
@@ -179,7 +179,7 @@ router.post("/component", check.AuthRequired, async (req, res) => {
     })
 })
 
-router.post("/component/connection", check.AuthRequired, async (req, res) => {
+router.post("/component/connection", check.AuthRequired, check.DevMode, async (req, res) => {
     pool.getConnection(async function(err, conn) {
         if (err){
             res.status(500).send('An error occurred')
@@ -251,7 +251,7 @@ router.post("/component/connection", check.AuthRequired, async (req, res) => {
     })
 })
 
-router.post("/topic", check.AuthRequired, check.role, input_validation.checkUniqueTopicTitle, input_validation.missionBody_topicBody_forumPost, async (req, res) => {
+router.post("/topic", check.AuthRequired, check.DevMode, check.role, input_validation.checkUniqueTopicTitle, input_validation.missionBody_topicBody_forumPost, async (req, res) => {
     if(req.user_id){
         if((req.body.topicThreshold != null) && (isNaN(req.body.topicThreshold) || (req.body.topicThreshold.length > 25))){
             res.status(422).send('Invalid Token Entry')
@@ -292,7 +292,7 @@ router.post("/topic", check.AuthRequired, check.role, input_validation.checkUniq
     }
 });
 
-router.post("/fundPageToken", check.AuthRequired, check.fundTransaction, async (req, res) => {
+router.post("/fundPageToken", check.AuthRequired, check.DevMode, check.fundTransaction, async (req, res) => {
     const connection = new Connection('https://api.devnet.solana.com', 'confirmed')
     try{
         await sendAndConfirmRawTransaction(connection, req.body.tx.data)
@@ -314,7 +314,7 @@ router.post("/fundPageToken", check.AuthRequired, check.fundTransaction, async (
     }
 });
 
-router.post("/forum/reply/:fp_uid", check.AuthRequired, input_validation.missionBody_topicBody_forumPost, input_validation.hex_color, async (req, res) => {
+router.post("/forum/reply/:fp_uid", check.AuthRequired, check.DevMode, input_validation.missionBody_topicBody_forumPost, input_validation.hex_color, async (req, res) => {
     pool.getConnection(function(err, conn) {
         if (err){
             res.status(500).send('An error occurred')
@@ -339,7 +339,7 @@ router.post("/forum/reply/:fp_uid", check.AuthRequired, input_validation.mission
 });
 
 
-router.post("/forum/post/:page/:mission/:component", check.AuthRequired, input_validation.missionBody_topicBody_forumPost, input_validation.hex_color, (req, res) => {
+router.post("/forum/post/:page/:mission/:component", check.AuthRequired, check.DevMode, input_validation.missionBody_topicBody_forumPost, input_validation.hex_color, (req, res) => {
     if(!req.params.component && !req.params.mission && !req.params.page) return res.status(404).send('Not found')
     
     pool.getConnection(async function(err, conn) {
@@ -423,7 +423,7 @@ router.post("/forum/post/:page/:mission/:component", check.AuthRequired, input_v
 });
 
 /*
-router.post("/forum/:unique_pagename/topic/:topic_id", check.AuthRequired, input_validation.missionBody_topicBody_forumPost, input_validation.hex_color, async (req, res) => {
+router.post("/forum/:unique_pagename/topic/:topic_id", check.AuthRequired, check.DevMode, input_validation.missionBody_topicBody_forumPost, input_validation.hex_color, async (req, res) => {
     pool.getConnection(async function(err, conn) {
         if (err){
             res.status(500).send('An error occurred')
@@ -469,7 +469,7 @@ router.post("/forum/:unique_pagename/topic/:topic_id", check.AuthRequired, input
     })
 })
 
-router.post("/forum/:unique_pagename/page", check.AuthRequired, input_validation.missionBody_topicBody_forumPost, input_validation.hex_color, async (req, res) => {
+router.post("/forum/:unique_pagename/page", check.AuthRequired, check.DevMode, input_validation.missionBody_topicBody_forumPost, input_validation.hex_color, async (req, res) => {
     pool.getConnection(async function(err, conn) {
         if (err){
             res.status(500).send('An error occurred')
@@ -492,7 +492,7 @@ router.post("/forum/:unique_pagename/page", check.AuthRequired, input_validation
     })
 })
 
-router.post("/forum/:unique_pagename/post/:parent_forumpost_id", check.AuthRequired, input_validation.missionBody_topicBody_forumPost, input_validation.hex_color, async (req, res) => {
+router.post("/forum/:unique_pagename/post/:parent_forumpost_id", check.AuthRequired, check.DevMode, input_validation.missionBody_topicBody_forumPost, input_validation.hex_color, async (req, res) => {
     pool.getConnection(async function(err, conn) {
         if (err){
             res.status(500).send('An error occurred')

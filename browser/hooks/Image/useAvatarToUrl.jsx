@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { useState, useEffect } from 'react'
+import config from '../../public/config.json'
 
 const useAvatarToUrl = () => {
     const [image, setImage] = useState()
@@ -14,7 +15,7 @@ const useAvatarToUrl = () => {
             let formData = new FormData()
             formData.append("file", image)
 
-            axios.post('https://api.20.vision/update/profile_picture',formData,{
+            axios.post(`${config.HTTP_SERVER_URL}/update/profile_picture`,formData,{
                 withCredentials: true
             }
             ).then(response => {

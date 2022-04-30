@@ -15,7 +15,7 @@ import Loading from '../../assets/Loading/Loading'
 import Link from 'next/link'
 import ZoomOut from '../../assets/ZoomOut'
 import ZoomIn from '../../assets/ZoomIn'
-
+import config from '../../public/config.json'
 import { useEffect, useState } from 'react'
 import { usePageSelectedStore } from '../../store/pageSelected'
 
@@ -26,34 +26,38 @@ export default function Index() {
 
     if(!page && (router.pathname.split('/')[1] == 'forum')) return(<></>)
 
-    return (
-        null
-        // <>
-        // {isLoading || !profile.username?
-        //     null
-        // :
-        //     <div className={styles.container}>
-        //         <div className={styles.child} style={{color: 'var(--white)'}}>
-        //             {profile.username?
-        //                 <>
-        //                     {router.pathname.split('/')[1] == 'zoomout'?     
-        //                         <ForumNav router={router}/>
-        //                     :router.query.component?
-        //                         <ComponentNav router={router}/>
-        //                     :router.query.mission?
-        //                         <MissionNavWithRole router={router}/>
-        //                     :
-        //                         <PageNavWithRole router={router}/>
-        //                     }
-        //                 </>
-        //             :
-        //                 <PageNav router={router}/>
-        //             }
-        //         </div>
-        //     </div>
-        // }
-        // </>
-    )
+
+    if(config.HTTP_SERVER_URL != 'https://localhost:3000'){
+        return null
+    }else{
+        return(
+            <>
+            {isLoading || !profile.username?
+                null
+            :
+                <div className={styles.container}>
+                    <div className={styles.child} style={{color: 'var(--white)'}}>
+                        {profile.username?
+                            <>
+                                {router.pathname.split('/')[1] == 'zoomout'?     
+                                    <ForumNav router={router}/>
+                                :router.query.component?
+                                    <ComponentNav router={router}/>
+                                :router.query.mission?
+                                    <MissionNavWithRole router={router}/>
+                                :
+                                    <PageNavWithRole router={router}/>
+                                }
+                            </>
+                        :
+                            <PageNav router={router}/>
+                        }
+                    </div>
+                </div>
+            }
+            </>
+        )
+    }
 }
 
 function MissionNavWithRole({router}){

@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 import {useUserStore} from '../../store/user'
-
+import config from '../../public/config.json'
 import { useEffect, useState } from 'react'
 
 const useUserProfile = () => {
@@ -14,7 +14,7 @@ const useUserProfile = () => {
     useEffect(() =>{
         if(profile.fetched == false){
             setLoading(true)
-            axios.get('https://api.20.vision/get/user_profile',{
+            axios.get(`${config.HTTP_SERVER_URL}/get/user_profile`,{
                 withCredentials: true
             })
             .then(response => {

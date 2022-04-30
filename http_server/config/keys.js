@@ -1,7 +1,7 @@
 const {express} = require('./passwords')
 
 const MYSQL = {
-    MYSQL_URI: '34.77.7.101',
+    MYSQL_URI: express=='password'?'127.0.0.1':'34.77.7.101',
     MYSQL_USER: 'express',
     MYSQL_PASS: express,
     MYSQL_DATABASE: '20Vision'

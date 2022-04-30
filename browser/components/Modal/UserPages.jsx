@@ -12,7 +12,7 @@ import PacmanLoader from 'react-spinners/PacmanLoader'
 
 import PageIcon from '../../assets/PageIcon/PageIcon'
 import Plus from '../../assets/Plus'
-
+import config from '../../public/config.json'
 import InfiniteScroll from 'react-infinite-scroll-component'
 
 
@@ -58,7 +58,7 @@ function Create(props){
     const queryClient = useQueryClient()
 
     const addPageMuation = useMutation(
-        async newPage => await axios.post('https://api.20.vision/post/create_page',newPage,{withCredentials: true}),
+        async newPage => await axios.post(`${config.HTTP_SERVER_URL}/post/create_page`,newPage,{withCredentials: true}),
         {
             onError: (error, variables, context) => {
                 console.log(error.data)
@@ -140,7 +140,7 @@ function My_Pages(props){
     const myPages = useInfiniteQuery(
         'my_pages',
         async ({pageParam = 0}) => {
-            const res = await axios.get(`https://api.20.vision/get/my_pages/${pageParam}`,{withCredentials: true})
+            const res = await axios.get(`${config.HTTP_SERVER_URL}/get/my_pages/${pageParam}`,{withCredentials: true})
             return res.data
         },
         {   

@@ -11,6 +11,7 @@ import User from "./User"
 import CreateTopicOrMission from './CreateTopicOrMission'
 import Trade from './Trade'
 import { useEffect } from 'react'
+import config from '../../public/config.json'
 
 export default function Modal() {
 
@@ -63,14 +64,12 @@ const ClickOutside = onClickOutside(() =>{
             animate={{ y: 0 }}
             className={styles.modalChild}
             >
-                {modal == 1?
+                
+                {config.HTTP_SERVER_URL != 'https://localhost:3000'?
                     <h1>
                         Coming soon
                     </h1>
-                :
-                    null
-                }
-                {/* {modal == 1 ?
+                :modal == 1 ?
                     <ConnectWallet/>
                 :modal == 2 ?
                     <User/>
@@ -85,7 +84,7 @@ const ClickOutside = onClickOutside(() =>{
                 :modal == 7 ?
                     <Component/>
                 :
-                    null} */}
+                    null}
 
             </motion.div>
         </div>
