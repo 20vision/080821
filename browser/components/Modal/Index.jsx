@@ -65,7 +65,7 @@ const ClickOutside = onClickOutside(() =>{
             className={styles.modalChild}
             >
                 
-                {config.HTTP_SERVER_URL != 'https://localhost:3000'?
+                {config.HTTP_SERVER_URL != 'http://localhost:8080'?
                     <h1>
                         Coming soon
                     </h1>

@@ -27,7 +27,7 @@ export default function Index() {
     if(!page && (router.pathname.split('/')[1] == 'forum')) return(<></>)
 
 
-    if(config.HTTP_SERVER_URL != 'https://localhost:3000'){
+    if(config.HTTP_SERVER_URL != 'http://localhost:8080'){
         return null
     }else{
         return(

@@ -18,7 +18,6 @@ import {animateScroll} from 'react-scroll';
 import { useRef } from "react";
 import { motion } from 'framer-motion';
 import useWindowSize from "../hooks/Page/useWindowsSize";
-import config from '../public/config.json'
 
 export default function PageLayout( {children, page, comp, subs} ) {
     return (
