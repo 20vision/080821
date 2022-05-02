@@ -40,6 +40,7 @@ exports.AuthOptional = function(req, res, next) {
 
 exports.DevMode = function(req, res, next){
     if(passwords.express != 'password') return res.status(422).send('Not allowed')
+    next()
 }
 
 exports.AuthRequired = function(req, res, next) {

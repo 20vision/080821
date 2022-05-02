@@ -169,38 +169,6 @@ export default function Edit(){
 
             </div>
 
-            
-            {/* <div className={styles.subComp}>
-                {components?<Dragable items={selectedComponents} setItems={new_items => setSelectedComponents(new_items)}/>:null}
-                <div style={{width: '100%', height: '10px', borderBottom: '1px solid black', textAlign: 'center', marginTop: '35px'}}>
-                    <h2 style={{backgroundColor: '#FAFAFA', width: '200px', margin: '0px auto'}}>
-                        All Components
-                    </h2>
-                </div>
-                <div>
-                    {components && components.map((component, index) => {
-                        return(
-                            <a onClick={() => {
-                                let items = [...components]
-                                let item = {...items[index]}
-                                item.checked = item.checked?false:true
-                                items[index] = item
-                                if(!item.checked && selectedComponents && (selectedComponents.length > 0)){
-                                    setSelectedComponents([...selectedComponents.sort(() => selectedComponents.uid != item.uid)])
-                                }else if(selectedComponents && (selectedComponents.length > 0)){
-                                    setSelectedComponents([...selectedComponents, item])
-                                }else{
-                                    setSelectedComponents([item])
-                                }
-                                setComponents(items)
-                            }}>
-                                <Checkbox checked={component.checked}/>
-                            </a>
-                        )
-                    })}
-                </div>
-            </div> */}
-
             <div onClick={async() => {
                 if(!pond.getFile()) return toast.error('Image not found')
                 const base64Image = pond.getFile().getFileEncodeDataURL()
@@ -212,15 +180,10 @@ export default function Edit(){
                         header: header, 
                         body: body, 
                         pagename: router.query.page,
-                        mission: router.query.mission
+                        mission: router.query.mission,
+                        uid: router.query.component
                     },{withCredentials: true})
 
-                    if(router.query.component){
-                        const responseConnection = await axios.post(`${config.HTTP_SERVER_URL}/post/component/connection`,{
-                            component_id: router.query.component,
-                            child_component_id: response,
-                        },{withCredentials: true})
-                    }
                     setModal(0)
                 }catch(err){
                     console.log(err)

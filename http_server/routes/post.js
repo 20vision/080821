@@ -7,6 +7,7 @@ const cloudStorage = require('../middleware/cloudStorage');
 const { sendAndConfirmRawTransaction, Connection } = require("@solana/web3.js");
 const gets = require("../utils/gets");
 const inserts = require("../utils/inserts");
+const deletes = require("../utils/deletes")
 const updates = require("../utils/updates");
 var validator = require('validator');
 const colorOptions = [
@@ -89,6 +90,7 @@ router.post("/mission", check.AuthRequired, check.DevMode, check.role, input_val
 });
 
 router.post("/component", check.AuthRequired, check.DevMode, async (req, res) => {
+
     if(!req.body.pagename){
         return res.status(422).send('Pagename missing')
     }else if(
@@ -157,9 +159,45 @@ router.post("/component", check.AuthRequired, check.DevMode, async (req, res) =>
                                 conn.query(
                                     'INSERT INTO Component values (?,?,?,?,?,?,?,now());',
                                     [null, data.timefolder+data.randomfolder, req.body.header, req.body.body, mission_id[0].mission_id, req.body.type, 0, null],
-                                    function(err, results) {
+                                    async function(err, compIntert) {
                                         if (err) throw err
-                                        res.json(data.timefolder+data.randomfolder)
+                                        if(req.body.uid && data.timefolder+data.randomfolder){
+                                            try{
+                                                const component_id = await gets.getComponentIdFromUidUserPostPermission({conn, uid: req.body.uid, user_id: req.user_id})
+                                                const child_component_id = await gets.getComponentIdFromUidUserPostPermission({conn, uid: data.timefolder+data.randomfolder, user_id: req.user_id})
+                                                conn.query(
+                                                    `SELECT count(cc.component_connection_id) as nextIndex from
+                                                    ComponentConnection cc where cc.component_id = ?;`,
+                                                    [component_id],
+                                                    async function(err, results) {
+                                                        if (err){
+                                                            res.status(500).send('An error occurred')
+                                                            console.log(err)
+                                                        }else{
+                                                            await inserts.component_connection({
+                                                                conn,
+                                                                component_id:component_id,
+                                                                child_component_id: child_component_id,
+                                                                child_component_index: results&&(results.length == 1)&&results[0].nextIndex?results[0].nextIndex:0
+                                                            })
+                                                            return res.status(200).send()
+                                                        }
+                                                    }
+                                                )
+                                                
+                                            }catch(error){
+                                                console.log(error)
+                                                deletes.ComponentAuthRequired({conn, component_id: compIntert.insertId, timefolder: data.timefolder, randomfolder: data.randomfolder})
+                                                .catch((err) => {
+                                                    console.log(err)
+                                                })
+                                                .then(() => {
+                                                    res.status(500).send('An error occurred while connecting Components')
+                                                })
+                                            }
+                                        }else{
+                                            res.json(data.timefolder+data.randomfolder)
+                                        }
                                     }
                                 );
                             }catch(error){

@@ -10,7 +10,7 @@ import Square from "../../components/Forum/Square"
 import BubbleView from "../../components/Forum/BubbleView"
 import config from '../../public/config.json'
 
-export function zoomout() {
+export default function zoomout() {
     const router = useRouter()
 
     useEffect(async() => {
