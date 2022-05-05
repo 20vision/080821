@@ -289,6 +289,42 @@ router.post("/component/connection", check.AuthRequired, check.DevMode, async (r
     })
 })
 
+router.post("/component/save", check.AuthRequired, check.DevMode, async (req, res) => {
+    if(req.user_id){
+        pool.getConnection(function(err, conn) {
+            if (err){
+                res.status(500).send('An error occurred')
+                console.log(err)
+            }else{
+                conn.query(
+                    'SELECT component_id from Component where uid = ?;',
+                    [req.body.uid],
+                    function(err, results) {
+                        if (err){
+                            res.status(500).send('An error occurred')
+                            console.log(err)
+                        }else if(results.length == 1){
+                            conn.query(
+                                'INSERT INTO UserComponentSave values (?,?,?,now());',
+                                [null, req.user_id, results[0].component_id, null],
+                                function(err, results) {
+                                    if (err) throw err
+                                    res.status(200).send()
+                                }
+                            );
+                        }else{
+                            res.status(403).send('Component not found')
+                        }
+                    }
+                );
+            }
+            pool.releaseConnection(conn);
+        })
+    }else{
+        res.status(401).send('Not authenticated')
+    }
+});
+
 router.post("/topic", check.AuthRequired, check.DevMode, check.role, input_validation.checkUniqueTopicTitle, input_validation.missionBody_topicBody_forumPost, async (req, res) => {
     if(req.user_id){
         if((req.body.topicThreshold != null) && (isNaN(req.body.topicThreshold) || (req.body.topicThreshold.length > 25))){

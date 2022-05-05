@@ -18,6 +18,9 @@ import ZoomIn from '../../assets/ZoomIn'
 import config from '../../public/config.json'
 import { useEffect, useState } from 'react'
 import { usePageSelectedStore } from '../../store/pageSelected'
+import SaveToCloud from '../../assets/SaveToCloud'
+import axios from 'axios'
+import { toast } from 'react-toastify'
 
 export default function Index() {
     const [profile, isLoading, setUser] = useUserProfile()
@@ -98,9 +101,22 @@ function ComponentNav({router}){
                 <div>Component</div>
             </a>
 
-            <a onClick={() => setModal(5)}>
+            {/* <a onClick={() => setModal(5)}>
                 <DollarSign color="#FAFAFA"/>
                 <div>Token</div>
+            </a> */}
+            <a onClick={() => {
+                axios.post(`${config.HTTP_SERVER_URL}/post/component/save`, {uid: router.query.component}, {withCredentials: true})
+                .then(async response => {
+                    toast.success('Saved Component')
+                })
+                .catch(error => {
+                    console.log(error)
+                    toast.error('Could not save Component')
+                })
+            }}>
+                <SaveToCloud color="#FAFAFA"/>
+                <div>Save</div>
             </a>
 
             <Link href={`/zoomout?page=${router.query.page}&mission=${router.query.mission}&component=${router.query.component}`}>
