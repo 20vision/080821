@@ -7,6 +7,7 @@ import {useUserStore} from '../../store/user'
 import UserPages from './UserPages'
 import ConnectWallet from './ConnectWallet'
 import Component from './Component'
+import SavedComponents from './SavedComponents'
 import User from "./User"
 import CreateTopicOrMission from './CreateTopicOrMission'
 import Trade from './Trade'
@@ -83,6 +84,8 @@ const ClickOutside = onClickOutside(() =>{
                     <CreateTopicOrMission type='topic'/>
                 :modal == 7 ?
                     <Component/>
+                :modal == 8 ?
+                    <SavedComponents/>
                 :
                     null}
 

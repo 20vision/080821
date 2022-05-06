@@ -18,6 +18,7 @@ import {animateScroll} from 'react-scroll';
 import { useRef } from "react";
 import { motion } from 'framer-motion';
 import useWindowSize from "../hooks/Page/useWindowsSize";
+import ComponentsHorizonta from "../components/Component/ComponentsHorizontal";
 
 export default function PageLayout( {children, page, comp, subs} ) {
     return (
@@ -93,31 +94,38 @@ var Panel = onClickOutside(({children, page, subs, comp}) => {
                                     loader={<PacmanLoader css="display:block;" color="#8A8A8A" size={12}/>}
                                 >
                                     {dependents.map((dependent, index) => {
-                                        return(
+                                        return (
                                             <Link key={index} href={`/${dependent.unique_pagename}/${dependent.mission_title}/${dependent.uid}`}>
                                                 <a>
-                                                    <div className={styles.dependent}>
-                                                        <div className={styles.info}>
-                                                            <div className={styles.header}>
-                                                                <h3>{dependent.header}</h3>
-                                                            </div>
-                                                            <div className={styles.footer}>
-                                                                <span style={{fontSize: 12,color: dependent.type == 'p'?'var(--blue)':dependent.type == 's'?'var(--yellow)':'var(--green)'}}>{dependent.type == 'p'?'Product':dependent.type == 's'?'Service':'Result'}</span>&nbsp;
-                                                                <span style={{fontSize: 12}}>· /{dependent.unique_pagename}</span>
-                                                            </div>
-                                                        </div>
-                                                        <img  src={config.FILE_SERVER_URL+'comp_images/'+dependent.uid.substring(0,dependent.uid.length-8)+'/'+dependent.uid.substring(dependent.uid.length-8)+'/512x512'+'.webp'}/>
-                                                        <div className={styles.page_icon}>
-                                                            {(dependent.page_icon.length < 7) ?
-                                                                <PageIcon color={'#'+dependent.page_icon}/>
-                                                            :
-                                                                <img src={dependent.page_icon}/>
-                                                            }
-                                                        </div>
-                                                    </div>
+                                                    <ComponentsHorizonta data={dependent} key={index}/>
                                                 </a>
                                             </Link>
                                         )
+                                        // (
+                                        //     <Link key={index} href={`/${dependent.unique_pagename}/${dependent.mission_title}/${dependent.uid}`}>
+                                        //         <a>
+                                        //             <div className={styles.dependent}>
+                                        //                 <div className={styles.info}>
+                                        //                     <div className={styles.header}>
+                                        //                         <h3>{dependent.header}</h3>
+                                        //                     </div>
+                                        //                     <div className={styles.footer}>
+                                        //                         <span style={{fontSize: 12,color: dependent.type == 'p'?'var(--blue)':dependent.type == 's'?'var(--yellow)':'var(--green)'}}>{dependent.type == 'p'?'Product':dependent.type == 's'?'Service':'Result'}</span>&nbsp;
+                                        //                         <span style={{fontSize: 12}}>· /{dependent.unique_pagename}</span>
+                                        //                     </div>
+                                        //                 </div>
+                                        //                 <img  src={config.FILE_SERVER_URL+'comp_images/'+dependent.uid.substring(0,dependent.uid.length-8)+'/'+dependent.uid.substring(dependent.uid.length-8)+'/512x512'+'.webp'}/>
+                                        //                 <div className={styles.page_icon}>
+                                        //                     {(dependent.page_icon.length < 7) ?
+                                        //                         <PageIcon color={'#'+dependent.page_icon}/>
+                                        //                     :
+                                        //                         <img src={dependent.page_icon}/>
+                                        //                     }
+                                        //                 </div>
+                                        //             </div>
+                                        //         </a>
+                                        //     </Link>
+                                        // )
                                     })}
                                 </InfiniteScroll>
                             :

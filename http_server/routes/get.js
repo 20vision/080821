@@ -680,6 +680,27 @@ router.get("/forum/:target_uid/:offset", () => {
 //     res.status(404).send('not ready yet')
 // })
 
+router.get("/components/saved/:offset", check.AuthRequired, check.DevMode, async (req, res) => {
+    pool.query(
+        `SELECT c.uid, c.header, c.body, c.type, m.title as mission_title, c.created, p.unique_pagename, p.page_icon, count(cc.component_connection_id) as subcomponents from Component c
+        join UserComponentSave ucs on ucs.component_id = c.component_id and ucs.user_id = ?
+        join Mission m on m.mission_id = c.mission_id join Page p on m.page_id = p.page_id
+        left join ComponentConnection cc on cc.component_id = c.component_id
+        group by ucs.usercomponentsave_id
+        order by ucs.added desc
+        limit ?,5`,
+        [req.user_id, req.params.offset?parseInt(req.params.offset):0],
+        function(err, saved_components) {
+            if (err){
+                res.status(500).send('An error occurred')
+                console.log(err)
+            }else{
+                res.json(saved_components)
+            }
+        }
+    );
+})
+
 router.get("/component/:uid/dependents/count", async (req, res) => {
     pool.query(
         `SELECT count(cc.component_connection_id) as dependentsCount from ComponentConnection cc 
