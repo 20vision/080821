@@ -83,14 +83,14 @@ const getTopic_s = ({conn, unique_pagename}) => new Promise((resolve, reject) =>
 })
 
 
-const getComponentIdFromUidUserPostPermission = ({conn, uid, user_id}) => new Promise((resolve, reject) => {
+const getComponentIdFromUidUserPostPermission = ({conn, uid, user_id, allowAllUsers}) => new Promise((resolve, reject) => {
     conn.query(
         `SELECT c.component_id from Component c
         join Mission m on m.mission_id = c.mission_id 
         join Page p on p.page_id = m.page_id 
         join PageUser pu on pu.page_id = p.page_id
-        where c.uid = ? and pu.user_id = ?`,
-        [uid, user_id],
+        where c.uid = ? ${allowAllUsers?'':'and pu.user_id = ?'}`,
+        [uid, allowAllUsers?null:user_id],
         function(err, component_id) {
             if (err){
                 reject({
