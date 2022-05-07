@@ -61,7 +61,7 @@ const CompWithCheckBox = ({comp, selected, setSelected}) => {
     useEffect(() => {
         if(selectedIndex==null && selected.length > 1){
             setSelected([
-                ...selected.slice(0, selectedIndex-1),
+                ...selected.slice(0, selectedIndex),
                 ...selected.slice(selectedIndex+1)
             ])
         }else if(selectedIndex==null && selected.length == 1){
@@ -69,6 +69,7 @@ const CompWithCheckBox = ({comp, selected, setSelected}) => {
         }else if(selectedIndex!=null){
             setSelected([...selected, comp.uid])
         }
+        console.log('selected:',selected)
     }, [selectedIndex])
 
     return(
