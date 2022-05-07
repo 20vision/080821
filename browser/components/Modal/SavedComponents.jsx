@@ -59,7 +59,7 @@ export default function SavedComponents() {
                 style={{marginBottom: 35}}
                 loader={<PacmanLoader css="display:block;" color="#8A8A8A" size={12}/>}
             >
-                {components && components.map((comp, index) => <CompWithCheckBox comp={comp} selected={selected} setSelected={setSelected}/>)}
+                {components && components.map((comp, index) => <div key={index}><CompWithCheckBox comp={comp} selected={selected} setSelected={setSelected}/></div>)}
             </InfiniteScroll>
             <a style={{flexGrow: 1}} onClick={async() => {
                 if(loading||(selected.length==0)) return
@@ -111,7 +111,7 @@ const CompWithCheckBox = ({comp, selected, setSelected}) => {
     }, [selectedIndex])
 
     return(
-        <a key={comp.uid} onClick={() => selectedIndex==null?setSelectedIndex(selected.length+1):setSelectedIndex(null)} style={{display: 'flex', alignItems: 'center', margin: '15px 0px'}}>
+        <a onClick={() => selectedIndex==null?setSelectedIndex(selected.length+1):setSelectedIndex(null)} style={{display: 'flex', alignItems: 'center', margin: '15px 0px'}}>
             <div style={{margin: 15, marginRight: 30}}>
                 {selectedIndex!=null?<CheckSquare color="var(--red)"/>:<Square/>}
             </div>
