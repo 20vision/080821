@@ -184,7 +184,7 @@ export default function Edit(){
                         uid: router.query.component
                     },{withCredentials: true})
 
-                    setModal(0)
+                    router.reload(window.location.pathname)
                 }catch(err){
                     console.log(err)
                     setLoading(false)

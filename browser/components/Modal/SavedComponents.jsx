@@ -67,6 +67,7 @@ export default function SavedComponents() {
                     setLoading(true)
                     await axios.post(`${config.HTTP_SERVER_URL}/post/component/connection`,{parent_component: router.query.component,selected: selected},{withCredentials: true})
                     setLoading(false)
+                    router.reload(window.location.pathname)
                 }catch(err){
                     console.log(err)
                     setLoading(false)
