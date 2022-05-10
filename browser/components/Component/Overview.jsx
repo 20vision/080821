@@ -1,11 +1,17 @@
 import styles from '../../styles/component/overview.module.css'
 import pageLayoutStyle from "../../styles/pageLayout/index.module.css"
 import config from '../../public/config.json';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRef } from 'react';
+import useUserProfile from '../../hooks/User/useUserProfile'
+import UploadCloud from '../../assets/UploadCloud'
+import Cloud from '../../assets/cloud'
+import SavedToCloud from '../../assets/SavedToCloud'
+import axios from 'axios'
 
 export default function Overview({comp, subs}){
+    const [profile, isLoading, setUser] = useUserProfile()
 
     return(
         <div>
@@ -49,7 +55,7 @@ export default function Overview({comp, subs}){
                                     </div>
                                 }
                                 <div className={`${styles.subParent}`} style={{borderBottom: index!=subs.length-1?'1px solid var(--lighter_grey)':null}}>
-                                    <ContentRow data={sub} pagination={subs.length-index}/>
+                                    <ContentRow data={sub} pagination={subs.length-index} profile={profile}/>
                                 </div>
                             </div>
                         </a>
@@ -61,7 +67,21 @@ export default function Overview({comp, subs}){
     )
 }
 
-const ContentRow = ({data, subcomponents, pagination}) => {
+const ContentRow = ({data, subcomponents, pagination, profile}) => {
+    const [saved, setSaved] = useState()
+
+    useEffect(() => {
+        async function AsyncFunction(){
+            try{
+                console.log((await axios.get(`${config.HTTP_SERVER_URL}/get/component/${data.uid}/saved`, {withCredentials: true})).data)
+                setSaved((await axios.get(`${config.HTTP_SERVER_URL}/get/component/${data.uid}/saved`, {withCredentials: true})).data==0?false:true)
+            }catch(err){
+                console.log(err)
+            }
+        }
+        if(profile && profile.username) AsyncFunction()
+    }, [profile])
+
     return(
         <div className={pageLayoutStyle.dependent}>
             <div className={pageLayoutStyle.info}>
@@ -73,7 +93,50 @@ const ContentRow = ({data, subcomponents, pagination}) => {
                     <span style={{fontSize: 12}}>· {subcomponents!=null?subcomponents:data.subcomponents} Components</span>
                 </div>
             </div>
-            <img src={config.FILE_SERVER_URL+'comp_images/'+data.uid.substring(0,data.uid.length-8)+'/'+data.uid.substring(data.uid.length-8)+'/512x512'+'.webp'}/>
+            <div style={{position: 'relative', width: 100, height: 100, flexShrink: 0, margin: 10}}>
+                <img
+                style={{position: 'absolute', left:0, right:0, top:0, bottom: 0, opacity: 0.5}}
+                src={config.FILE_SERVER_URL+'comp_images/'+data.uid.substring(0,data.uid.length-8)+'/'+data.uid.substring(data.uid.length-8)+'/512x512'+'.webp'}/>
+                {profile && profile.username?
+                    <div style={{position: 'absolute', transform: 'scale(0.8)', opacity: 0.8, right: -5, bottom: -5, backgroundColor: '#FAFAFA', borderRadius: 10, padding: 5}}>
+                        {saved==false?
+                            <a onClick={() => {
+                                axios.post(`${config.HTTP_SERVER_URL}/post/component/save`, {uid: data.uid}, {withCredentials: true})
+                                .then(async response => {
+                                    //toast.success('Saved Component')
+                                    setSaved(true)
+                                })
+                                .catch(error => {
+                                    console.log(error)
+                                    toast.error('Could not save Component')
+                                })
+                            }}>
+                                <UploadCloud/>
+                            </a>
+                        :saved==true?
+                            <a onClick={() => {
+                                axios.post(`${config.HTTP_SERVER_URL}/update/component/save`, {uid: data.uid}, {withCredentials: true})
+                                .then(async response => {
+                                    //toast.success('U Component')
+                                    setSaved(false)
+                                })
+                                .catch(error => {
+                                    console.log(error)
+                                    toast.error('Could not unsave Component')
+                                })
+                            }}>
+                                <SavedToCloud/>
+                            </a>
+                        :
+                            <a style={{opacity: 0.6}}>
+                                <Cloud/>
+                            </a>
+                        }
+                    </div>
+                :
+                    null
+                }
+            </div>
         </div>
     )
 }
