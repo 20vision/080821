@@ -104,5 +104,41 @@ router.post("/forum/like", check.AuthRequired, check.DevMode, async (req, res) =
     })
 })
 
+router.post("/component/save", check.AuthRequired, check.DevMode, async (req, res) => {
+    if(req.user_id){
+        pool.getConnection(function(err, conn) {
+            if (err){
+                res.status(500).send('An error occurred')
+                console.log(err)
+            }else{
+                conn.query(
+                    'SELECT component_id from Component where uid = ?;',
+                    [req.body.uid],
+                    function(err, results) {
+                        if (err){
+                            res.status(500).send('An error occurred')
+                            console.log(err)
+                        }else if(results.length == 1){
+                            conn.query(
+                                'DELETE from UserComponentSave where component_id = ? and user_id = ?;',
+                                [results[0].component_id, req.user_id],
+                                function(err, results) {
+                                    if (err) throw err
+                                    res.status(200).send()
+                                }
+                            );
+                        }else{
+                            res.status(403).send('Component not found')
+                        }
+                    }
+                );
+            }
+            pool.releaseConnection(conn);
+        })
+    }else{
+        res.status(401).send('Not authenticated')
+    }
+});
+
 
 module.exports = router;

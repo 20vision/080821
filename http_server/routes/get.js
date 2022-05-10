@@ -771,6 +771,29 @@ router.get("/component/:uid/subs", async (req, res) => {
     })
 })
 
+router.get("/component/:uid/saved", check.AuthRequired, check.DevMode, async (req, res) => {
+    pool.getConnection(async function(err, conn) {
+        if (err){
+            res.status(500).send('An error occurred')
+            console.log(err)
+        }else{
+            conn.query(
+                `SELECT if(count(ucs.usercomponentsave_id) > 0, true, false) as saved from Component c
+                join UserComponentSave ucs on ucs.component_id = c.component_id
+                where c.uid = ? and ucs.user_id = ?`,
+                [req.params.uid, req.user_id], async function(err, saved) {
+                    if (err){
+                        console.log(err)
+                        res.status(400).send('An error occurred')
+                    }else{
+                        res.json(saved[0].saved)
+                    }
+                }
+            );
+        }
+    })
+})
+
 router.get("/component/:uid", async (req, res) => {
     //console.log('okk')
     pool.getConnection(async function(err, conn) {

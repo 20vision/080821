@@ -22,6 +22,9 @@ import axios from 'axios'
 import { toast } from 'react-toastify'
 import DownloadCloud from '../../assets/DownloadCloud'
 import UploadCloud from '../../assets/UploadCloud'
+import { useComponentStore } from '../../store/component'
+import Cloud from '../../assets/cloud'
+import SavedToCloud from '../../assets/SavedToCloud'
 
 export default function Index() {
     const [profile, isLoading, setUser] = useUserProfile()
@@ -95,43 +98,95 @@ function MissionNavWithRole({router}){
 
 function ComponentNav({router}){
     const setModal = useModalStore(state => state.setModal)
+    const setEditMode = useComponentStore(state => state.setEditMode)
+    const editMode = useComponentStore(state => state.editMode)
+    const [profile, isLoading, setUser] = useUserProfile()
+    const [saved, setSaved] = useState()
+
+    useEffect(() => {
+        async function AsyncFunction(){
+            try{
+                console.log((await axios.get(`${config.HTTP_SERVER_URL}/get/component/${router.query.component}/saved`, {withCredentials: true})).data)
+                setSaved((await axios.get(`${config.HTTP_SERVER_URL}/get/component/${router.query.component}/saved`, {withCredentials: true})).data==0?false:true)
+            }catch(err){
+                console.log(err)
+            }
+        }
+        if(profile.username) AsyncFunction()
+    }, [profile])
+
     return(
         <>  
-            <a onClick={() => setModal(7)}>
-                <Plus color="#FAFAFA"/>
-                <div>Component</div>
-            </a>
+            {editMode?
+                <>
+                    <a onClick={() => setModal(7)}>
+                        <Plus color="#FAFAFA"/>
+                        <div>Component</div>
+                    </a>
+
+                    <a onClick={() => setModal(8)}>
+                        <DownloadCloud color="#FAFAFA"/>
+                        <div>Add Sub-</div>
+                    </a>
+                </>
+            :
+                <>
+                    {saved==false?
+                        <a onClick={() => {
+                            axios.post(`${config.HTTP_SERVER_URL}/post/component/save`, {uid: router.query.component}, {withCredentials: true})
+                            .then(async response => {
+                                //toast.success('Saved Component')
+                                setSaved(true)
+                            })
+                            .catch(error => {
+                                console.log(error)
+                                toast.error('Could not save Component')
+                            })
+                        }}>
+                            <UploadCloud color="#FAFAFA"/>
+                            <div>Save</div>
+                        </a>
+                    :saved==true?
+                        <a onClick={() => {
+                            axios.post(`${config.HTTP_SERVER_URL}/update/component/save`, {uid: router.query.component}, {withCredentials: true})
+                            .then(async response => {
+                                //toast.success('U Component')
+                                setSaved(false)
+                            })
+                            .catch(error => {
+                                console.log(error)
+                                toast.error('Could not unsave Component')
+                            })
+                        }}>
+                            <SavedToCloud color="#FAFAFA"/>
+                            <div>Saved</div>
+                        </a>
+                    :
+                        <a style={{opacity: 0.3}}>
+                            <Cloud color="#FAFAFA"/>
+                            <div>Loading...</div>
+                        </a>
+                    }
+                </>
+            }
 
             {/* <a onClick={() => setModal(5)}>
-                <DollarSign color="#FAFAFA"/>
-                <div>Token</div>
-            </a> */}
+                    <DollarSign color="#FAFAFA"/>
+                    <div>Token</div>
+                </a> */}
 
-            <a onClick={() => setModal(8)}>
-                <DownloadCloud color="#FAFAFA"/>
-                <div>Add Sub-</div>
-            </a>
-
-            <a onClick={() => {
-                axios.post(`${config.HTTP_SERVER_URL}/post/component/save`, {uid: router.query.component}, {withCredentials: true})
-                .then(async response => {
-                    toast.success('Saved Component')
-                })
-                .catch(error => {
-                    console.log(error)
-                    toast.error('Could not save Component')
-                })
-            }}>
-                <UploadCloud color="#FAFAFA"/>
-                <div>Save</div>
-            </a>
-
-            <Link href={`/zoomout?page=${router.query.page}&mission=${router.query.mission}&component=${router.query.component}`}>
+            {/* <Link href={`/zoomout?page=${router.query.page}&mission=${router.query.mission}&component=${router.query.component}`}>
                 <a>
                     <ZoomOut color="#FAFAFA"/>
                     <div>Zoom Out</div>
                 </a>
-            </Link>
+            </Link> */}
+            <a onClick={() => {
+                setEditMode(!editMode)
+            }}>
+                {editMode?<Check color="#FAFAFA"/>:<Tool color="#FAFAFA"/>}
+                <div>{editMode?'Finish':'Edit'}</div>
+            </a>
         </>
     )
 }
