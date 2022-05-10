@@ -9,9 +9,15 @@ import UploadCloud from '../../assets/UploadCloud'
 import Cloud from '../../assets/cloud'
 import SavedToCloud from '../../assets/SavedToCloud'
 import axios from 'axios'
+import { useComponentStore } from '../../store/component'
+import Trash from '../../assets/Trash'
+import { useRouter } from 'next/router'
+import { toast } from "react-toastify"
 
 export default function Overview({comp, subs}){
     const [profile, isLoading, setUser] = useUserProfile()
+    const editMode = useComponentStore(state => state.editMode)
+    const router = useRouter()
 
     return(
         <div>
@@ -55,7 +61,7 @@ export default function Overview({comp, subs}){
                                     </div>
                                 }
                                 <div className={`${styles.subParent}`} style={{borderBottom: index!=subs.length-1?'1px solid var(--lighter_grey)':null}}>
-                                    <ContentRow data={sub} pagination={subs.length-index} profile={profile}/>
+                                    <ContentRow router={router} editMode={editMode} data={sub} pagination={subs.length-index} profile={profile}/>
                                 </div>
                             </div>
                         </a>
@@ -67,13 +73,12 @@ export default function Overview({comp, subs}){
     )
 }
 
-const ContentRow = ({data, subcomponents, pagination, profile}) => {
+const ContentRow = ({data, subcomponents, pagination, profile, editMode, router}) => {
     const [saved, setSaved] = useState()
 
     useEffect(() => {
         async function AsyncFunction(){
             try{
-                console.log((await axios.get(`${config.HTTP_SERVER_URL}/get/component/${data.uid}/saved`, {withCredentials: true})).data)
                 setSaved((await axios.get(`${config.HTTP_SERVER_URL}/get/component/${data.uid}/saved`, {withCredentials: true})).data==0?false:true)
             }catch(err){
                 console.log(err)
@@ -99,7 +104,23 @@ const ContentRow = ({data, subcomponents, pagination, profile}) => {
                 src={config.FILE_SERVER_URL+'comp_images/'+data.uid.substring(0,data.uid.length-8)+'/'+data.uid.substring(data.uid.length-8)+'/512x512'+'.webp'}/>
                 {profile && profile.username?
                     <div style={{position: 'absolute', transform: 'scale(0.8)', opacity: 0.8, right: -5, bottom: -5, backgroundColor: '#FAFAFA', borderRadius: 10, padding: 5}}>
-                        {saved==false?
+                        {editMode?
+                            <div style={{display: 'flex', alignItems: 'center'}}>
+                                <a onClick={() => {
+                                    axios.post(`${config.HTTP_SERVER_URL}/update/component/connection`, {uid: router.query.component, child_uid: data.uid}, {withCredentials: true})
+                                    .then(async response => {
+                                        //toast.success('Saved Component')
+                                        router.reload(window.location.pathname)
+                                    })
+                                    .catch(error => {
+                                        console.log(error)
+                                        toast.error('Could not remove Sub-Component')
+                                    })
+                                }}>
+                                    <Trash/>
+                                </a>
+                            </div>
+                        :saved==false?
                             <a onClick={() => {
                                 axios.post(`${config.HTTP_SERVER_URL}/post/component/save`, {uid: data.uid}, {withCredentials: true})
                                 .then(async response => {
