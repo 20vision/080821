@@ -141,42 +141,48 @@ router.post("/component/save", check.AuthRequired, check.DevMode, async (req, re
 });
 
 router.post("/component/connection", check.AuthRequired, check.DevMode, async (req, res) => {
-    console.log(req.body)
     if(req.user_id){
         pool.getConnection(function(err, conn) {
             if (err){
                 res.status(500).send('An error occurred')
                 console.log(err)
             }else{
-                conn.query(
-                    `SELECT c.component_id, c1.component_id from Component c
-                    join Mission m on m.mission_id = c.mission_id
-                    join Page p on p.page_id = m.page_id
-                    join PageUser pu on pu.page_id = p.page_id and pu.user_id = ?
-                    join ComponentConnection cc on cc.component_id = c.component_id 
-                    join Component c1 on c1.component_id = cc.child_component_id and c1.uid = ?
-                    where c.uid = ?`,
-                    [req.user_id, req.body.uid, req.body.child_uid],
-                    function(err, results) {
-                        console.log(results)
-                        if (err){
-                            res.status(500).send('An error occurred')
-                            console.log(err)
-                        }else if(results.length == 1){
-                            console.log(results[0])
-                            conn.query(
-                                'DELETE from ComponentConnection where component_id = ? and child_component_id = ?;',
-                                [results[0].component_id, results[0].component_id],
-                                function(err, results) {
-                                    if (err) throw err
-                                    res.status(200).send()
+                console.log(req.body.child_uids)
+                if(req.body.child_uids && (req.body.child_uids.length > 0)){
+                    for(var i = 0;i<req.body.child_uids.length;i++){
+                        conn.query(
+                            `SELECT c.component_id as component_id, c1.component_id as child_component_id from Component c
+                            join Mission m on m.mission_id = c.mission_id
+                            join Page p on p.page_id = m.page_id
+                            join PageUser pu on pu.page_id = p.page_id and pu.user_id = ?
+                            join ComponentConnection cc on cc.component_id = c.component_id 
+                            join Component c1 on c1.component_id = cc.child_component_id
+                            where c.uid = ? and c1.uid = ?`,
+                            [req.user_id, req.body.uid, req.body.child_uids[i]],
+                            function(err, results) {
+                                console.log(results)
+                                if (err){
+                                    res.status(500).send('An error occurred')
+                                    throw err
+                                }else if(results.length == 1){
+                                    conn.query(
+                                        'DELETE from ComponentConnection where component_id = ? and child_component_id = ?;',
+                                        [results[0].component_id, results[0].child_component_id],
+                                        function(err, results) {
+                                            if (err) throw err
+                                        }
+                                    );
+                                }else{
+                                    res.status(403).send('Component not found')
+                                    throw new Error('Comp not found or not Authorized')
                                 }
-                            );
-                        }else{
-                            res.status(403).send('Component not found')
-                        }
+                            }
+                        );   
                     }
-                );
+                    res.status(200).send()
+                }else{
+                    res.status(422).send('')
+                }
             }
             pool.releaseConnection(conn);
         })
