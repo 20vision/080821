@@ -13,6 +13,7 @@ import CreateTopicOrMission from './CreateTopicOrMission'
 import Trade from './Trade'
 import { useEffect } from 'react'
 import config from '../../public/config.json'
+import DeleteComponent from './DeleteComponent'
 
 export default function Modal() {
 
@@ -86,6 +87,8 @@ const ClickOutside = onClickOutside(() =>{
                     <Component/>
                 :modal == 8 ?
                     <SavedComponents/>
+                :modal == 9 ?
+                    <DeleteComponent/>
                 :
                     null}
 

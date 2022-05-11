@@ -25,6 +25,7 @@ import UploadCloud from '../../assets/UploadCloud'
 import { useComponentStore } from '../../store/component'
 import Cloud from '../../assets/cloud'
 import SavedToCloud from '../../assets/SavedToCloud'
+import Trash from '../../assets/Trash'
 
 export default function Index() {
     const [profile, isLoading, setUser] = useUserProfile()
@@ -128,6 +129,11 @@ function ComponentNav({router}){
                         <DownloadCloud color="#FAFAFA"/>
                         <div>Add Sub-</div>
                     </a>
+
+                    <a onClick={() => setModal(8)}>
+                        <Trash color="#FAFAFA"/>
+                        <div>Delete</div>
+                    </a>
                 </>
             :
                 <>
@@ -181,6 +187,7 @@ function ComponentNav({router}){
                     <div>Zoom Out</div>
                 </a>
             </Link> */}
+
             <a onClick={() => {
                 setEditMode(!editMode)
             }}>
