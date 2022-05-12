@@ -140,6 +140,46 @@ router.post("/component/save", check.AuthRequired, check.DevMode, async (req, re
     }
 });
 
+router.post("/component/delete", check.AuthRequired, check.DevMode, async (req, res) => {
+    if(req.user_id){
+        pool.getConnection(function(err, conn) {
+            if (err){
+                res.status(500).send('An error occurred')
+                console.log(err)
+            }else{
+                conn.query(
+                    `SELECT c.component_id from Component c
+                    join Mission m on m.mission_id = c.mission_id
+                    join Page p on p.page_id = m.page_id
+                    join PageUser pu on pu.page_id = p.page_id and pu.user_id = ?
+                    where c.uid = ?;`,
+                    [req.user_id, req.body.uid],
+                    function(err, results) {
+                        if (err){
+                            res.status(500).send('An error occurred')
+                            console.log(err)
+                        }else if(results.length == 1){
+                            conn.query(
+                                'DELETE from Component where component_id = ?;',
+                                [results[0].component_id, req.user_id],
+                                function(err, results) {
+                                    if (err) throw err
+                                    res.status(200).send()
+                                }
+                            );
+                        }else{
+                            res.status(403).send('Component not found')
+                        }
+                    }
+                );
+            }
+            pool.releaseConnection(conn);
+        })
+    }else{
+        res.status(401).send('Not authenticated')
+    }
+});
+
 router.post("/component/connection", check.AuthRequired, check.DevMode, async (req, res) => {
     if(req.user_id){
         pool.getConnection(function(err, conn) {

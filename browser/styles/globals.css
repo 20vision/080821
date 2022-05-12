@@ -73,6 +73,14 @@ span{
   margin-top: 5px;
 }
 
+.button{
+  padding: 15px 25px;
+  border-radius: 15px;
+  display: flex;
+  justify-content: center;
+  cursor: pointer;
+}
+
 svg{
   display: flex;
   align-items: center;
