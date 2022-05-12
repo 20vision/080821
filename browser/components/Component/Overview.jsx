@@ -10,7 +10,7 @@ import Cloud from '../../assets/cloud'
 import SavedToCloud from '../../assets/SavedToCloud'
 import axios from 'axios'
 import { useComponentStore } from '../../store/component'
-import Trash from '../../assets/Trash'
+import X from '../../assets/X'
 import { useRouter } from 'next/router'
 import { toast } from "react-toastify"
 
@@ -124,9 +124,9 @@ const ContentRow = ({data, subcomponents, pagination, profile, editMode, router,
             </Link>
             <div style={{position: 'relative', width: 100, height: 100, flexShrink: 0, margin: 10}}>
                 <img
-                style={{position: 'absolute', left:0, right:0, top:0, bottom: 0, opacity: 0.5}}
+                style={{position: 'absolute', left:0, right:0, top:0, bottom: 0}}
                 src={config.FILE_SERVER_URL+'comp_images/'+data.uid.substring(0,data.uid.length-8)+'/'+data.uid.substring(data.uid.length-8)+'/512x512'+'.webp'}/>
-                {profile && profile.username?
+                {profile && profile.username && router.query.component?
                     <div style={{position: 'absolute', transform: 'scale(0.8)', opacity: 0.8, right: -5, bottom: -5, backgroundColor: '#FAFAFA', borderRadius: 10, padding: 5}}>
                         {editMode?
                             <div style={{display: 'flex', alignItems: 'center'}}>
@@ -145,7 +145,7 @@ const ContentRow = ({data, subcomponents, pagination, profile, editMode, router,
                                         setDeleteIndex(null)
                                     }
                                 }}>
-                                    <Trash color={deleteIndex==null?null:'#FF5B77'}/>
+                                    <X color={deleteIndex==null?null:'#FF5B77'}/>
                                 </a>
                             </div>
                         :saved==false?

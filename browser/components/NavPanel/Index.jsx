@@ -130,7 +130,7 @@ function ComponentNav({router}){
                         <div>Add Sub-</div>
                     </a>
 
-                    <a onClick={() => setModal(8)}>
+                    <a onClick={() => setModal(9)}>
                         <Trash color="#FAFAFA"/>
                         <div>Delete</div>
                     </a>
