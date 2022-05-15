@@ -680,16 +680,20 @@ router.get("/forum/:target_uid/:offset", () => {
 //     res.status(404).send('not ready yet')
 // })
 
-router.get("/components/saved/:offset", check.AuthRequired, check.DevMode, async (req, res) => {
+router.get("/components/:not_within_uid/saved/:offset", check.AuthRequired, check.DevMode, async (req, res) => {
     pool.query(
-        `SELECT c.uid, c.header, c.body, c.type, m.title as mission_title, c.created, p.unique_pagename, p.page_icon, count(cc.component_connection_id) as subcomponents from Component c
+        `SELECT c.uid, c.header, c.body, c.type, m.title as mission_title, c.created, p.unique_pagename, p.page_icon, if(c4.component_id  or a1.child_component_id, true, false) as already_used from Component c
         join UserComponentSave ucs on ucs.component_id = c.component_id and ucs.user_id = ?
         join Mission m on m.mission_id = c.mission_id join Page p on m.page_id = p.page_id
-        left join ComponentConnection cc on cc.component_id = c.component_id
+        left join Component c4 on c.component_id = c4.component_id and c4.uid = ?
+        left join (
+            SELECT cc.child_component_id from ComponentConnection cc
+            join Component c2 on c2.component_id = cc.component_id and c2.uid = ?
+        ) as a1 on a1.child_component_id = c.component_id
         group by ucs.usercomponentsave_id
         order by ucs.added desc
         limit ?,5`,
-        [req.user_id, req.params.offset?parseInt(req.params.offset):0],
+        [req.user_id, req.params.not_within_uid, req.params.not_within_uid, req.params.offset?parseInt(req.params.offset):0],
         function(err, saved_components) {
             if (err){
                 res.status(500).send('An error occurred')

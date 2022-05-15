@@ -107,7 +107,6 @@ function ComponentNav({router}){
     useEffect(() => {
         async function AsyncFunction(){
             try{
-                console.log((await axios.get(`${config.HTTP_SERVER_URL}/get/component/${router.query.component}/saved`, {withCredentials: true})).data)
                 setSaved((await axios.get(`${config.HTTP_SERVER_URL}/get/component/${router.query.component}/saved`, {withCredentials: true})).data==0?false:true)
             }catch(err){
                 console.log(err)
@@ -175,18 +174,6 @@ function ComponentNav({router}){
                     }
                 </>
             }
-
-            {/* <a onClick={() => setModal(5)}>
-                    <DollarSign color="#FAFAFA"/>
-                    <div>Token</div>
-                </a> */}
-
-            {/* <Link href={`/zoomout?page=${router.query.page}&mission=${router.query.mission}&component=${router.query.component}`}>
-                <a>
-                    <ZoomOut color="#FAFAFA"/>
-                    <div>Zoom Out</div>
-                </a>
-            </Link> */}
 
             <a onClick={() => {
                 setEditMode(!editMode)

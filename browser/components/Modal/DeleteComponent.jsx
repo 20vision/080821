@@ -1,5 +1,6 @@
 import axios from "axios"
 import { useModalStore } from "../../store/modal"
+import { useComponentStore } from "../../store/component"
 import config from '../../public/config.json'
 import { useRouter } from 'next/router'
 import { toast } from "react-toastify"
@@ -7,6 +8,7 @@ import { toast } from "react-toastify"
 export default function DeleteComponent() {
     const setModal = useModalStore(state => state.setModal)
     const router = useRouter()
+    const setEditMode = useComponentStore(state => state.setEditMode)
 
     return (
         <div style={{textAlign: 'center'}}>
@@ -21,8 +23,10 @@ export default function DeleteComponent() {
                 </h2>
                 <h2 onClick={async() => {
                     try{
-                        await axios.post(`/${config.HTTP_SERVER_URL}/update/component/delete`, {uid: router.query.component}, {withCredentials: true})
-                        router.push(`${router.query.page}/${router.query.mission}`)
+                        await axios.post(`${config.HTTP_SERVER_URL}/update/component/delete`, {uid: router.query.component}, {withCredentials: true})
+                        setModal(0)
+                        setEditMode(false)
+                        router.push(`/${router.query.page}/${router.query.mission}`)
                     }catch(err){
                         console.log(err)
                         toast.error('Could not delete Component')

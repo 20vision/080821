@@ -37,7 +37,6 @@ export default function Overview({comp, subs}){
                 setWasEditing(false)
             }
         }
-        console.log(wasEditing, editMode)
         if((wasEditing == true) && (editMode == false) && (childUids.length > 0)) AsyncFunction()
         if((wasEditing == false) && (editMode == true)) setWasEditing(true)
     }, [editMode])

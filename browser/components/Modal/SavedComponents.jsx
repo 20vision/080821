@@ -9,7 +9,6 @@ import InfiniteScroll from 'react-infinite-scroll-component'
 import PacmanLoader from 'react-spinners/PacmanLoader'
 import Loading from "../../assets/Loading/Loading"
 import { useRouter } from "next/router"
-import UploadCloud from "../../assets/UploadCloud"
 
 export default function SavedComponents() {
     const [loading, setLoading] = useState(false)
@@ -21,9 +20,10 @@ export default function SavedComponents() {
     const fetchSavedComponents = () => {
         if(canFetchNext == false) return
         setLoading(true)
-        axios.get(`${config.HTTP_SERVER_URL}/get/components/saved/${components && components.length?(components.length-1):0}`, {withCredentials: true})
+        axios.get(`${config.HTTP_SERVER_URL}/get/components/${router.query.component}/saved/${components && components.length?(components.length-1):0}`, {withCredentials: true})
         .then(response => {
             if(response.data.length != 5) setCanFetchNext(false)
+            console.log(response.data)
             if(components && (components.length > 0)) return setComponents([...components, ...response.data])
             setComponents(response.data)
         })
@@ -112,7 +112,7 @@ const CompWithCheckBox = ({comp, selected, setSelected}) => {
     }, [selectedIndex])
 
     return(
-        <a onClick={() => selectedIndex==null?setSelectedIndex(selected.length+1):setSelectedIndex(null)} style={{display: 'flex', alignItems: 'center', margin: '15px 0px'}}>
+        <a onClick={() => selectedIndex==null?setSelectedIndex(selected.length+1):setSelectedIndex(null)} style={{display: 'flex', alignItems: 'center', margin: '15px 0px', opacity: comp.already_used?'0.3':'1', cursor: comp.already_used?'auto':'pointer', pointerEvents: comp.already_used?'none':'auto'}}>
             <div style={{margin: 15, marginRight: 30}}>
                 {selectedIndex!=null?<CheckSquare color="var(--red)"/>:<Square/>}
             </div>
