@@ -42,12 +42,14 @@ var Panel = onClickOutside(({children, page, subs, comp}) => {
     const size = useWindowSize()
 
     useEffect(async() => {
+        const controller = new AbortController()
         try{
-            setDependentsCount((await axios.get(`${config.HTTP_SERVER_URL}/get/component/${router.query.component}/dependents/count`)).data.count)
-            setDependents([...(await axios.get(`${config.HTTP_SERVER_URL}/get/component/${router.query.component}/dependents/0`)).data.dependents])
+            setDependentsCount((await axios.get(`${config.HTTP_SERVER_URL}/get/component/${router.query.component}/dependents/count`, {signal: controller.signal})).data.count)
+            setDependents([...(await axios.get(`${config.HTTP_SERVER_URL}/get/component/${router.query.component}/dependents/0`, {signal: controller.signal})).data.dependents])
         }catch(error){
             console.error(error)
         }
+        return () => controller.abort()
     }, [router.query.component])
 
     Panel.handleClickOutside = () => {

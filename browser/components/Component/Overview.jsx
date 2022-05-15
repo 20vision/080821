@@ -23,44 +23,45 @@ export default function Overview({comp, subs}){
 
 
     useEffect(() => {
-        async function AsyncFunction(){
-            try{
-                await axios.post(`${config.HTTP_SERVER_URL}/update/component/connection`, {
-                    uid: router.query.component, 
-                    child_uids: childUids
-                }, {withCredentials: true})
+        const controller = new AbortController();
+        
+        if((wasEditing == true) && (editMode == false) && (childUids.length > 0)){
+            axios.get(`${config.HTTP_SERVER_URL}/update/component/connection`, {
+                uid: router.query.component, 
+                child_uids: childUids
+            }, {signal: controller.signal,withCredentials: true})
+            .then(response => {
                 router.reload(window.location.pathname)
                 setWasEditing(false)
-            }catch(err){
+            })
+            .catch(err => {
                 console.log(err)
                 toast.error('Could not remove Sub-Components')
                 setWasEditing(false)
-            }
+            })
         }
-        if((wasEditing == true) && (editMode == false) && (childUids.length > 0)) AsyncFunction()
         if((wasEditing == false) && (editMode == true)) setWasEditing(true)
+        return () => {
+            controller.abort()
+        }
     }, [editMode])
 
     return(
         <div>
-            <Link href={`#main`}>
-                <a>
-                    <div style={{display:'flex'}}>
-                        {subs && subs.length>0?
-                            <div style={{display: 'flex', flexDirection: 'column',width: '8px', paddingLeft: '3px'}}>
-                                <div style={{flexGrow: '1'}}/>
-                                <Start type={comp.type}/>
-                                <Branch type={comp.type}/>
-                            </div>
-                        :
-                            null
-                        }
-                        <div className={`${styles.componentParent}`}>
-                            <ContentRow data={comp} subcomponents={subs && subs.length}/>
-                        </div>
+            <div style={{display:'flex'}}>
+                {subs && subs.length>0?
+                    <div style={{display: 'flex', flexDirection: 'column',width: '8px', paddingLeft: '3px'}}>
+                        <div style={{flexGrow: '1'}}/>
+                        <Start type={comp.type}/>
+                        <Branch type={comp.type}/>
                     </div>
-                </a>
-            </Link>
+                :
+                    null
+                }
+                <div className={`${styles.componentParent}`}>
+                    <ContentRow data={comp} subcomponents={subs && subs.length}/>
+                </div>
+            </div>
             {subs && subs.map((sub, index) => {
                 return(
                     <div style={{display:'flex',marginLeft:'3px'}} key={index}>
@@ -94,21 +95,25 @@ export default function Overview({comp, subs}){
 const ContentRow = ({data, subcomponents, pagination, profile, editMode, router, childUids, setChildUids}) => {
     const [saved, setSaved] = useState()
     const [deleteIndex, setDeleteIndex] = useState()
-
+    
     useEffect(() => {
-        async function AsyncFunction(){
-            try{
-                setSaved((await axios.get(`${config.HTTP_SERVER_URL}/get/component/${data.uid}/saved`, {withCredentials: true})).data==0?false:true)
-            }catch(err){
+        const controller = new AbortController();
+        if(profile && profile.username) {
+            axios.get(`${config.HTTP_SERVER_URL}/get/component/${data.uid}/saved`,{withCredentials: true, signal: controller.signal})
+            .then(response => {
+                setSaved(response.data==0?false:true)
+            })
+            .catch(err => {
                 console.log(err)
-            }
+            })
         }
-        if(profile && profile.username) AsyncFunction()
+        return () => controller.abort()
+
     }, [profile])
 
     return(
         <div className={pageLayoutStyle.dependent} style={{opacity: deleteIndex==null?1:0.6}}>
-            <Link href={`#sub_${data.child_component_index}`}>
+            <Link href={childUids!=null?`#sub_${data.child_component_index}`:`#main`}>
                 <a>
                     <div className={pageLayoutStyle.info}>
                         <div className={pageLayoutStyle.header}>

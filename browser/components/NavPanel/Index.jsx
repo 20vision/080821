@@ -105,14 +105,17 @@ function ComponentNav({router}){
     const [saved, setSaved] = useState()
 
     useEffect(() => {
+        const controller = new AbortController();
+
         async function AsyncFunction(){
             try{
-                setSaved((await axios.get(`${config.HTTP_SERVER_URL}/get/component/${router.query.component}/saved`, {withCredentials: true})).data==0?false:true)
+                setSaved((await axios.get(`${config.HTTP_SERVER_URL}/get/component/${router.query.component}/saved`, {withCredentials: true, signal: controller.signal})).data==0?false:true)
             }catch(err){
                 console.log(err)
             }
         }
         if(profile.username) AsyncFunction()
+        return () => controller.abort()
     }, [profile])
 
     return(

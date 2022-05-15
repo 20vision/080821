@@ -23,7 +23,6 @@ export default function SavedComponents() {
         axios.get(`${config.HTTP_SERVER_URL}/get/components/${router.query.component}/saved/${components && components.length?(components.length-1):0}`, {withCredentials: true})
         .then(response => {
             if(response.data.length != 5) setCanFetchNext(false)
-            console.log(response.data)
             if(components && (components.length > 0)) return setComponents([...components, ...response.data])
             setComponents(response.data)
         })
