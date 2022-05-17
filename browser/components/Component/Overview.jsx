@@ -114,14 +114,14 @@ const ContentRow = ({data, subcomponents, pagination, profile, editMode, router,
     return(
         <div className={pageLayoutStyle.dependent} style={{opacity: deleteIndex==null?1:0.6}}>
             <Link href={childUids!=null?`#sub_${data.child_component_index}`:`#main`}>
-                <a>
+                <a style={{flexGrow: 1}}>
                     <div className={pageLayoutStyle.info}>
                         <div className={pageLayoutStyle.header}>
                             <h3>{pagination?<span style={{opacity: '0.75'}}>-{pagination}|&nbsp;</span>:null}<span>{data.header}</span></h3>
                         </div>
                         <div className={pageLayoutStyle.footer}>
                             <span style={{fontSize: 12,fontWeight: 'bold',color: data.type == 'p'?'var(--blue)':data.type == 's'?'var(--yellow)':'var(--green)'}}>{data.type == 'p'?'Product':data.type == 's'?'Service':'Result'}</span>&nbsp;
-                            <span style={{fontSize: 12}}>· {subcomponents!=null?subcomponents:data.subcomponents} Components</span>
+                            <span style={{fontSize: 12}}>· {subcomponents!=null?subcomponents:data.subcomponents} Component{((subcomponents&&subcomponents > 1) || (data.subcomponents&&data.subcomponents > 1))?'s':null}</span>
                         </div>
                     </div>
                 </a>
