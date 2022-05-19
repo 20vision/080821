@@ -23,13 +23,12 @@ export default function Overview({comp, subs}){
 
 
     useEffect(() => {
-        const controller = new AbortController();
         
         if((wasEditing == true) && (editMode == false) && (childUids.length > 0)){
             axios.get(`${config.HTTP_SERVER_URL}/update/component/connection`, {
                 uid: router.query.component, 
                 child_uids: childUids
-            }, {signal: controller.signal,withCredentials: true})
+            }, {withCredentials: true})
             .then(response => {
                 router.reload(window.location.pathname)
                 setWasEditing(false)
@@ -41,9 +40,6 @@ export default function Overview({comp, subs}){
             })
         }
         if((wasEditing == false) && (editMode == true)) setWasEditing(true)
-        return () => {
-            controller.abort()
-        }
     }, [editMode])
 
     return(
@@ -97,9 +93,8 @@ const ContentRow = ({data, subcomponents, pagination, profile, editMode, router,
     const [deleteIndex, setDeleteIndex] = useState()
     
     useEffect(() => {
-        const controller = new AbortController();
         if(profile && profile.username) {
-            axios.get(`${config.HTTP_SERVER_URL}/get/component/${data.uid}/saved`,{withCredentials: true, signal: controller.signal})
+            axios.get(`${config.HTTP_SERVER_URL}/get/component/${data.uid}/saved`,{withCredentials: true})
             .then(response => {
                 setSaved(response.data==0?false:true)
             })
@@ -107,7 +102,6 @@ const ContentRow = ({data, subcomponents, pagination, profile, editMode, router,
                 console.log(err)
             })
         }
-        return () => controller.abort()
 
     }, [profile])
 

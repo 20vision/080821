@@ -23,7 +23,7 @@ import ComponentsHorizonta from "../components/Component/ComponentsHorizontal";
 export default function PageLayout( {children, page, comp, subs} ) {
     return (
         <>  
-            <div className={styles.container} style={{color: 'var(--lighter_black)'}}>
+            <div className={styles.container} style={{color: 'var(--lighter_black)',backgroundColor: 'var(--light_black)'}}>
                 <Panel children={children} page={page} subs={subs} comp={comp} outsideClickIgnoreClass={'ignore_click_outside_page'}/>
             </div>
         </>
@@ -42,14 +42,12 @@ var Panel = onClickOutside(({children, page, subs, comp}) => {
     const size = useWindowSize()
 
     useEffect(async() => {
-        const controller = new AbortController()
         try{
-            setDependentsCount((await axios.get(`${config.HTTP_SERVER_URL}/get/component/${router.query.component}/dependents/count`, {signal: controller.signal})).data.count)
-            setDependents([...(await axios.get(`${config.HTTP_SERVER_URL}/get/component/${router.query.component}/dependents/0`, {signal: controller.signal})).data.dependents])
+            setDependentsCount((await axios.get(`${config.HTTP_SERVER_URL}/get/component/${router.query.component}/dependents/count`)).data.count)
+            setDependents([...(await axios.get(`${config.HTTP_SERVER_URL}/get/component/${router.query.component}/dependents/0`)).data.dependents])
         }catch(error){
             console.error(error)
         }
-        return () => controller.abort()
     }, [router.query.component])
 
     Panel.handleClickOutside = () => {

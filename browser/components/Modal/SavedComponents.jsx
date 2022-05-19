@@ -20,7 +20,7 @@ export default function SavedComponents() {
     const fetchSavedComponents = () => {
         if(canFetchNext == false) return
         setLoading(true)
-        axios.get(`${config.HTTP_SERVER_URL}/get/components/${router.query.component}/saved/${components && components.length?(components.length-1):0}`, {withCredentials: true})
+        axios.get(`${config.HTTP_SERVER_URL}/get/components/${router.query.component}/saved/${components?components.length:0}`, {withCredentials: true})
         .then(response => {
             if(response.data.length != 5) setCanFetchNext(false)
             if(components && (components.length > 0)) return setComponents([...components, ...response.data])
@@ -38,7 +38,6 @@ export default function SavedComponents() {
         fetchSavedComponents()
     }, [])
 
-
     return (
         <div className="noselect" style={{width: 450}}>
             <h1 style={{textAlign: "center", marginBottom: '35px'}}>Saved Components</h1>
@@ -47,19 +46,23 @@ export default function SavedComponents() {
                     <div style={{color: 'var(--grey)', textAlign: 'center'}}>You have to save Components prior to adding them</div>
                 </div>
             :null}
-            <InfiniteScroll 
-                dataLength={components.length}
-                hasMore={canFetchNext}
-                next={
-                    () => {
-                        fetchSavedComponents()
+            <div
+            id="scrollableDiv"
+            style={{marginBottom: 35, maxHeight: 350, overflowY: 'scroll'}}>
+                <InfiniteScroll 
+                    dataLength={components.length}
+                    hasMore={canFetchNext}
+                    scrollableTarget="scrollableDiv"
+                    next={
+                        () => {
+                            fetchSavedComponents()
+                        }
                     }
-                }
-                style={{marginBottom: 35}}
-                loader={<PacmanLoader css="display:block;" color="#8A8A8A" size={12}/>}
-            >
-                {components && components.map((comp, index) => <div key={index}><CompWithCheckBox comp={comp} selected={selected} setSelected={setSelected}/></div>)}
-            </InfiniteScroll>
+                    loader={<PacmanLoader css="display:block;" color="#8A8A8A" size={12}/>}
+                >
+                    {components && components.map((comp, index) => <div key={index}><CompWithCheckBox comp={comp} selected={selected} setSelected={setSelected}/></div>)}
+                </InfiniteScroll>
+            </div>
             <a style={{flexGrow: 1}} onClick={async() => {
                 if(loading||(selected.length==0)) return
                 try{

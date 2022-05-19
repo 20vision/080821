@@ -33,9 +33,9 @@ var Panel = onClickOutside(({children, page, missions, comp, subs}) => {
     };
 
     return(
-        <div className={styles.child}  style={{backgroundColor: 'var(--black)'}}>
+        <div className={styles.child}  style={{backgroundColor: 'var(--light_black)'}}>
 
-            <div className={styles.pageInfo} style={{backgroundColor: 'var(--black)'}}>
+            <div className={styles.pageInfo} style={{backgroundColor: 'var(--light_black)'}}>
                 <PageInfo page={page}/>
                 <Missions missions={missions}/>
             </div>

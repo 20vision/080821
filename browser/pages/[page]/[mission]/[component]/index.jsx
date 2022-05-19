@@ -11,13 +11,11 @@ export default function Component({component, subComponents, params}){
   const [page, setPage] = useState(null)
   
   useEffect(async() => {
-    const controller = new AbortController()
     try{
-      setPage((await axios.get(`${config.HTTP_SERVER_URL}/get/page/${params.page}?missions=false`, {signal: controller.signal})).data.page)
+      setPage((await axios.get(`${config.HTTP_SERVER_URL}/get/page/${params.page}?missions=false`)).data.page)
     }catch(error){
       console.error(error)
     }
-    return () => controller.abort()
   }, [])
 
   return(
