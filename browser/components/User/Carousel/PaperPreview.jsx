@@ -52,7 +52,6 @@ export default function PaperPreview({setSelectedComponent}){
             transition: { duration: 0.25}
         })
       })
-      await new Promise(r => setTimeout(r, 1200));
       setIsInWheelTransition(false)
   }, [highlightIndex, components])
 
@@ -82,31 +81,35 @@ export default function PaperPreview({setSelectedComponent}){
         <div style={{height: 407, position: 'relative', color: 'var(--lighter_black)'}}>
           {components && components.map((component, index) => (
             <div key={index} onWheel={async scrollInfo => {
-              if(isInWheelTransition) return
-              if((scrollInfo.deltaY < 0) && (0 != highlightIndex)){
-                setIsInWheelTransition(true)
-                await controls.start(() => {
-                  return({
-                      opacity: 0,
-                      y: 15,
-                      scale: 0.95,
-                      transition: { duration: 0.01}
+              try{
+                if(isInWheelTransition) return
+                if((scrollInfo.deltaY < -5) && (0 != highlightIndex)){
+                  setIsInWheelTransition(true)
+                  await controls.start(() => {
+                    return({
+                        opacity: 0,
+                        y: 0.5,
+                        scale: 0.95,
+                        transition: { duration: 0.001}
+                    })
                   })
-                })
-                setHighlightIndex(highlightIndex-1)
-              }else if((scrollInfo.deltaY > 0) && (components.length > (highlightIndex+1))){
-                setIsInWheelTransition(true)
-                await controls.start(() => {
-                  return({
-                      opacity: 0,
-                      y: 15,
-                      scale: 0.95,
-                      transition: { duration: 0.01}
+                  setHighlightIndex(highlightIndex-1)
+                }else if(((scrollInfo.deltaY > 5)) && (components.length > (highlightIndex+1))){
+                  setIsInWheelTransition(true)
+                  await controls.start(() => {
+                    return({
+                        opacity: 0,
+                        y: 0.5,
+                        scale: 0.95,
+                        transition: { duration: 0.001}
+                    })
                   })
-                })
-                setHighlightIndex(highlightIndex+1)
-              }else{
-                null
+                  setHighlightIndex(highlightIndex+1)
+                }else{
+                  null
+                }
+              }catch(err){
+                console.error(err)
               }
             }}>
               {((index == highlightIndex+1) || (index == highlightIndex-1) || (index == highlightIndex))?
