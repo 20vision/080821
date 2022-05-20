@@ -16,9 +16,9 @@ import PageIcon from '../assets/PageIcon/PageIcon'
 import Overview from "../components/Component/Overview";
 import {animateScroll} from 'react-scroll';
 import { useRef } from "react";
-import { motion } from 'framer-motion';
 import useWindowSize from "../hooks/Page/useWindowsSize";
 import ComponentsHorizonta from "../components/Component/ComponentsHorizontal";
+import { motion, useAnimation } from 'framer-motion';
 
 export default function PageLayout( {children, page, comp, subs} ) {
     return (
@@ -40,6 +40,24 @@ var Panel = onClickOutside(({children, page, subs, comp}) => {
     const [dependentsCount, setDependentsCount] = useState(null)
     const [scrollPercentage, setScrollPercentage] = useState(0)
     const size = useWindowSize()
+    const controls = useAnimation()
+
+    useEffect(async()=>{
+        await controls.start(() => {
+          return({
+              x: -100,
+              opacity: 0,
+              transition: { duration: 0}
+          })
+        })
+        await controls.start(() => {
+          return({
+              x: 0,
+              opacity: 1,
+              transition: { duration: 0.35}
+          })
+        })
+    }, [comp])
 
     useEffect(async() => {
         try{
@@ -65,7 +83,7 @@ var Panel = onClickOutside(({children, page, subs, comp}) => {
         exit={{scale: 0.5}}
         className={styles.child} style={{backgroundColor: 'var(--white)'}}>
 
-            <div className={styles.pageInfo} style={{backgroundColor: 'var(--white)'}}>
+            <div className={styles.pageInfo} style={{backgroundColor: 'var(--white)', zIndex: 100}}>
                 {page?
                 <Link href={`/${page.unique_pagename}`}>
                     <a>
@@ -117,16 +135,16 @@ var Panel = onClickOutside(({children, page, subs, comp}) => {
                 }
             </div>
 
-            <div onScroll={arg => setScrollPercentage((arg.target.scrollTop/arg.target.scrollTopMax)*100)} className={`hideScrollBar ${styles.previewContainer}`} style={{scrollBehavior: 'smooth',overflowY: 'scroll'}}>
+            <motion.div animate={controls} onScroll={arg => setScrollPercentage((arg.target.scrollTop/arg.target.scrollTopMax)*100)} className={`hideScrollBar ${styles.previewContainer}`} style={{scrollBehavior: 'smooth',overflowY: 'scroll'}}>
                 <div className={styles.previewChild}>
                     <main>
                         {children}
                     </main>
                 </div>
-            </div>
+            </motion.div>
 
             {((size !== 'undefined') && (size.width >= 1500))?
-                <div className={styles.overviewParent}>
+                <motion.div animate={controls} className={styles.overviewParent}>
                     <div onMouseEnter={() => animateScroll.scrollTo(overviewRef.current.scrollTopMax*scrollPercentage/100, {
                             smooth: true,
                             duration: 400,
@@ -139,7 +157,7 @@ var Panel = onClickOutside(({children, page, subs, comp}) => {
                     drop-shadow( 0px -20px 5px rgb(250, 250, 250, 1))`}}>
                         <NavPanel/>
                     </div>
-                </div>
+                </motion.div>
             :null}
 
         </motion.div>
