@@ -45,7 +45,7 @@ var Panel = onClickOutside(({children, page, subs, comp}) => {
     useEffect(async()=>{
         await controls.start(() => {
           return({
-              x: -100,
+              x: '-40vw',
               opacity: 0,
               transition: { duration: 0}
           })
@@ -144,20 +144,20 @@ var Panel = onClickOutside(({children, page, subs, comp}) => {
             </motion.div>
 
             {((size !== 'undefined') && (size.width >= 1500))?
-                <motion.div animate={controls} className={styles.overviewParent}>
-                    <div onMouseEnter={() => animateScroll.scrollTo(overviewRef.current.scrollTopMax*scrollPercentage/100, {
+                <div className={styles.overviewParent}>
+                    <motion.div animate={controls} onMouseEnter={() => animateScroll.scrollTo(overviewRef.current.scrollTopMax*scrollPercentage/100, {
                             smooth: true,
                             duration: 400,
                             ignoreCancelEvents: false,
                             containerId: 'overviewId'
                         })} className={`hideScrollBar ${styles.overviewChild}`} id='overviewId' ref={overviewRef} style={{scrollBehavior: 'inherit!important'}}>
                         <Overview subs={subs} comp={comp}/>
-                    </div>
+                    </motion.div>
                     <div style={{filter: `
                     drop-shadow( 0px -20px 5px rgb(250, 250, 250, 1))`}}>
                         <NavPanel/>
                     </div>
-                </motion.div>
+                </div>
             :null}
 
         </motion.div>
