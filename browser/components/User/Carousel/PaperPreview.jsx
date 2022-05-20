@@ -81,6 +81,7 @@ export default function PaperPreview({setSelectedComponent}){
         <div style={{height: 407, position: 'relative', color: 'var(--lighter_black)'}}>
           {components && components.map((component, index) => (
             <div key={index} onWheel={async scrollInfo => {
+              console.log(scrollInfo.deltaY)
               try{
                 if(isInWheelTransition) return
                 if((scrollInfo.deltaY < -5) && (0 != highlightIndex)){
@@ -106,7 +107,11 @@ export default function PaperPreview({setSelectedComponent}){
                   })
                   setHighlightIndex(highlightIndex+1)
                 }else{
-                  null
+                  scrollInfo.preventDefault();
+                  scrollInfo.stopPropagation();
+
+                  return false;
+
                 }
               }catch(err){
                 console.error(err)
