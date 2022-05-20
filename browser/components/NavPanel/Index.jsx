@@ -26,6 +26,7 @@ import { useComponentStore } from '../../store/component'
 import Cloud from '../../assets/cloud'
 import SavedToCloud from '../../assets/SavedToCloud'
 import Trash from '../../assets/Trash'
+import Flag from '../../assets/Flag'
 
 export default function Index() {
     const [profile, isLoading, setUser] = useUserProfile()
@@ -39,31 +40,19 @@ export default function Index() {
         return null
     }else{
         return(
-            <>
-            {isLoading || !profile.username?
-                null
-            :
-                <div className={styles.container}>
-                    <div className={styles.child} style={{color: 'var(--white)'}}>
-                        {profile.username?
-                            <>
-                                {router.pathname.split('/')[1] == 'zoomout'?     
-                                    <ForumNav router={router}/>
-                                :router.query.component?
-                                    <ComponentNav router={router}/>
-                                :router.query.mission?
-                                    <MissionNavWithRole router={router}/>
-                                :
-                                    <PageNavWithRole router={router}/>
-                                }
-                            </>
-                        :
-                            <PageNav router={router}/>
-                        }
-                    </div>
+            <div className={styles.container}>
+                <div className={styles.child} style={{color: 'var(--white)'}}>
+                    {router.pathname.split('/')[1] == 'zoomout'?     
+                        <ForumNav router={router}/>
+                    :router.query.component?
+                        <ComponentNav router={router}/>
+                    :router.query.mission?
+                        <MissionNavWithRole router={router}/>
+                    :
+                        <PageNav router={router} profile={profile}/>
+                    }
                 </div>
-            }
-            </>
+            </div>
         )
     }
 }
@@ -103,12 +92,18 @@ function ComponentNav({router}){
     const editMode = useComponentStore(state => state.editMode)
     const [profile, isLoading, setUser] = useUserProfile()
     const [saved, setSaved] = useState()
+    const [hasRole, setHasRole] = useState()
 
     useEffect(() => {
-
+        if(!profile.username) return
         async function AsyncFunction(){
             try{
                 setSaved((await axios.get(`${config.HTTP_SERVER_URL}/get/component/${router.query.component}/saved`, {withCredentials: true})).data==0?false:true)
+            }catch(err){
+                console.log(err)
+            }
+            try{
+                if(hasRole == null) setHasRole((await axios.get(`${config.HTTP_SERVER_URL}/get/page/${router.query.page}/role`, {withCredentials: true})).data)
             }catch(err){
                 console.log(err)
             }
@@ -135,7 +130,7 @@ function ComponentNav({router}){
                         <div>Delete</div>
                     </a>
                 </>
-            :
+            :profile.username?
                 <>
                     {saved==false?
                         <a onClick={() => {
@@ -174,25 +169,36 @@ function ComponentNav({router}){
                         </a>
                     }
                 </>
-            }
+            :null}
 
-            <a onClick={() => {
-                setEditMode(!editMode)
-            }}>
-                {editMode?<Check color="#FAFAFA"/>:<Tool color="#FAFAFA"/>}
-                <div>{editMode?'Finish':'Edit'}</div>
-            </a>
+            {hasRole?
+                <a onClick={() => {
+                    setEditMode(!editMode)
+                }}>
+                    {editMode?<Check color="#FAFAFA"/>:<Tool color="#FAFAFA"/>}
+                    <div>{editMode?'Finish':'Edit'}</div>
+                </a>
+            :
+                <a onClick={() => setModal(10)}>
+                    <Flag color="var(--white)"/>
+                    <div>Report</div>
+                </a>
+            }
         </>
     )
 }
 
-function PageNavWithRole({router}){
+function PageNav({router, profile}){
     const setModal = useModalStore(state => state.setModal)
     return(
         <>
             <a onClick={() => setModal(4)}>
                 <Plus color="#FAFAFA"/>
                 <div>Mission</div>
+            </a>
+            <a>
+                <UserPlus color="#FAFAFA"/>
+                <div>Follow</div>
             </a>
 
             <a onClick={() => setModal(5)}>
@@ -210,35 +216,6 @@ function PageNavWithRole({router}){
             <a>
                 <Tool color="#FAFAFA"/>
                 <div>Manage</div>
-            </a>
-        </>
-    )
-}
-
-function PageNav({router}){
-    const setModal = useModalStore(state => state.setModal)
-    return(
-        <>
-            <a>
-                <UserPlus color="#FAFAFA"/>
-                <div>Follow</div>
-            </a>
-
-            <a onClick={() => setModal(5)}>
-                <DollarSign color="#FAFAFA"/>
-                <div>Trade</div>
-            </a>
-
-            <Link href={`/zoomout?page=${router.query.page}`}>
-                <a>
-                    <ZoomOut color="#FAFAFA"/>
-                    <div>Zoom Out</div>
-                </a>
-            </Link>
-
-            <a>
-                <Info color="#FAFAFA"/>
-                <div>Info</div>
             </a>
         </>
     )

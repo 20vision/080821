@@ -277,6 +277,34 @@ router.get("/page/:page_name/trade_info", check.AuthOptional, async (req, res) =
     })
 })
 
+router.get("/page/:page_name/role", check.AuthOptional, async (req, res) => {
+    if(!req.user_id) return res.json(false)
+    pool.getConnection(async function(err, conn) {
+        if (err){
+            res.status(500).send('An error occurred')
+            console.log(err)
+        }else{
+            conn.query(
+                'SELECT pu.page_user_id from PageUser pu join Page p on p.page_id = pu.page_id and pu.user_id = ? and p.unique_pagename = ?;',
+                [req.user_id, req.params.page_name],
+                function(err, result) {
+                    if (err){
+                        res.status(500).send('An error occurred')
+                        console.log(err)
+                    }else{
+                        if(result && result.length == 1){
+                            res.json(true)
+                        }else{
+                            res.json(false)
+                        }
+                    }
+                }
+            );
+        }
+        pool.releaseConnection(conn);
+    })
+})
+
 
 // Forum
 

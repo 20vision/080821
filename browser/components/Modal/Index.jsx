@@ -14,6 +14,7 @@ import Trade from './Trade'
 import { useEffect } from 'react'
 import config from '../../public/config.json'
 import DeleteComponent from './DeleteComponent'
+import Report from './Report'
 
 export default function Modal() {
 
@@ -53,7 +54,9 @@ const ClickOutside = onClickOutside(() =>{
             setModal(0)
         }
 
-        if(modal > 1 && (profile.username == null)){
+        if((modal > 1)
+         && (profile.username == null)
+         && (modal != 10)){
             setModal(1)
         }
     }, [])
@@ -89,6 +92,8 @@ const ClickOutside = onClickOutside(() =>{
                     <SavedComponents/>
                 :modal == 9 ?
                     <DeleteComponent/>
+                :modal == 10 ?
+                    <Report/>
                 :
                     null}
 
