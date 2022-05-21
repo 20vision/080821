@@ -1,5 +1,5 @@
 import styles from "../styles/pageLayout/index.module.css"
-
+import indexStyles from '../styles/modal/index.module.css'
 import PageInfo from '../components/PageLayout/PageInfo'
 import onClickOutside from "react-onclickoutside";
 import NavPanel from "../components/NavPanel/Index"
@@ -39,6 +39,7 @@ var Panel = onClickOutside(({children, page, subs, comp}) => {
     const [dependents, setDependents] = useState([])
     const [dependentsCount, setDependentsCount] = useState(null)
     const [scrollPercentage, setScrollPercentage] = useState(0)
+    const [selectedRoute, setSelectedRoute] = useState(0)
     const size = useWindowSize()
     const controls = useAnimation()
 
@@ -92,7 +93,12 @@ var Panel = onClickOutside(({children, page, subs, comp}) => {
                 </Link>
                 :<div style={{margin: 'auto auto'}}><Loading/></div>}
 
-                {((size !== 'undefined') && (size.width >= 1500))?
+                <div className={indexStyles.header} style={{margin: '25px 5px', marginTop: 0}}>
+                    <h2 style={{margin: 'auto', padding: '2px 30px', cursor: 'pointer'}} onClick={() => setSelectedRoute(0)} className={selectedRoute == 0?indexStyles.highlight:null}>Overview</h2>
+                    <h2 style={{margin: 'auto', padding: '2px 30px', cursor: 'pointer'}} onClick={() => setSelectedRoute(1)} className={selectedRoute == 1?indexStyles.highlight:null}>Dependent</h2>
+                </div>
+
+                {selectedRoute == 1?
                     <div style={{margin: '35px', flexGrow: '1', display: 'flex', flexDirection: 'column'}}>
                         <div style={{flexGrow: '1'}}>
                             {dependentsCount && (dependents.length>0)?
