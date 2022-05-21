@@ -81,7 +81,7 @@ var Panel = onClickOutside(({children, page, subs, comp}) => {
         }}
         animate={{scale: 1}}
         exit={{scale: 0.5}}
-        className={styles.child} style={{backgroundColor: 'var(--white)'}}>
+        className={styles.child} style={{backgroundColor: 'var(--white)', overflow: 'hidden'}}>
 
             <div className={styles.pageInfo} style={{backgroundColor: 'var(--white)', zIndex: 100}}>
                 {page?
