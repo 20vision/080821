@@ -99,7 +99,7 @@ export default function CreateMission({type}) {
     }
 
     return (
-        <div>
+        <div style={{width: 450}}>
             <h1 style={{marginBottom: '35px', textAlign: 'center'}}>
                 {type.charAt(0).toUpperCase() + type.slice(1)}
             </h1>

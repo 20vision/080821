@@ -15,6 +15,7 @@ import { useEffect } from 'react'
 import config from '../../public/config.json'
 import DeleteComponent from './DeleteComponent'
 import Report from './Report'
+import ManagePageAndMission from './ManagePageAndMission'
 
 export default function Modal() {
 
@@ -94,8 +95,9 @@ const ClickOutside = onClickOutside(() =>{
                     <DeleteComponent/>
                 :modal == 10 ?
                     <Report/>
-                :
-                    null}
+                :modal == 11 ?
+                    <ManagePageAndMission/>
+                :null}
 
             </motion.div>
         </div>

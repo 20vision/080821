@@ -49,7 +49,7 @@
 
 .selected{
     background-color: transparent;
-    border: 1px solid var(--grey);
+    border: 3px solid var(--grey);
     color: var(--white);
     margin-bottom: 25px;
     border-radius: 25px;

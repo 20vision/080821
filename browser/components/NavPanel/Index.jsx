@@ -46,8 +46,6 @@ export default function Index() {
                         <ForumNav router={router}/>
                     :router.query.component?
                         <ComponentNav router={router}/>
-                    :router.query.mission?
-                        <MissionNavWithRole router={router}/>
                     :
                         <PageNav router={router} profile={profile}/>
                     }
@@ -57,34 +55,34 @@ export default function Index() {
     }
 }
 
-function MissionNavWithRole({router}){
-    const setModal = useModalStore(state => state.setModal)
-    return(
-        <>  
-            <a onClick={() => setModal(7)}>
-                <Plus color="#FAFAFA"/>
-                <div>Component</div>
-            </a>
+// function MissionNavWithRole({router}){
+//     const setModal = useModalStore(state => state.setModal)
+//     return(
+//         <>  
+//             <a onClick={() => setModal(7)}>
+//                 <Plus color="#FAFAFA"/>
+//                 <div>Component</div>
+//             </a>
 
-            <a onClick={() => setModal(5)}>
-                <DollarSign color="#FAFAFA"/>
-                <div>Token</div>
-            </a>
+//             <a onClick={() => setModal(5)}>
+//                 <DollarSign color="#FAFAFA"/>
+//                 <div>Token</div>
+//             </a>
 
-            <Link href={`/zoomout?page=${router.query.page}&mission=${router.query.mission}`}>
-                <a>
-                    <ZoomOut color="#FAFAFA"/>
-                    <div>Zoom Out</div>
-                </a>
-            </Link>
+//             <Link href={`/zoomout?page=${router.query.page}&mission=${router.query.mission}`}>
+//                 <a>
+//                     <ZoomOut color="#FAFAFA"/>
+//                     <div>Zoom Out</div>
+//                 </a>
+//             </Link>
 
-            <a>
-                <Tool color="#FAFAFA"/>
-                <div>Manage</div>
-            </a>
-        </>
-    )
-}
+//             <a>
+//                 <Tool color="#FAFAFA"/>
+//                 <div>Manage</div>
+//             </a>
+//         </>
+//     )
+// }
 
 function ComponentNav({router}){
     const setModal = useModalStore(state => state.setModal)
@@ -190,16 +188,41 @@ function ComponentNav({router}){
 
 function PageNav({router, profile}){
     const setModal = useModalStore(state => state.setModal)
+    const [hasRole, setHasRole] = useState()
+
+    useEffect(() => {
+        if(!profile.username) return
+        async function AsyncFunction(){
+            try{
+                if(hasRole == null) setHasRole((await axios.get(`${config.HTTP_SERVER_URL}/get/page/${router.query.page}/role`, {withCredentials: true})).data)
+            }catch(err){
+                console.log(err)
+            }
+        }
+        if(profile.username) AsyncFunction()
+    }, [profile])
+
     return(
         <>
-            <a onClick={() => setModal(4)}>
-                <Plus color="#FAFAFA"/>
-                <div>Mission</div>
-            </a>
-            <a>
-                <UserPlus color="#FAFAFA"/>
-                <div>Follow</div>
-            </a>
+            {profile && profile.username?
+                <>
+                    {hasRole?
+                        <a onClick={() => {
+                            if(router.query.mission) return setModal(7)
+                            setModal(4)
+                        }}>
+                            <Plus color="#FAFAFA"/>
+                            <div>{router.query.mission?'Component':'Mission'}</div>
+                        </a>
+                    :
+                        <a>
+                            <UserPlus color="#FAFAFA"/>
+                            <div>Follow</div>
+                        </a> 
+                    }
+                </>
+            :null
+            }
 
             <a onClick={() => setModal(5)}>
                 <DollarSign color="#FAFAFA"/>
@@ -213,10 +236,12 @@ function PageNav({router, profile}){
                 </a>
             </Link>
 
-            <a>
-                <Tool color="#FAFAFA"/>
-                <div>Manage</div>
-            </a>
+            {profile && profile.username && hasRole?
+                <a onClick={() => setModal(11)}>
+                    <Tool color="#FAFAFA"/>
+                    <div>Manage</div>
+                </a>
+            :null}
         </>
     )
 }
