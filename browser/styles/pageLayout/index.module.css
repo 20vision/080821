@@ -27,7 +27,7 @@
     border-radius: 35px;
     position: relative;
 }
-@media (min-width: 1501px) {
+@media (min-width: 1500px) {
     .child{
        width: clamp(1600px, 80%, 1800px);
     }
@@ -35,7 +35,7 @@
        width: clamp(1000px, 80%, 1800px);
     }
 }
-@media (max-width: 1500px) {
+@media (max-width: 1499px) {
     .child{
        width: clamp(1100px, 80%, 1800px);
     }

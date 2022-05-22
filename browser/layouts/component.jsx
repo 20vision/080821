@@ -93,12 +93,12 @@ var Panel = onClickOutside(({children, page, subs, comp}) => {
                 </Link>
                 :<div style={{margin: 'auto auto'}}><Loading/></div>}
 
-                <div className={indexStyles.header} style={{margin: '25px 5px', marginTop: 0}}>
+                {((size !== 'undefined') && (size.width < 1500))?<div className={indexStyles.header} style={{margin: '25px 5px', marginTop: 0}}>
                     <h2 style={{margin: 'auto', padding: '2px 30px', cursor: 'pointer'}} onClick={() => setSelectedRoute(0)} className={selectedRoute == 0?indexStyles.highlight:null}>Overview</h2>
                     <h2 style={{margin: 'auto', padding: '2px 30px', cursor: 'pointer'}} onClick={() => setSelectedRoute(1)} className={selectedRoute == 1?indexStyles.highlight:null}>Dependent</h2>
-                </div>
+                </div>:null}
 
-                {selectedRoute == 1?
+                {(selectedRoute == 1) || ((size !== 'undefined') && (size.width >= 1500))?
                     <div style={{margin: '35px', flexGrow: '1', display: 'flex', flexDirection: 'column'}}>
                         <div style={{flexGrow: '1'}}>
                             {dependentsCount && (dependents.length>0)?
