@@ -25,7 +25,7 @@ export default function Overview({comp, subs}){
     useEffect(() => {
         
         if((wasEditing == true) && (editMode == false) && (childUids.length > 0)){
-            axios.get(`${config.HTTP_SERVER_URL}/update/component/connection`, {
+            axios.post(`${config.HTTP_SERVER_URL}/update/component/connection`, {
                 uid: router.query.component, 
                 child_uids: childUids
             }, {withCredentials: true})
