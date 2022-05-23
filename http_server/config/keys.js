@@ -1,4 +1,4 @@
-const {express} = require('./passwords')
+const {express, jwt} = require('./passwords')
 
 const MYSQL = {
     MYSQL_URI: express=='password'?'127.0.0.1':'34.77.7.101',
@@ -8,7 +8,7 @@ const MYSQL = {
 };
 
 const JWT = {
-    JWT_SECRET: '0sm1GBXzMpX1k5E2YrpJyxohD6eoAYMd'
+    JWT_SECRET: jwt
 }
 
 const CLOUDSTORAGE = {
