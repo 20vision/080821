@@ -53,8 +53,8 @@ const create_user = (useragent, conn, username, publicKeyString) => new Promise(
               })
             }else{
                 conn.query(
-                    'INSERT INTO User_Session values (?,?,INET_ATON(?),?,now());',
-                    [null, results.insertId, '127.0.0.1', useragent.os, null],
+                    'INSERT INTO User_Session values (?,?,?,now());',
+                    [null, results.insertId, useragent.os, null],
                     function(err, results) {
                         if (err){
                           reject({
@@ -104,8 +104,8 @@ const login_user = (useragent, conn, publicKeyString) => new Promise(async (reso
               })
             }else{
                 conn.query(
-                    'INSERT INTO User_Session values (?,?,INET_ATON(?),?,now());',
-                    [null, results[0].user_id, '127.0.0.1', useragent.os, null],
+                    'INSERT INTO User_Session values (?,?,?,now());',
+                    [null, results[0].user_id, useragent.os, null],
                     function(err, results) {
                         if (err){
                           reject({
