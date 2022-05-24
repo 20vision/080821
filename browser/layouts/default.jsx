@@ -6,6 +6,7 @@ import Overview from "../components/Component/Overview";
 import PageIcon from '../assets/PageIcon/PageIcon'
 import { useRouter } from "next/router";
 import useWindowSize from "../hooks/Page/useWindowsSize";
+import config from '../public/config.json'
 
 export default function PageLayout( {children, comp, subs} ) {
     const opened = useMenuStore(state => state.opened)
@@ -26,11 +27,10 @@ export default function PageLayout( {children, comp, subs} ) {
                             {comp?
                                 <>
                                     <a onClick={() => router.push(`/${comp.unique_pagename}/${comp.mission_title}`)}>
-                                        {(comp.page_icon.length > 6) ?
-                                            <img src={comp.page_icon}/>
-                                        :comp?
+                                        {comp.page_icon.length > 6 ?
+                                            <img src={config.FILE_SERVER_URL+comp.page_icon+'48x48.webp'} style={{width: 45, height: 45}}/>
+                                        :
                                             <PageIcon color={'#'+comp.page_icon}/>
-                                        :null
                                         }
                                     </a>
                                     <h1>{comp.pagename}</h1>
