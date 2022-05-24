@@ -22,7 +22,7 @@ exports.profile_picture = function(req, res, next) {
             
         },
         limits: {
-            fieldSize: 5 * 1024 * 1024
+            fieldSize: 30 * 1024 * 1024
         }
     }).single('file')
 
@@ -49,77 +49,36 @@ exports.profile_picture = function(req, res, next) {
                 randomfolder: await random_string(8)
             }
 
-            for(var i=0; i<ratio.length;i++){
-                await sharp(imgBuffer)
-                .resize({ fit: sharp.fit.contain, width: ratio[i], height: ratio[i] })
-                .webp({ quality: 60 })
-                .toBuffer()
-                .then(async response => {
-                    data.buffer = response,
-                    data.filename = ratio[i].toString()+'x'+ratio[i].toString()+'.webp'
+            try{
 
-                    try{
-                        req.imageUrl = await uploadFile(data)
-                    }catch(error){
-                        console.log(error)
-                        res.status(500).send('An error occured while uploading file')
-                    }
+                for(var i=0; i<ratio.length;i++){
+                    await sharp(imgBuffer)
+                    .resize({ fit: sharp.fit.contain, width: ratio[i], height: ratio[i] })
+                    .webp({ quality: 60 })
+                    .toBuffer()
+                    .then(async response => {
+                        data.buffer = response,
+                        data.filename = ratio[i].toString()+'x'+ratio[i].toString()+'.webp'
 
-                }).catch(err =>{
-                    console.log("err: ",err);   
-                    res.status(500).send() 
-                })
-            }
-            
-
-            pool.getConnection(function(err, conn) {
-                if (err){
-                    res.status(500).send('An error occurred')
-                    console.log(err)
-                }else{
-                    conn.query(
-                        'SELECT profilePicture from User where user_id=?;',
-                        [req.user_id],
-                        function(err, oldProfilePicture) {
-                            if (err){
-                                res.status(500).send('An error occurred')
-                                console.log(err)
-                            }else{
-                                conn.query(
-                                    'UPDATE User set profilePicture=? where user_id=?;',
-                                    [req.imageUrl, req.user_id],
-                                    async function(err, results) {
-                                        if (err){
-                                            res.status(500).send('An error occurred')
-                                            console.log(err)
-                                        }
-                                        if(oldProfilePicture[0].profilePicture){
-                                            try{
-                                                oldProfilePicture = oldProfilePicture[0].profilePicture
-                                                oldProfilePicture = oldProfilePicture.split("/")
-                                                let delData ={
-                                                    bucketname: oldProfilePicture[0],
-                                                    timefolder: oldProfilePicture[1],
-                                                    randomfolder: oldProfilePicture[2]
-                                                }
-                                                await deleteFile(delData)
-                                                next()
-                                            }catch(error){
-                                                throw error
-                                            }
-                                        }else{
-                                            next()
-                                        }
-                                        
-                                    }
-                                );
-                            }
+                        try{
+                            req.imageUrl = await uploadFile(data)
+                            console.log('upload',i)
+                        }catch(error){
+                            console.log(error)
+                            res.status(500).send('An error occured while uploading file')
                         }
-                    );
-                }
-                pool.releaseConnection(conn);
-            })
 
+                    }).catch(err =>{
+                        console.log("err: ",err);   
+                        res.status(500).send() 
+                    })
+                }
+                console.log('next')
+                next()
+            }catch(error){
+                console.log('err: ',err)
+                res.status(500).send()
+            }
 
         }
     })

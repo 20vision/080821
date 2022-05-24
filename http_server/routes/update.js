@@ -3,6 +3,63 @@ const cloudStorage = require('../middleware/cloudStorage')
 const check = require('../middleware/check')
 const pool = require('../config/db');
 const input_validation = require('../middleware/input_validation');
+const { deleteFile } = require("../config/storage");
+
+router.post("/page_picture/:page_name", check.AuthRequired, check.role, check.DevMode, cloudStorage.profile_picture, async (req, res) => {
+    if(!req.user_id){
+        res.status(401).send('Not authenticated')
+    }else if(!req.imageUrl){
+        res.status(500).send('An error occured. Please try again later')
+    }else{
+        pool.getConnection(function(err, conn) {
+            if (err){
+                res.status(500).send('An error occurred')
+                console.log(err)
+            }else{
+                conn.query(
+                    'SELECT page_icon from Page where unique_pagename = ?;',
+                    [req.params.page_name],
+                    function(err, oldProfilePicture) {
+                        if (err){
+                            res.status(500).send('An error occurred')
+                            console.log(err)
+                        }else{
+                            conn.query(
+                                'UPDATE Page set page_icon=? where unique_pagename=?;',
+                                [req.imageUrl, req.params.page_name],
+                                async function(err, results) {
+                                    if (err){
+                                        res.status(500).send('An error occurred')
+                                        console.log(err)
+                                    }
+                                    if(oldProfilePicture[0].page_icon && oldProfilePicture[0].page_icon.length > 6){
+                                        try{
+                                            oldProfilePicture = oldProfilePicture[0].page_icon
+                                            oldProfilePicture = oldProfilePicture.split("/")
+                                            let delData ={
+                                                bucketname: oldProfilePicture[0],
+                                                timefolder: oldProfilePicture[1],
+                                                randomfolder: oldProfilePicture[2]
+                                            }
+                                            await deleteFile(delData)
+                                            res.json({url: req.imageUrl})
+                                        }catch(error){
+                                            throw error
+                                        }
+                                    }else{
+                                        res.json({url: req.imageUrl})
+                                    }
+                                    
+                                }
+                            );
+                        }
+                    }
+                );
+            }
+            pool.releaseConnection(conn);
+        })
+    }
+});
 
 router.post("/profile_picture", check.AuthRequired, check.DevMode, cloudStorage.profile_picture, async (req, res) => {
     if(!req.user_id){
@@ -10,7 +67,53 @@ router.post("/profile_picture", check.AuthRequired, check.DevMode, cloudStorage.
     }else if(!req.imageUrl){
         res.status(500).send('An error occured. Please try again later')
     }else{
-        res.json({url: req.imageUrl})
+        pool.getConnection(function(err, conn) {
+            if (err){
+                res.status(500).send('An error occurred')
+                console.log(err)
+            }else{
+                conn.query(
+                    'SELECT profilePicture from User where user_id=?;',
+                    [req.user_id],
+                    function(err, oldProfilePicture) {
+                        if (err){
+                            res.status(500).send('An error occurred')
+                            console.log(err)
+                        }else{
+                            conn.query(
+                                'UPDATE User set profilePicture=? where user_id=?;',
+                                [req.imageUrl, req.user_id],
+                                async function(err, results) {
+                                    if (err){
+                                        res.status(500).send('An error occurred')
+                                        console.log(err)
+                                    }
+                                    if(oldProfilePicture[0].profilePicture){
+                                        try{
+                                            oldProfilePicture = oldProfilePicture[0].profilePicture
+                                            oldProfilePicture = oldProfilePicture.split("/")
+                                            let delData ={
+                                                bucketname: oldProfilePicture[0],
+                                                timefolder: oldProfilePicture[1],
+                                                randomfolder: oldProfilePicture[2]
+                                            }
+                                            await deleteFile(delData)
+                                            res.json({url: req.imageUrl})
+                                        }catch(error){
+                                            throw error
+                                        }
+                                    }else{
+                                        res.json({url: req.imageUrl})
+                                    }
+                                    
+                                }
+                            );
+                        }
+                    }
+                );
+            }
+            pool.releaseConnection(conn);
+        })
     }
 });
 

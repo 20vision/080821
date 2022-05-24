@@ -56,10 +56,10 @@ export default function Square({content, makeScroll, isInTheBackground}){
         <div onMouseEnter={e => disableScroll.on()} onMouseLeave={() => disableScroll.off()} onWheel={info => makeScroll(info)} className={styles.container} id='bubble' style={{backgroundColor: `${content.page?'var(--light_grey)':content.mission?'var(--lighter_grey)':content.component?'var(--white)':null}`}}>
             {content.page?
                 <div className={styles.header} style={{display: 'flex'}}>
-                    {(content.page.page_icon.length < 7) ?
-                        <PageIcon color={'#'+content.page.page_icon}/>
+                    {page.page_icon.length > 6 ?
+                        <img src={config.FILE_SERVER_URL+page.page_icon+'48x48.webp'} style={{width: 45, height: 45}}/>
                     :
-                        <img src={content.page.page_icon}/>
+                        <PageIcon color={'#'+page.page_icon}/>
                     }
                     <div className={styles.pageNameDiv} style={{fontWeight: 'bold', fontSize: 12}}>
                         <h3 style={{color: '#444', marginTop: 4, marginBottom: 4}}>

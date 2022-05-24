@@ -17,9 +17,14 @@ import {BarLoader} from "react-spinners";
 
 import AvatarEditor from 'react-avatar-editor'
 import useAvatarToUrl from '../../hooks/Image/useAvatarToUrl'
+import {usePageSelectedStore} from '../../store/pageSelected'
+import { useRouter } from 'next/router'
 
 export default function User() {
     const [selectedRoute, setSelectedRoute] = useState(0)
+    const [profile, isLoading, setUser] = useUserProfile()
+    const [username, setUsername, valid, errorMsg, loading, publishNewUsername] = useUsernameValidation()
+
     return(
         <div>
             <div className={indexStyles.header}>
@@ -31,30 +36,55 @@ export default function User() {
                 </h1>
             </div>
 
-            {selectedRoute == 0 ? <Profile/> : <Logout/>}
+            {selectedRoute == 0 ? 
+            <Profile
+                profile={profile}
+                isLoading={isLoading}
+                setUser={setUser}
+                username={username}
+                setUsername={setUsername}
+                valid={valid}
+                errorMsg={errorMsg}
+                loading={loading}
+                publishNewUsername={publishNewUsername}
+            /> : <Logout/>}
 
         </div>
     )
 }
 
-function Profile(){
-    const [profile, isLoading, setUser] = useUserProfile()
-    const [username, setUsername, valid, errorMsg, loading, publishNewUsername] = useUsernameValidation()
+export function Profile({
+    profile, 
+    isLoading, 
+    setUser,
+    username, 
+    setUsername, 
+    valid, 
+    errorMsg, 
+    loading, 
+    publishNewUsername,
+    page}){
     const [validateImage, imageValidationError, validImage] = useImageValidation()
 
-    const [loadingUrl, url, setImage, err, setErr] = useAvatarToUrl()
+    const [loadingUrl, url, setImage, err, setErr] = useAvatarToUrl({isPage: profile?false:true})
 
     const [scaleImg, setScaleImg] = useState(1)
-
+        
     const showFileUpload = useRef()
     const croppedImgRef = useRef()
 
+    const [pagename, setPagename] = useState()
+    const [uniquePagename, setUniquePagename] = useState()
+    const router = useRouter()
+        
     useEffect(() => {
-        if(url){
+        if(url && profile){
             let newProfile = profile
             newProfile.profilePicture = url
             setUser(newProfile)
             validateImage(null)
+        }else if(url){
+            router.reload(window.location.pathname)
         }
     }, [url])
 
@@ -98,9 +128,9 @@ function Profile(){
             :
                 <div className={styles.profileContainer}>
                     <a onClick={!isLoading ? () => showFileUpload.current.click() : null}>
-                        <div className={styles.profileEdit}>
+                        <div className={styles.profileEdit} style={page?{borderRadius: 35}:null}>
                             <div className={styles.profile}>
-                                <ProfilePicture type={'large'} loading={isLoading} uri={profile.profilePicture?profile.profilePicture:null}/>
+                                <ProfilePicture type={'large'} page={page} loading={isLoading} uri={profile && profile.profilePicture?profile.profilePicture:(page && page.page_icon && page.page_icon.length > 6)?page.page_icon:null}/>
                             </div>
                             <div className={styles.cameraContainer}>
                                 <Camera color="#FAFAFA"/>
@@ -108,16 +138,23 @@ function Profile(){
                         </div>
                     </a>
                     <div>
-                        <div className={`inputLine ${styles.usernameContainer}`}>
-                            <span>@</span><input value={username?username:(profile.username)} onChange={e => setUsername(e.target.value.toLocaleLowerCase())}/>
-                            {((username != profile.username) && (valid) && (!loading))?
-                                <a onClick={() => publishNewUsername()} style={{margin: '0px 0px -5px 5px'}}>
-                                    <Check size={16} color="#FF5B77"/>
-                                </a>
-                            :
-                                null
-                            }
-                        </div>
+                        {profile?
+                            <div className={`inputLine ${styles.usernameContainer}`}>
+                                <span>@</span><input value={username?username:(profile.username)} onChange={e => setUsername(e.target.value.toLocaleLowerCase())}/>
+                                {((username != profile.username) && (valid) && (!loading))?
+                                    <a onClick={() => publishNewUsername()} style={{margin: '0px 0px -5px 5px'}}>
+                                        <Check size={16} color="#FF5B77"/>
+                                    </a>
+                                :
+                                    null
+                                }
+                            </div>
+                        :page?
+                            <div className={`inputLine ${styles.usernameContainer}`}>
+                                <input value={pagename?pagename:page.pagename} onChange={e => setPagename(e.target.value.toLocaleLowerCase())}/>
+                                <span>/</span><input value={uniquePagename?uniquePagename:page.unique_pagename} onChange={e => setUniquePagename(e.target.value.toLocaleLowerCase())}/>
+                            </div>
+                        :null}
                         {loading?
                         <BarLoader css="display:block;height:2px;" height={2} color="#FF5B77" width={190}/>
                         :

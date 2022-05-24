@@ -129,7 +129,7 @@ export default function CreateMission({type}) {
                     <div className={styles.topicChild}>
                         <div style={{transform: 'scale(0.8)'}}>
                             {page.page_icon.length > 6 ?
-                                <img src={page.page_icon}/>
+                                <img src={config.FILE_SERVER_URL+page.page_icon+'48x48.webp'} style={{width: 45, height: 45}}/>
                             :
                                 <PageIcon color={'#'+page.page_icon}/>
                             }

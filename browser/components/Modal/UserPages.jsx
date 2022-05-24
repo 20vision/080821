@@ -175,10 +175,10 @@ function My_Pages(props){
                         <React.Fragment key={page.nextId}>
                             {page.my_pages.map(page => (
                                 <div key={page.unique_pagename} className={styles.myPageItem}>
-                                    {(page.page_icon.length < 7) ?
-                                        <PageIcon color={'#'+page.page_icon}/>
+                                    {page.page_icon.length > 6 ?
+                                        <img src={config.FILE_SERVER_URL+page.page_icon+'48x48.webp'} style={{width: 45, height: 45}}/>
                                     :
-                                        <img src={page.page_icon}/>
+                                        <PageIcon color={'#'+page.page_icon}/>
                                     }
                                     <div className={styles.names}>
                                         <h3>

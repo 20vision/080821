@@ -1,13 +1,13 @@
 import styles from '../../styles/pageLayout/pageInfo.module.css'
 import PageIcon from '../../assets/PageIcon/PageIcon'
+import config from '../../public/config.json'
 
 export default function PageInfo({page, type}) {
     return (
-        <>
         <div className={styles.container}>
             <div className={styles.header}>
                 {page.page_icon.length > 6 ?
-                    <img src={page.page_icon}/>
+                    <img src={config.FILE_SERVER_URL+page.page_icon+'48x48.webp'} style={{width: 45, height: 45}}/>
                 :
                     <PageIcon color={'#'+page.page_icon}/>
                 }
@@ -30,7 +30,5 @@ export default function PageInfo({page, type}) {
                 </div>
             }
         </div>
-
-        </>
     )
 }

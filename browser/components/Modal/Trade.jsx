@@ -795,8 +795,8 @@ const SelectionPageToken = ({setTokenAmt, tokenAmt, amtOut, tokenBalance, tokenD
     <div className={styles.tradePageInfoParent}>
 
       <div className={styles.pageIcon}>
-        {page && page.page_icon.length > 6 ?
-            <img src={page.page_icon}/>
+        {page.page_icon.length > 6 ?
+            <img src={config.FILE_SERVER_URL+page.page_icon+'48x48.webp'} style={{width: 45, height: 45}}/>
         :
             <PageIcon color={'#'+page.page_icon}/>
         }

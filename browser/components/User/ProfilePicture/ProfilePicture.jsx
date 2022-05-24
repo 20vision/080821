@@ -4,6 +4,7 @@ import styles from '../../../styles/user/ProfilePicture.module.css'
 
 import BounceLoader from "react-spinners/BounceLoader";
 import config from '../../../public/config.json';
+import PageIcon from '../../../assets/PageIcon/PageIcon'
 
 /*
     Properties:
@@ -18,7 +19,7 @@ import config from '../../../public/config.json';
     }
 */
 
-export default function ProfilePicture({loading, uri, type}) {
+export default function ProfilePicture({loading, uri, type, page}) {
     return (
         <>
             {
@@ -27,7 +28,7 @@ export default function ProfilePicture({loading, uri, type}) {
                 :uri?
                     <ProfileImg uri={uri} type={type}/>
                 :
-                    <ProfileSvg type={type}/>
+                    <ProfileSvg type={type} page={page}/>
             }
         </>
     )
@@ -68,7 +69,7 @@ function ProfileImg({uri, type}){
     )
 }
 
-function ProfileSvg({type}){
+function ProfileSvg({type, page}){
     return(
         <div className={
             type=='small'?
@@ -79,8 +80,10 @@ function ProfileSvg({type}){
             :
                 styles.medium
             }>   
-            <div className={styles.svg}>
-                <User size={type=='large'?'87':null}/>
+            <div className={styles.svg} style={page?{borderRadius: 35, backgroundColor: '#'+page.page_icon}:null}>
+                {page?
+                    <svg xmlns="http://www.w3.org/2000/svg" width="87" height="87" viewBox="0 0 24 24" fill="none" stroke="#FAFAFA" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>                
+                :<User size={type=='large'?'87':null}/>}
             </div>
         </div>
     )
