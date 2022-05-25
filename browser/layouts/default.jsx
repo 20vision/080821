@@ -28,7 +28,7 @@ export default function PageLayout( {children, comp, subs} ) {
                                 <>
                                     <a onClick={() => router.push(`/${comp.unique_pagename}/${comp.mission_title}`)}>
                                         {comp.page_icon.length > 6 ?
-                                            <img src={config.FILE_SERVER_URL+comp.page_icon+'48x48.webp'} style={{width: 45, height: 45}}/>
+                                            <img src={config.FILE_SERVER_URL+comp.page_icon+'48x48.webp'} style={{width: 45, height: 45, borderRadius: 10}}/>
                                         :
                                             <PageIcon color={'#'+comp.page_icon}/>
                                         }

@@ -57,7 +57,7 @@ export default function Square({content, makeScroll, isInTheBackground}){
             {content.page?
                 <div className={styles.header} style={{display: 'flex'}}>
                     {page.page_icon.length > 6 ?
-                        <img src={config.FILE_SERVER_URL+page.page_icon+'48x48.webp'} style={{width: 45, height: 45}}/>
+                        <img src={config.FILE_SERVER_URL+page.page_icon+'48x48.webp'} style={{width: 45, height: 45, borderRadius: 10}}/>
                     :
                         <PageIcon color={'#'+page.page_icon}/>
                     }

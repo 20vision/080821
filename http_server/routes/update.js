@@ -174,6 +174,24 @@ router.post("/pagename/:page_name", check.AuthRequired, check.role, check.DevMod
         res.status(401).send('Not Authenticated')
     }
 })
+router.post("/vision/:page_name", check.AuthRequired, check.role, input_validation.vision, check.DevMode, async (req, res) => {
+    if(req.user_id){
+        pool.query(
+            'UPDATE Page set vision = ? where unique_pagename = ?;',
+            [req.body.vision,req.params.page_name],
+            function(err, results) {
+                if (err){
+                    res.status(500).send('An error occurred')
+                    console.log(err)
+                }else{
+                    res.status(200).send()
+                }
+            }
+        );
+    }else{
+        res.status(401).send('Not Authenticated')
+    }
+})
 
 router.post("/forum/like", check.AuthRequired, check.DevMode, async (req, res) => {
     if(!req.body.forumpost_id || !Number.isInteger(req.body.forumpost_id)){

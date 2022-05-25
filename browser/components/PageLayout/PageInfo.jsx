@@ -7,7 +7,7 @@ export default function PageInfo({page, type}) {
         <div className={styles.container}>
             <div className={styles.header}>
                 {page.page_icon.length > 6 ?
-                    <img src={config.FILE_SERVER_URL+page.page_icon+'48x48.webp'} style={{width: 45, height: 45}}/>
+                    <img src={config.FILE_SERVER_URL+page.page_icon+'48x48.webp'} style={{width: 45, height: 45, borderRadius: 10}}/>
                 :
                     <PageIcon color={'#'+page.page_icon}/>
                 }

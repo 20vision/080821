@@ -22,6 +22,9 @@ import { useRouter } from 'next/router'
 import axios from 'axios'
 import config from '../../public/config.json'
 import { toast } from 'react-toastify'
+import TextareaAutosize from 'react-textarea-autosize'
+import createTopicModalStyle from '../../styles/modal/createTopicOrMission.module.css'
+import Loading from '../../assets/Loading/Loading'
 
 export default function User() {
     const [selectedRoute, setSelectedRoute] = useState(0)
@@ -63,8 +66,7 @@ export function Profile({
     username, 
     setUsername, 
     valid, 
-    errorMsg, 
-    loading, 
+    errorMsg,
     publishNewUsername,
     page}){
     const [validateImage, imageValidationError, validImage] = useImageValidation()
@@ -80,7 +82,14 @@ export function Profile({
     const [uniquePagename, setUniquePagename] = useState()
     const [setNewPagename, pagename, pagenameError, validPagenameLoading] = usePagenameValidation()
     const router = useRouter()
-        
+    
+    const [vision, setVision] = useState()
+    const [loading, setLoading] = useState(false)
+
+    useEffect(() => {
+        if(page && page.vision) setVision(page.vision)
+    }, [page])
+
     useEffect(() => {
         if(url && profile){
             let newProfile = profile
@@ -163,7 +172,7 @@ export function Profile({
                                 <div>
                                     <div className={`inputLine ${styles.usernameContainer}`}>
                                         <input value={pagenameNotUnique?pagenameNotUnique:page.pagename} onChange={e => setPagenameNotUnique(e.target.value)}/>
-                                        {(/^[a-zA-Z0-9 _.]{1,50}$/).test(pagenameNotUnique) && pagenameNotUnique != page.pagename?
+                                        {/* {(/^[a-zA-Z0-9 _.]{1,50}$/).test(pagenameNotUnique) && pagenameNotUnique != page.pagename?
                                             <a onClick={async() => {
                                                 try{
                                                     await axios.post(`${config.HTTP_SERVER_URL}/update/pagename/${router.query.page}`, {pagename: pagenameNotUnique}, {withCredentials: true})
@@ -177,11 +186,11 @@ export function Profile({
                                             </a>
                                         :
                                             <div style={{width: 16, height: 1}}/>
-                                        }
+                                        } */}
                                     </div>
                                     <div className={`inputLine ${styles.usernameContainer}`}>
                                     <span>/</span><input value={uniquePagename} onChange={e => {setUniquePagename(e.target.value); setNewPagename(e.target.value.toLocaleLowerCase());}}/>
-                                        {((pagename != page.unique_pagename) && pagename && (!pagenameError) && (!validPagenameLoading))?
+                                        {/* {((pagename != page.unique_pagename) && pagename && (!pagenameError) && (!validPagenameLoading))?
                                             <a onClick={async() => {
                                                 try{
                                                     await axios.post(`${config.HTTP_SERVER_URL}/update/unique_pagename/${router.query.page}`, {pagename: pagename}, {withCredentials: true})
@@ -195,7 +204,7 @@ export function Profile({
                                             </a>
                                         :
                                             <div style={{width: 16, height: 1}}/>
-                                        }
+                                        } */}
                                     </div>
                                 </div>
                             :null}
@@ -207,10 +216,6 @@ export function Profile({
                         </div>
                     </div>
                     
-                    <div style={{...{width: '180px'}, ...{marginTop: '50px'}}}>
-                        <span className={styles.errorMsg}>{errorMsg} {uniquePagename != page.unique_pagename?pagenameError:null} {!(/^[a-zA-Z0-9 _.]{0,50}$/).test(pagenameNotUnique)?'Pagenames can only contain letters, numbers, dots and underscores and have 50 characters at most':null} {imageValidationError}</span>
-                    </div>
-                    
                     <input
                         style={{display: 'none'}}
                         accept="image/jpeg,image/png"
@@ -219,8 +224,73 @@ export function Profile({
                         onChange={(e) => {validateImage(e.target.files[0]); setErr(null);}}
                         ref={showFileUpload}
                     />
+
+
+                    {page?
+                        <div style={{width: '100%', marginTop: 35}}>
+
+                            <div style={{borderLeft: '2px solid #ced4da', padding: '5px 15px', width: '100%'}}>
+                                <TextareaAutosize
+                                    style={{width: '100%'}}
+                                    minRows={2}
+                                    value={vision}
+                                    onChange={e => {setVision(e.target.value);}}
+                                />
+                            </div>
+                            <div style={{width: '100%', margin: '30px 0px'}}>
+                                <span className={styles.errorMsg}>
+                                    {errorMsg} 
+                                    {uniquePagename != page.unique_pagename?pagenameError:null} 
+                                    {!(/^[a-zA-Z0-9 _.]{3,50}$/).test(pagenameNotUnique)?'Pagenames can only contain letters, numbers, dots and underscores and have 50 characters at most':null} 
+                                    {imageValidationError}
+                                    {vision && (vision.length < 4 || vision.length > 500)?'Your Vision has to contain at least 4 and at most 500 characters':null}
+                                </span>
+                            </div>
+                            <a
+                            onClick={async e => {
+                                try{
+                                    setLoading(true)
+                                    if(((pagename != page.unique_pagename) && pagename && (!pagenameError) && (!validPagenameLoading))){
+                                        await axios.post(`${config.HTTP_SERVER_URL}/update/unique_pagename/${router.query.page}`, {pagename: pagename}, {withCredentials: true})
+                                    }
+                                    if((/^[a-zA-Z0-9 _.]{3,50}$/).test(pagenameNotUnique) && pagenameNotUnique != page.pagename){
+                                        await axios.post(`${config.HTTP_SERVER_URL}/update/pagename/${router.query.page}`, {pagename: pagenameNotUnique}, {withCredentials: true})
+                                    }
+                                    if((vision != page.vision) && !((vision.length < 4) || (vision.length > 500))){
+                                        await axios.post(`${config.HTTP_SERVER_URL}/update/vision/${router.query.page}`, {vision: vision}, {withCredentials: true})
+                                    }
+                                    router.reload(window.location.pathname)
+                                }catch(err){
+                                    toast.error('Could not save. An error occurred')
+                                    console.log(err)
+                                    setLoading(false)
+                                }
+                            }} 
+                            className={`${createTopicModalStyle.createPageButton} ${loading || 
+                                ((vision != page.vision) && ((vision.length < 4) || (vision.length > 500))) ||
+                                (!(/^[a-zA-Z0-9 _.]{3,50}$/).test(pagenameNotUnique) && pagenameNotUnique != page.pagename) ||
+                                ((uniquePagename != page.unique_pagename) && (!pagename || (pagenameError) || (validPagenameLoading))) ||
+                                ((vision == page.vision) && (uniquePagename == page.unique_pagename) && (pagenameNotUnique == page.pagename))
+                            ?createTopicModalStyle.invalidButton:null}`}>
+                                {!loading && !validPagenameLoading && !loadingUrl?
+                                    <div>
+                                        <h2>Save</h2>
+                                    </div>
+                                :
+                                    <Loading/>
+                                }
+                            </a>
+                        </div>
+                    :
+                    <div style={{...{width: '180px'}}}>
+                        <span className={styles.errorMsg}>
+                            {errorMsg} 
+                            {imageValidationError}
+                        </span>
+                    </div>
+                    }
                 </div>
-        }
+            }
         </>
     )
         

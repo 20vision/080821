@@ -1,8 +1,7 @@
 import {usePageSelectedStore} from '../../store/pageSelected'
-import PageIcon from '../../assets/PageIcon/PageIcon'
 import { Profile } from './User'
 import indexStyles from '../../styles/modal/index.module.css'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 export default function ManagePageAndMission() {
     const page = usePageSelectedStore(state => state.page)
@@ -19,8 +18,11 @@ export default function ManagePageAndMission() {
                 </h1>
             </div>
            {selectedRoute == 0?
-            <Profile page={page}/>
+                <Profile
+                page={page}
+                />
             :null}
+            
         </div>
     )
 }

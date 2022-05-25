@@ -176,7 +176,7 @@ function My_Pages(props){
                             {page.my_pages.map(page => (
                                 <div key={page.unique_pagename} className={styles.myPageItem}>
                                     {page.page_icon.length > 6 ?
-                                        <img src={config.FILE_SERVER_URL+page.page_icon+'48x48.webp'} style={{width: 45, height: 45}}/>
+                                        <img src={config.FILE_SERVER_URL+page.page_icon+'48x48.webp'} style={{width: 45, height: 45, borderRadius: 10}}/>
                                     :
                                         <PageIcon color={'#'+page.page_icon}/>
                                     }
