@@ -54,7 +54,7 @@ exports.profile_picture = function(req, res, next) {
                 for(var i=0; i<ratio.length;i++){
                     await sharp(imgBuffer)
                     .resize({ fit: sharp.fit.contain, width: ratio[i], height: ratio[i] })
-                    .webp({ quality: 60 })
+                    .webp({ quality: i==2?90:60 })
                     .toBuffer()
                     .then(async response => {
                         data.buffer = response,

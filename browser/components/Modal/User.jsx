@@ -14,11 +14,14 @@ import Camera from '../../assets/Camera'
 import X from '../../assets/X'
 
 import {BarLoader} from "react-spinners";
-
+import usePagenameValidation from '../../hooks/Page/usePagenameValidation'
 import AvatarEditor from 'react-avatar-editor'
 import useAvatarToUrl from '../../hooks/Image/useAvatarToUrl'
 import {usePageSelectedStore} from '../../store/pageSelected'
 import { useRouter } from 'next/router'
+import axios from 'axios'
+import config from '../../public/config.json'
+import { toast } from 'react-toastify'
 
 export default function User() {
     const [selectedRoute, setSelectedRoute] = useState(0)
@@ -73,8 +76,9 @@ export function Profile({
     const showFileUpload = useRef()
     const croppedImgRef = useRef()
 
-    const [pagename, setPagename] = useState()
+    const [pagenameNotUnique, setPagenameNotUnique] = useState()
     const [uniquePagename, setUniquePagename] = useState()
+    const [setNewPagename, pagename, pagenameError, validPagenameLoading] = usePagenameValidation()
     const router = useRouter()
         
     useEffect(() => {
@@ -88,17 +92,22 @@ export function Profile({
         }
     }, [url])
 
+    useEffect(() => {
+        if(page && page.unique_pagename) setUniquePagename(page.unique_pagename)
+        if(page && page.pagename) setPagenameNotUnique(page.pagename)
+    }, [page])
+
     return(
         <>
             {(validImage != null)?
-                <div>
-                    <div>
+                <div style={{display: 'flex', justifyContent: 'center'}}>
+                    <div style={{maxWidth: 300}}>
                         <AvatarEditor
                             ref={croppedImgRef}
                             image={validImage}
                             width={250}
                             height={250}
-                            borderRadius={300}
+                            borderRadius={page?50:300}
                             color={[250, 250, 250]} // RGBA
                             scale={scaleImg}
                             rotate={0}
@@ -127,42 +136,79 @@ export function Profile({
                 </div>
             :
                 <div className={styles.profileContainer}>
-                    <a onClick={!isLoading ? () => showFileUpload.current.click() : null}>
-                        <div className={styles.profileEdit} style={page?{borderRadius: 35}:null}>
-                            <div className={styles.profile}>
-                                <ProfilePicture type={'large'} page={page} loading={isLoading} uri={profile && profile.profilePicture?profile.profilePicture:(page && page.page_icon && page.page_icon.length > 6)?page.page_icon:null}/>
+                    <div style={page?{display: 'flex', justifyContent: 'center'}:null}>
+                        <a onClick={!isLoading ? () => showFileUpload.current.click() : null}>
+                            <div className={styles.profileEdit} style={page?{borderRadius: 35}:null}>
+                                <div className={styles.profile}>
+                                    <ProfilePicture type={'large'} page={page} loading={isLoading} uri={profile && profile.profilePicture?profile.profilePicture:(page && page.page_icon && page.page_icon.length > 6)?page.page_icon:null}/>
+                                </div>
+                                <div className={styles.cameraContainer}>
+                                    <Camera color="#FAFAFA"/>
+                                </div>
                             </div>
-                            <div className={styles.cameraContainer}>
-                                <Camera color="#FAFAFA"/>
-                            </div>
+                        </a>
+                        <div style={page?{marginLeft: 50}:null}>
+                            {profile?
+                                <div className={`inputLine ${styles.usernameContainer}`}>
+                                    <span>@</span><input value={username?username:(profile.username)} onChange={e => setUsername(e.target.value.toLocaleLowerCase())}/>
+                                    {((username != profile.username) && (valid) && (!loading))?
+                                        <a onClick={() => publishNewUsername()} style={{margin: '0px 0px -5px 5px'}}>
+                                            <Check size={16} color="#FF5B77"/>
+                                        </a>
+                                    :
+                                        null
+                                    }
+                                </div>
+                            :page?
+                                <div>
+                                    <div className={`inputLine ${styles.usernameContainer}`}>
+                                        <input value={pagenameNotUnique?pagenameNotUnique:page.pagename} onChange={e => setPagenameNotUnique(e.target.value)}/>
+                                        {(/^[a-zA-Z0-9 _.]{1,50}$/).test(pagenameNotUnique) && pagenameNotUnique != page.pagename?
+                                            <a onClick={async() => {
+                                                try{
+                                                    await axios.post(`${config.HTTP_SERVER_URL}/update/pagename/${router.query.page}`, {pagename: pagenameNotUnique}, {withCredentials: true})
+                                                    router.push(window.location.pathname)
+                                                }catch(err){
+                                                    toast.error('Failed to change pagename')
+                                                    console.log(err)
+                                                }
+                                            }} style={{margin: '0px 0px -5px 5px'}}>
+                                                <Check size={16} color="#FF5B77"/>
+                                            </a>
+                                        :
+                                            <div style={{width: 16, height: 1}}/>
+                                        }
+                                    </div>
+                                    <div className={`inputLine ${styles.usernameContainer}`}>
+                                    <span>/</span><input value={uniquePagename} onChange={e => {setUniquePagename(e.target.value); setNewPagename(e.target.value.toLocaleLowerCase());}}/>
+                                        {((pagename != page.unique_pagename) && pagename && (!pagenameError) && (!validPagenameLoading))?
+                                            <a onClick={async() => {
+                                                try{
+                                                    await axios.post(`${config.HTTP_SERVER_URL}/update/unique_pagename/${router.query.page}`, {pagename: pagename}, {withCredentials: true})
+                                                    router.push(`/${pagename}${router.query.mission?'/'+router.query.mission:null}`)
+                                                }catch(err){
+                                                    toast.error('Failed to change unique Pagename')
+                                                    console.log(err)
+                                                }
+                                            }} style={{margin: '0px 0px -5px 5px'}}>
+                                                <Check size={16} color="#FF5B77"/>
+                                            </a>
+                                        :
+                                            <div style={{width: 16, height: 1}}/>
+                                        }
+                                    </div>
+                                </div>
+                            :null}
+                            {loading?
+                                <BarLoader css="display:block;height:2px;" height={2} color="#FF5B77" width={190}/>
+                            :
+                                null
+                            }
                         </div>
-                    </a>
-                    <div>
-                        {profile?
-                            <div className={`inputLine ${styles.usernameContainer}`}>
-                                <span>@</span><input value={username?username:(profile.username)} onChange={e => setUsername(e.target.value.toLocaleLowerCase())}/>
-                                {((username != profile.username) && (valid) && (!loading))?
-                                    <a onClick={() => publishNewUsername()} style={{margin: '0px 0px -5px 5px'}}>
-                                        <Check size={16} color="#FF5B77"/>
-                                    </a>
-                                :
-                                    null
-                                }
-                            </div>
-                        :page?
-                            <div className={`inputLine ${styles.usernameContainer}`}>
-                                <input value={pagename?pagename:page.pagename} onChange={e => setPagename(e.target.value.toLocaleLowerCase())}/>
-                                <span>/</span><input value={uniquePagename?uniquePagename:page.unique_pagename} onChange={e => setUniquePagename(e.target.value.toLocaleLowerCase())}/>
-                            </div>
-                        :null}
-                        {loading?
-                        <BarLoader css="display:block;height:2px;" height={2} color="#FF5B77" width={190}/>
-                        :
-                            null
-                        }
                     </div>
-                    <div style={{width: '180px'}}>
-                        <span className={styles.errorMsg}>{errorMsg} {imageValidationError}</span>
+                    
+                    <div style={{...{width: '180px'}, ...{marginTop: '50px'}}}>
+                        <span className={styles.errorMsg}>{errorMsg} {uniquePagename != page.unique_pagename?pagenameError:null} {!(/^[a-zA-Z0-9 _.]{0,50}$/).test(pagenameNotUnique)?'Pagenames can only contain letters, numbers, dots and underscores and have 50 characters at most':null} {imageValidationError}</span>
                     </div>
                     
                     <input

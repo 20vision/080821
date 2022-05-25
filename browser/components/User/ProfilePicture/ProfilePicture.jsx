@@ -26,7 +26,7 @@ export default function ProfilePicture({loading, uri, type, page}) {
                 loading ?
                     <Loading type={type}/>
                 :uri?
-                    <ProfileImg uri={uri} type={type}/>
+                    <ProfileImg uri={uri} type={type} page={page}/>
                 :
                     <ProfileSvg type={type} page={page}/>
             }
@@ -51,7 +51,7 @@ function Loading({type}){
     )
 }
 
-function ProfileImg({uri, type}){
+function ProfileImg({uri, type, page}){
     return(
         <div className={
             type=='small'?
@@ -63,7 +63,7 @@ function ProfileImg({uri, type}){
                 styles.medium
             }>
             {/* LARGE STARTS AT 200 -> get downsized to 150 and medium is 48px. 400 is XL */}
-            <img style={type=='small'?{height:'35px', width: '35px'}:null} className={styles.img} src={config.FILE_SERVER_URL+uri+(type=='large'?'200x200':'48x48')+'.webp'}/>
+            <img style={{...type=='small'?{height:'35px', width: '35px'}:null,...page?{borderRadius:35}:null}} className={styles.img} src={config.FILE_SERVER_URL+uri+(type=='large'?'200x200':'48x48')+'.webp'}/>
         </div>
         
     )

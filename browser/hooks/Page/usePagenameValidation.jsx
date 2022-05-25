@@ -19,12 +19,12 @@ const usePagenameValidation = () => {
         setValidPagenameLoading(true)
         if(newPagename.length < 1){
             setValidPagenameLoading(false)
-        }else if(newPagename.length > 50){
+        }else if(newPagename.length > 30){
             setValidPagenameLoading(false)
-            setPagenameError('Pagenames can have 50 characters at most')
+            setPagenameError('Unique Pagenames can have 30 characters at most')
         }else if(!regex.test(newPagename)){
             setValidPagenameLoading(false)
-            setPagenameError('Pagenames can only contain letters, numbers, dots and underscores')
+            setPagenameError('Unique Pagenames can only contain letters, numbers, dots and underscores')
         }else{
             setTimer(setTimeout(() => {
                 if(newPagename.length < 4){

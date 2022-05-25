@@ -134,7 +134,45 @@ router.post("/username", check.AuthRequired, check.DevMode, input_validation.che
     }else{
         res.status(401).send('Not Authenticated')
     }
+})
 
+router.post("/unique_pagename/:page_name", check.AuthRequired, check.role, check.DevMode, input_validation.checkRegexPagename, input_validation.checkUniquePagename, async (req, res) => {
+    if(req.user_id){
+        pool.query(
+            'UPDATE Page set unique_pagename = ? where unique_pagename = ?;',
+            [req.body.pagename,req.params.page_name],
+            function(err, results) {
+                if (err){
+                    res.status(500).send('An error occurred')
+                    console.log(err)
+                }else{
+                    res.status(200).send()
+                }
+            }
+        );
+    }else{
+        res.status(401).send('Not Authenticated')
+    }
+})
+
+router.post("/pagename/:page_name", check.AuthRequired, check.role, check.DevMode, async (req, res) => {
+    if(!(/^[a-zA-Z0-9 _.]{3,50}$/).test(req.body.pagename)) return res.status(422).send('Invalid Pagename')
+    if(req.user_id){
+        pool.query(
+            'UPDATE Page set pagename = ? where unique_pagename = ?;',
+            [req.body.pagename,req.params.page_name],
+            function(err, results) {
+                if (err){
+                    res.status(500).send('An error occurred')
+                    console.log(err)
+                }else{
+                    res.status(200).send()
+                }
+            }
+        );
+    }else{
+        res.status(401).send('Not Authenticated')
+    }
 })
 
 router.post("/forum/like", check.AuthRequired, check.DevMode, async (req, res) => {

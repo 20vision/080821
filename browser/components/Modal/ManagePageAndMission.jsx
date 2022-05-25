@@ -18,7 +18,9 @@ export default function ManagePageAndMission() {
                     Missions
                 </h1>
             </div>
+           {selectedRoute == 0?
             <Profile page={page}/>
+            :null}
         </div>
     )
 }
