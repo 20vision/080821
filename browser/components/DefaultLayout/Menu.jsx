@@ -242,7 +242,11 @@ function UserConnection({ type, page }) {
             <div className={styles.myPageContainer}>
                 <Link href={`/${page.unique_pagename}`}><a className={styles.pageLink}>
                     <div>
-                        <PageIcon color={'#'+page.page_icon}/>
+                        {page && page.page_icon.length > 6 ?
+                            <img src={config.FILE_SERVER_URL+page.page_icon+'48x48.webp'} style={{width: 45, height: 45, borderRadius: 10}}/>
+                        :
+                            <PageIcon color={'#'+page.page_icon}/>
+                        }
                     </div>
                     <div className={styles.myPageChild}>
                         <h3>

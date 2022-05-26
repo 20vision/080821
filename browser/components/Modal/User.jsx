@@ -145,8 +145,8 @@ export function Profile({
                 </div>
             :
                 <div className={styles.profileContainer}>
-                    <div style={page?{display: 'flex', justifyContent: 'center'}:null}>
-                        <a onClick={!isLoading ? () => showFileUpload.current.click() : null}>
+                    <div style={{...{display: 'flex', justifyContent: 'center', alignItems: 'center'},...profile?{flexDirection: 'column'}:null}}>
+                        <a onClick={!isLoading ? () => showFileUpload.current.click() : null} style={{width: 150, height: 150, display: 'block'}}>
                             <div className={styles.profileEdit} style={page?{borderRadius: 35}:null}>
                                 <div className={styles.profile}>
                                     <ProfilePicture type={'large'} page={page} loading={isLoading} uri={profile && profile.profilePicture?profile.profilePicture:(page && page.page_icon && page.page_icon.length > 6)?page.page_icon:null}/>
@@ -158,16 +158,21 @@ export function Profile({
                         </a>
                         <div style={page?{marginLeft: 50}:null}>
                             {profile?
-                                <div className={`inputLine ${styles.usernameContainer}`}>
-                                    <span>@</span><input value={username?username:(profile.username)} onChange={e => setUsername(e.target.value.toLocaleLowerCase())}/>
-                                    {((username != profile.username) && (valid) && (!loading))?
-                                        <a onClick={() => publishNewUsername()} style={{margin: '0px 0px -5px 5px'}}>
-                                            <Check size={16} color="#FF5B77"/>
-                                        </a>
-                                    :
-                                        null
-                                    }
-                                </div>
+                                <>
+                                    <div className={`inputLine ${styles.usernameContainer}`}>
+                                        <span>@</span><input value={username?username:(profile.username)} onChange={e => setUsername(e.target.value.toLocaleLowerCase())}/>
+                                        {((username != profile.username) && (valid) && (!loading))?
+                                            <a onClick={() => publishNewUsername()} style={{margin: '0px 0px -5px 5px'}}>
+                                                <Check size={16} color="#FF5B77"/>
+                                            </a>
+                                        :
+                                            <div style={{width: 16, height: 1}}/>
+                                        }
+                                    </div>
+                                    <div style={{width: '180px',marginTop: 15}}>
+                                        <span className={styles.errorMsg}>{errorMsg} {imageValidationError}</span>
+                                    </div>
+                                </>
                             :page?
                                 <div>
                                     <div className={`inputLine ${styles.usernameContainer}`}>
@@ -283,14 +288,7 @@ export function Profile({
                                 }
                             </a>
                         </div>
-                    :
-                    <div style={{...{width: '180px'}}}>
-                        <span className={styles.errorMsg}>
-                            {errorMsg} 
-                            {imageValidationError}
-                        </span>
-                    </div>
-                    }
+                    :null}
                 </div>
             }
         </>
