@@ -237,13 +237,15 @@ export function Profile({
                                     onChange={e => {setVision(e.target.value);}}
                                 />
                             </div>
+                            <div style={{marginTop: 15,textAlign: 'right',color: (vision.length <= 500)?'var(--black)':'var(--red)'}}>
+                                {vision?vision.length:0}
+                            </div>
                             <div style={{width: '100%', margin: '30px 0px'}}>
                                 <span className={styles.errorMsg}>
                                     {errorMsg} 
                                     {uniquePagename != page.unique_pagename?pagenameError:null} 
                                     {!(/^[a-zA-Z0-9 _.]{3,50}$/).test(pagenameNotUnique)?'Pagenames can only contain letters, numbers, dots and underscores and have 50 characters at most':null} 
                                     {imageValidationError}
-                                    {vision && (vision.length < 4 || vision.length > 500)?'Your Vision has to contain at least 4 and at most 500 characters':null}
                                 </span>
                             </div>
                             <a
