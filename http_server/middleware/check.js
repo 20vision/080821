@@ -44,7 +44,6 @@ exports.DevMode = function(req, res, next){
 }
 
 exports.AuthRequired = function(req, res, next) {
-
     if(req.cookies['auth_token']){
         jwt.verify(req.cookies['auth_token'], keys.JWT_SECRET, function(err, decoded) {
             if(err){

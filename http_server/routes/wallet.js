@@ -28,7 +28,7 @@ router.post("/connect", async (req, res) => {
                         }else{
                             if((results.length > 0) && !req.body.username){
                                 try{
-                                    const token = await login_user(req.useragent.os, conn, publicKey.toString())
+                                    const token = await login_user(req.useragent, conn, publicKey.toString())
                                     res.cookie('auth_token', token, {httpOnly: true, sameSite:"none", secure: true})
                                     res.status(200).send()
                                 }catch(e){
@@ -41,7 +41,7 @@ router.post("/connect", async (req, res) => {
                             }else if((req.body.username) && (results.length == 0)){
 
                                 try{
-                                    const token = await create_user(req.useragent.os, conn, req.body.username, publicKey.toString())
+                                    const token = await create_user(req.useragent, conn, req.body.username, publicKey.toString())
                                     res.cookie('auth_token', token, {httpOnly: true, sameSite:"none", secure: true})
                                     res.status(200).send()
                                 }catch(e){

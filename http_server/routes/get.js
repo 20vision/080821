@@ -19,6 +19,12 @@ router.get("/user_sessions", check.AuthRequired, async (req, res) => {
                 res.status(500).send('An error occurred')
                 console.log(err)
             }else{
+                for(var i=0;i<sessions.length;i++){
+                    if(sessions[i].session_id == req.session_id){
+                        sessions[i].device = 'Current device'
+                        break;
+                    }
+                }
                 res.json(sessions)
             }
         }

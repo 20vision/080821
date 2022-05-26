@@ -1,5 +1,6 @@
 var keys = require('../config/keys');
 const jwt = require('jsonwebtoken');
+const req = require('express/lib/request');
 var usernameRe = /^[a-z0-9_.]{0,30}$/
 
 const validate_username = (conn, username) => new Promise((resolve, reject) => {
@@ -54,7 +55,7 @@ const create_user = (useragent, conn, username, publicKeyString) => new Promise(
             }else{
                 conn.query(
                     'INSERT INTO User_Session values (?,?,?,now());',
-                    [null, results.insertId, useragent.os, null],
+                    [null, results.insertId, useragent && useragent.platform&&useragent.browser?(useragent.platform+' · '+useragent.browser):'Unknown', null],
                     function(err, results) {
                         if (err){
                           reject({
@@ -105,7 +106,7 @@ const login_user = (useragent, conn, publicKeyString) => new Promise(async (reso
             }else{
                 conn.query(
                     'INSERT INTO User_Session values (?,?,?,now());',
-                    [null, results[0].user_id, useragent.os, null],
+                    [null, results[0].user_id, useragent && useragent.platform&&useragent.browser?(useragent.platform+' · '+useragent.browser):'Unknown', null],
                     function(err, results) {
                         if (err){
                           reject({

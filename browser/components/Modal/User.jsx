@@ -177,7 +177,7 @@ export function Profile({
                             :page?
                                 <div>
                                     <div className={`inputLine ${styles.usernameContainer}`}>
-                                        <input value={pagenameNotUnique?pagenameNotUnique:page.pagename} onChange={e => setPagenameNotUnique(e.target.value)}/>
+                                        <input value={pagenameNotUnique!=null?pagenameNotUnique:page.pagename} onChange={e => setPagenameNotUnique(e.target.value)}/>
                                         {/* {(/^[a-zA-Z0-9 _.]{1,50}$/).test(pagenameNotUnique) && pagenameNotUnique != page.pagename?
                                             <a onClick={async() => {
                                                 try{
@@ -344,13 +344,11 @@ function Logout({profile}){
                     let selectedSession = []
                     if(!allActive) {
                         for(var i = 0;i<sessions.length;i++){
-                            console.log(sessions[i].selected)
                             if(sessions[i].selected) {
                                 selectedSession = [...selectedSession, {session_id: sessions[i].session_id}]
                             }
                         }
                     }
-                    console.log(selectedSession)
                     axios.post(`${config.HTTP_SERVER_URL}/update/sessions`, {sessions: allActive?sessions:selectedSession}, {withCredentials: true})
                     .then(res => {
                         router.reload(window.location.pathname)
@@ -386,7 +384,7 @@ const SessionRow = ({session, setSessions, index}) => {
             <div style={{margin: 15, marginRight: 30}}>
                 {session.selected?<CheckSquare color="var(--red)"/>:<Square/>}
             </div>
-            <div>
+            <div style={{margin: 15, marginRight: 30, marginLeft: 0}}>
                 <h2>
                     {session.device?session.device:'Unknown device'}
                 </h2>
