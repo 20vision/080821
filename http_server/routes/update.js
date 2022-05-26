@@ -193,6 +193,31 @@ router.post("/vision/:page_name", check.AuthRequired, check.role, input_validati
     }
 })
 
+router.post("/sessions", check.AuthRequired, async (req, res) => {
+    if(!req.body.sessions || !req.body.sessions[0]) return res.status(422).send('Not enough sessions')
+    pool.getConnection(async function(err, conn) {
+        if (err){
+            res.status(500).send('An error occurred')
+            console.log(err)
+        }else{
+            for(var i = 0;i<req.body.sessions.length;i++){
+                conn.query(
+                    `DELETE from User_Session where session_id = ? and user_id = ?;`,
+                    [req.body.sessions[i].session_id, req.user_id],
+                    function(err, check_owner) {
+                        if (err){
+                            console.log(err)
+                            res.status(500).send('An error occurred')
+                        }
+                    }
+                );
+            }
+            res.status(200).send()
+        }
+        pool.releaseConnection(conn);
+    })
+})
+
 router.post("/forum/like", check.AuthRequired, check.DevMode, async (req, res) => {
     if(!req.body.forumpost_id || !Number.isInteger(req.body.forumpost_id)){
         console.log(req.body.forumpost_id)

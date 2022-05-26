@@ -10,6 +10,21 @@ const req = require("express/lib/request");
 
 // PRIVATE //////////////////////////////////////////////////
 
+router.get("/user_sessions", check.AuthRequired, async (req, res) => {
+    pool.query(
+        `SELECT session_id, device, last_use from User_Session where user_id = ? order by last_use desc`,
+        [req.user_id],
+        function(err, sessions) {
+            if (err){
+                res.status(500).send('An error occurred')
+                console.log(err)
+            }else{
+                res.json(sessions)
+            }
+        }
+    );
+});
+
 router.post("/username_unique", input_validation.checkRegexUsername, input_validation.checkUniqueUsername, async (req, res) => {
     res.status(200).send()
 });

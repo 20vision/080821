@@ -2,7 +2,7 @@ import styles from '../../styles/modal/user.module.css'
 import indexStyles from '../../styles/modal/index.module.css'
 
 import { useState, useRef, useEffect } from 'react'
-
+import { DateTime } from "luxon";
 import useUserProfile from '../../hooks/User/useUserProfile'
 import useUsernameValidation from '../../hooks/User/useUsernameValidation'
 import useImageValidation from '../../hooks/Image/useImageValidation'
@@ -12,7 +12,8 @@ import ProfilePicture from '../User/ProfilePicture/ProfilePicture'
 import Check from '../../assets/Check'
 import Camera from '../../assets/Camera'
 import X from '../../assets/X'
-
+import CheckSquare from "../../assets/CheckSquare"
+import Square from "../../assets/Square"
 import {BarLoader} from "react-spinners";
 import usePagenameValidation from '../../hooks/Page/usePagenameValidation'
 import AvatarEditor from 'react-avatar-editor'
@@ -53,7 +54,7 @@ export default function User() {
                 errorMsg={errorMsg}
                 loading={loading}
                 publishNewUsername={publishNewUsername}
-            /> : <Logout/>}
+            /> : <Logout profile={profile}/>}
 
         </div>
     )
@@ -297,10 +298,102 @@ export function Profile({
     
 }
 
-function Logout(){
+function Logout({profile}){
+    const router = useRouter()
+
+    useEffect(() => {
+        if(!profile) return
+        setLoading(true)
+        axios.get(`${config.HTTP_SERVER_URL}/get/user_sessions`, {withCredentials: true})
+        .then((response) => {
+            setSessions(response.data)
+            setLoading(false)
+        })
+        .catch(err => {
+            toast.error('Could not find sessions')
+            setLoading(false)
+        })
+    }, [profile])
+
+    const [sessions, setSessions] = useState()
+    const [loading, setLoading] = useState()
+
+    const [allActive, setAllActive] = useState(true)
+
+    useEffect(() => {
+        let allActiveLocal = true
+
+        if(!sessions || (sessions.length <= 1)) return
+        for(var i=0;i<sessions.length;i++){ 
+            if(sessions[i].selected==true) {
+                allActiveLocal = false 
+                break;
+            } 
+        }
+        setAllActive(allActiveLocal)
+    }, sessions)
+
     return(
         <div>
-
+            <div style={{overflowY: 'scroll', maxHeight: 180}}>
+                {sessions && sessions.map((session, index) => <SessionRow session={session} setSessions={arg => setSessions([...sessions.slice(0, index),{...session,selected: arg},...sessions.slice(index+1)])} index={index}/>)}
+            </div>
+            <a
+                onClick={async e => {
+                    setLoading(true)
+                    let selectedSession = []
+                    if(!allActive) {
+                        for(var i = 0;i<sessions.length;i++){
+                            console.log(sessions[i].selected)
+                            if(sessions[i].selected) {
+                                selectedSession = [...selectedSession, {session_id: sessions[i].session_id}]
+                            }
+                        }
+                    }
+                    console.log(selectedSession)
+                    axios.post(`${config.HTTP_SERVER_URL}/update/sessions`, {sessions: allActive?sessions:selectedSession}, {withCredentials: true})
+                    .then(res => {
+                        router.reload(window.location.pathname)
+                    })
+                    .catch(err => {
+                        console.log(err)
+                        toast.error('Could not logout all sessions')
+                    })
+                    .then(() => setLoading(false))
+                }} 
+                className={`${createTopicModalStyle.createPageButton} ${sessions && (sessions.length > 0)?null:createTopicModalStyle.invalidButton}`}>
+                    {!loading?
+                        <div>
+                            {allActive?<h2>Logout all</h2>:<h2>Logout selected</h2>}
+                        </div>
+                    :
+                        <Loading/>
+                    }
+                </a>
         </div>
+    )
+}
+
+const SessionRow = ({session, setSessions, index}) => {
+
+    return(
+        <a onClick={() => {
+            session.selected?
+                setSessions(false)
+            :
+                setSessions(true)
+        }} style={{display: 'flex', alignItems: 'center', margin: '15px 0px'}}>
+            <div style={{margin: 15, marginRight: 30}}>
+                {session.selected?<CheckSquare color="var(--red)"/>:<Square/>}
+            </div>
+            <div>
+                <h2>
+                    {session.device?session.device:'Unknown device'}
+                </h2>
+                <div style={{fontSize: 12, marginTop: 5, color: 'var(--grey)'}}>
+                    last use: {DateTime.fromISO(session.last_use).toLocaleString(DateTime.DATE_MED)}
+                </div>
+            </div>
+        </a>
     )
 }
