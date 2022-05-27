@@ -18,10 +18,10 @@ export default function ComponentsHorizontal({data}){
             </div>
             <img src={config.FILE_SERVER_URL+'comp_images/'+data.uid.substring(0,data.uid.length-8)+'/'+data.uid.substring(data.uid.length-8)+'/512x512'+'.webp'}/>
             <div className={styles.page_icon}>
-                {(data.page_icon.length < 7) ?
-                    <PageIcon color={'#'+data.page_icon}/>
+                {data && data.page_icon.length > 6 ?
+                    <img src={config.FILE_SERVER_URL+data.page_icon+'48x48.webp'} style={{width: 45, height: 45, borderRadius: 10}}/>
                 :
-                    <img src={data.page_icon}/>
+                    <PageIcon color={'#'+data.page_icon}/>
                 }
             </div>
         </div>

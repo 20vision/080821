@@ -174,11 +174,11 @@ const ContentRow = ({data, subcomponents, pagination, profile, editMode, router,
                             }}>
                                 <SavedToCloud/>
                             </a>
-                        :
-                            <a style={{opacity: 0.6}}>
+                        :profile.username?
+                            <a style={{opacity: 0.6, pointer: 'auto'}}>
                                 <Cloud/>
                             </a>
-                        }
+                        :null}
                     </div>
                 :
                     null
