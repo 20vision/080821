@@ -1,5 +1,4 @@
 const updateNestedForumSet = (conn, forumpost_parent_id, left, right) => new Promise((resolve, reject) => {
-    console.log(forumpost_parent_id)
     conn.query(
         `Update ForumPost f set f.right =
         CASE 

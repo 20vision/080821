@@ -164,7 +164,7 @@ export default function ConnectWallet() {
     if((step == 1) || (connected == false)){
 
         return(
-            <div className={modalStyle.container} style={{maxWidth: 350}}>
+            <div className={modalStyle.container} style={{maxWidth: 350, maxHeight: 480}}>
                 
                 {connecting?
                     <h1>Connecting Wallet...</h1>
@@ -178,30 +178,33 @@ export default function ConnectWallet() {
                     <a className={styles.highlight} >Terms of Service</a> and <a className={styles.highlight} >Privacy Notice</a>
                 </div>
                 
-                {wallets.map((wallet) => (
-                    <a style={{position: 'relative'}} key={wallet.adapter.name} onClick={() => select(wallet.adapter.name)} className={`${wallet.adapter.name == selectedWallet?styles.walletSelected:null} ${styles.connectWalletButton}`}>
-                        <img style={wallet.adapter.name == 'Ledger'?{filter:'invert(1)'}:null} src={wallet.adapter.icon}/>
-                        {ready && (wallet.adapter.name == selectedWallet) && !connected?
-                            <div className={styles.walletSelectedChild}>
-                                <Loading/>
-                            </div>
-                        :
-                            <div>
+                <div style={{overflowY: 'scroll', width: '100%'}}>
+                    {wallets.map((wallet) => (
+                        <a style={{position: 'relative'}} key={wallet.adapter.name} onClick={() => select(wallet.adapter.name)} className={`${wallet.adapter.name == selectedWallet?styles.walletSelected:null} ${styles.connectWalletButton}`}>
+                            <img style={wallet.adapter.name == 'Ledger'?{filter:'invert(1)'}:null} src={wallet.adapter.icon}/>
+                            {ready && (wallet.adapter.name == selectedWallet) && !connected?
+                                <div className={styles.walletSelectedChild}>
+                                    <Loading/>
+                                </div>
+                            :
                                 <div>
-                                    {(wallet.adapter.name == selectedWallet)?
-                                        <h2 style={{color: '#FAFAFA'}}>{wallet.adapter.name}</h2>
-                                    :
-                                        <h2>{wallet.adapter.name}</h2>
-                                    }
+                                    <div>
+                                        {(wallet.adapter.name == selectedWallet)?
+                                            <h2 style={{color: '#FAFAFA'}}>{wallet.adapter.name}</h2>
+                                        :
+                                            <h2>{wallet.adapter.name}</h2>
+                                        }
+                                    </div>
+                                    <div style={{position: 'absolute', fontSize: '12px', color: '#FF5B77', right: 20}}>
+                                        {wallet.readyState}
+                                    </div>
                                 </div>
-                                <div style={{position: 'absolute', fontSize: '12px', color: '#FF5B77', right: 20}}>
-                                    {wallet.readyState}
-                                </div>
-                            </div>
-                        }
-                        
-                    </a>
-                ))}
+                            }
+                            
+                        </a>
+                    ))}
+                </div>
+                
                 
             </div>
         )

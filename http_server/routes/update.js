@@ -220,7 +220,6 @@ router.post("/sessions", check.AuthRequired, async (req, res) => {
 
 router.post("/forum/like", check.AuthRequired, check.DevMode, async (req, res) => {
     if(!req.body.forumpost_id || !Number.isInteger(req.body.forumpost_id)){
-        console.log(req.body.forumpost_id)
         return res.status(422).send('invalid post id')
     }
     pool.getConnection(async function(err, conn) {
@@ -371,7 +370,6 @@ router.post("/component/connection", check.AuthRequired, check.DevMode, async (r
                 res.status(500).send('An error occurred')
                 console.log(err)
             }else{
-                console.log(req.body.child_uids)
                 if(req.body.child_uids && (req.body.child_uids.length > 0)){
                     for(var i = 0;i<req.body.child_uids.length;i++){
                         conn.query(
@@ -384,7 +382,6 @@ router.post("/component/connection", check.AuthRequired, check.DevMode, async (r
                             where c.uid = ? and c1.uid = ?`,
                             [req.user_id, req.body.uid, req.body.child_uids[i]],
                             function(err, results) {
-                                console.log(results)
                                 if (err){
                                     res.status(500).send('An error occurred')
                                     throw err

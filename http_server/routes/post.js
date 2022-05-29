@@ -346,7 +346,6 @@ router.post("/fundPageToken", check.AuthRequired, check.DevMode, check.fundTrans
                     console.log(err)
                     return res.status(500).send('An error occurred')
                 }else{
-                    console.log(results)
                     res.status(200).send()
                 }
             }
@@ -374,7 +373,6 @@ router.post("/forum/reply/:fp_uid", check.AuthRequired, check.DevMode, input_val
                     }
                 }
             );
-            console.log('okk 2')
         }
         pool.releaseConnection(conn);
     })

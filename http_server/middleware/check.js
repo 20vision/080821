@@ -197,7 +197,6 @@ exports.fundTransaction = function(req, res, next) {
                 console.log(err)
                 return res.status(500).send('An Error Occurred')
             }else{
-                console.log(results)
                 if(!results || !results[0]){
                     return res.status(404).send('Page Not Found')
                 }

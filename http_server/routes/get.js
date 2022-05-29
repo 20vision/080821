@@ -787,7 +787,6 @@ router.get("/component/:uid/dependents/:offset", async (req, res) => {
                 res.status(500).send('An error occurred')
                 console.log(err)
             }else{
-                console.log(dependents)
                 res.json({
                     dependents: dependents
                 })
@@ -848,7 +847,6 @@ router.get("/component/:uid/saved", check.AuthRequired, check.DevMode, async (re
 })
 
 router.get("/component/:uid", async (req, res) => {
-    //console.log('okk')
     pool.getConnection(async function(err, conn) {
         if (err){
             res.status(500).send('An error occurred')

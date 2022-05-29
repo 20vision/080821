@@ -148,7 +148,6 @@ exports.missionBody_topicBody_forumPost = function(req, res, next) {
 
 exports.hex_color = function(req, res, next){
     if(!hexRegex.test(req.body.hex_color)){
-        console.log(req.body.hex_color)
         res.status(422).send("Invalid Color")
     }else{
         next()

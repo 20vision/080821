@@ -27,6 +27,7 @@ import Cloud from '../../assets/cloud'
 import SavedToCloud from '../../assets/SavedToCloud'
 import Trash from '../../assets/Trash'
 import Flag from '../../assets/Flag'
+import SolanaLogoMarkWhite from '../../assets/solanaLogoMarkWhite'
 
 export default function Index() {
     const [profile, isLoading, setUser] = useUserProfile()
@@ -176,10 +177,15 @@ function ComponentNav({router}){
                     {editMode?<Check color="#FAFAFA"/>:<Tool color="#FAFAFA"/>}
                     <div>{editMode?'Finish':'Edit'}</div>
                 </a>
-            :
+            :profile.username?
                 <a onClick={() => setModal(10)}>
                     <Flag color="var(--white)"/>
                     <div>Report</div>
+                </a>
+            :
+                <a onClick={() => setModal(1)}>
+                    <SolanaLogoMarkWhite/>
+                    <div>Connect</div>
                 </a>
             }
         </>

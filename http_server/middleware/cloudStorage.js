@@ -62,7 +62,6 @@ exports.profile_picture = function(req, res, next) {
 
                         try{
                             req.imageUrl = await uploadFile(data)
-                            console.log('upload',i)
                         }catch(error){
                             console.log(error)
                             res.status(500).send('An error occured while uploading file')
