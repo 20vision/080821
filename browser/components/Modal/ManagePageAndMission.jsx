@@ -88,7 +88,7 @@ const ManageMissions = () => {
 const MissionRow = ({newAndOldMissions, setNewAndOldMissions, missions, index}) => {
 
     return(
-        <div style={{borderLeft: '2px solid #ced4da', padding: '5px 15px'}}>
+        <div style={{borderLeft: '2px solid #ced4da', padding: '5px 15px', marginBottom: '50px'}}>
             <input 
                 value={newAndOldMissions[index].title.replace(/_/g, ' ')} 
                 onChange={e => setNewAndOldMissions(newAndOldMissions.slice(0, index).concat([{title: e.target.value.replace(/ /g, '_'), old_title: missions[index].title, description: newAndOldMissions[index].description}]).concat(newAndOldMissions.slice(index+1)))}
