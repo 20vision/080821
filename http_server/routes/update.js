@@ -363,6 +363,40 @@ router.post("/component/delete", check.AuthRequired, check.DevMode, async (req, 
     }
 });
 
+router.post("/:page_name/missions", check.AuthRequired, check.role, check.DevMode, async (req, res) => {
+    pool.getConnection(async function(err, conn) {
+        if (err){
+            res.status(500).send('An error occurred')
+            console.log(err)
+        }else{
+            if(req.body.missions && (req.body.missions.length > 0)){
+                for(var i = 0; i < req.body.missions.length; i++){
+                    try{
+                        await checkUniqueMissionTitleFunction({pagename: req.params.page_name, mission_title: req.body.missions[i].title})
+                        if((req.body.missions[i].description.length < 1) || (req.body.missions[i].description.length > 280)) {
+                            res.status(422).send('Invalid mission description')
+                            return pool.releaseConnection(conn);
+                        }
+                        conn.query(
+                            'UPDATE Mission set title=?, description = ? where title = ? and page_id = ?;',
+                            [req.body.missions[i].title.replace(/ /g, '_'), req.body.missions[i].description, req.body.missions[i].old_title, results[0].child_component_id],
+                            function(err, results) {
+                                if (err) throw err
+                            }
+                        );
+                    }catch(err){
+                        res.status(422).send("Mission Title already taken")
+                    }
+                }
+                res.status(200).send()
+            }else{
+                res.status(422).send('')
+            }
+        }
+        pool.releaseConnection(conn);
+    })
+})
+
 router.post("/component/connection", check.AuthRequired, check.DevMode, async (req, res) => {
     if(req.user_id){
         pool.getConnection(function(err, conn) {

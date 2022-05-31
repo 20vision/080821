@@ -111,6 +111,10 @@ textarea {
   font-family: 'Nunito', sans-serif!important;
 }
 
+input{
+  font-family: 'Nunito', sans-serif!important;
+}
+
 .inputLine{
   border: 1px solid #ced4da;
   border-width: 0 0 1px 0;

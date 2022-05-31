@@ -83,14 +83,15 @@ exports.role = function(req, res, next) {
     }
     req.pagename = req.params.page_name?req.params.page_name:req.body.pagename?req.body.pagename:null
     pool.query(
-        'SELECT pu.role FROM PageUser pu join Page p on p.page_id = pu.page_id and pu.user_id = ? and p.unique_pagename = ?;',
+        'SELECT pu.page_id FROM PageUser pu join Page p on p.page_id = pu.page_id and pu.user_id = ? and p.unique_pagename = ?;',
         [req.user_id, req.pagename],
         function(err, results) {
             if (err){
                 res.status(500).send('An error occurred')
                 console.log(err)
             }else{
-                if(results[0] && (results[0].role != null)){
+                if(results[0] && (results[0].page_id != null)){
+                    req.page_id = results[0].page_id
                     next();
                 }else{
                     res.status(403).send('Permission denied')
