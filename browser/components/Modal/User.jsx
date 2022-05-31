@@ -185,7 +185,7 @@ export function Profile({
                                                     router.push(window.location.pathname)
                                                 }catch(err){
                                                     toast.error('Failed to change pagename')
-                                                    console.log(err)
+                                                    console.log((err && err.response)?err.response:err)
                                                 }
                                             }} style={{margin: '0px 0px -5px 5px'}}>
                                                 <Check size={16} color="#FF5B77"/>
@@ -203,7 +203,7 @@ export function Profile({
                                                     router.push(`/${pagename}${router.query.mission?'/'+router.query.mission:null}`)
                                                 }catch(err){
                                                     toast.error('Failed to change unique Pagename')
-                                                    console.log(err)
+                                                    console.log((err && err.response)?err.response:err)
                                                 }
                                             }} style={{margin: '0px 0px -5px 5px'}}>
                                                 <Check size={16} color="#FF5B77"/>
@@ -244,7 +244,7 @@ export function Profile({
                                 />
                             </div>
                             <div style={{marginTop: 15,textAlign: 'right',color: (vision.length <= 500)?'var(--black)':'var(--red)'}}>
-                                {vision?vision.length:0}
+                                {vision?500-vision.length:0}
                             </div>
                             <div style={{width: '100%', margin: '30px 0px'}}>
                                 <span className={styles.errorMsg}>
@@ -270,7 +270,7 @@ export function Profile({
                                     router.reload(window.location.pathname)
                                 }catch(err){
                                     toast.error('Could not save. An error occurred')
-                                    console.log(err)
+                                    console.log((err && err.response)?err.response:err)
                                     setLoading(false)
                                 }
                             }} 
@@ -354,7 +354,7 @@ function Logout({profile}){
                         router.reload(window.location.pathname)
                     })
                     .catch(err => {
-                        console.log(err)
+                        console.log((err && err.response)?err.response:err)
                         toast.error('Could not logout all sessions')
                     })
                     .then(() => setLoading(false))

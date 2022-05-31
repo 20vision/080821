@@ -28,7 +28,7 @@ export default function DeleteComponent() {
                         setEditMode(false)
                         router.push(`/${router.query.page}/${router.query.mission}`)
                     }catch(err){
-                        console.log(err)
+                        console.log((err && err.response)?err.response:err)
                         toast.error('Could not delete Component')
                     }
                 }} className="button" style={{backgroundColor: 'var(--red)', flexGrow: 1, color: 'var(--white)'}}>

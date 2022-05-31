@@ -17,7 +17,7 @@ export async function getServerSideProps(context) {
       }
     }
   }catch(error){
-    console.log(error)
+    console.log((error && error.response)?error.response:error)
     return {
       notFound: true
     }

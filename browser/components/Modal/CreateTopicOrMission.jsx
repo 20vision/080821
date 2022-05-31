@@ -71,7 +71,8 @@ export default function CreateMission({type}) {
         axios.post(`${config.HTTP_SERVER_URL}/post/mission`,{pagename: router.query.page, missionTitle: Title, missionBody: Body},{
         withCredentials: true
         }).then(response => {
-            router.push(`/forum/${router.query.page}/mission/${Title.replace(/ /g, '_').toLowerCase()}`)
+            //router.push(`/forum/${router.query.page}/mission/${Title.replace(/ /g, '_').toLowerCase()}`)
+            router.reload(window.location.pathname)
             setModal(0)
         })
         .catch(error =>{

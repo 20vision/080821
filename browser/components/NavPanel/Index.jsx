@@ -99,12 +99,12 @@ function ComponentNav({router}){
             try{
                 setSaved((await axios.get(`${config.HTTP_SERVER_URL}/get/component/${router.query.component}/saved`, {withCredentials: true})).data==0?false:true)
             }catch(err){
-                console.log(err)
+                console.log((err && err.response)?err.response:err)
             }
             try{
                 if(hasRole == null) setHasRole((await axios.get(`${config.HTTP_SERVER_URL}/get/page/${router.query.page}/role`, {withCredentials: true})).data)
             }catch(err){
-                console.log(err)
+                console.log((err && err.response)?err.response:err)
             }
         }
         if(profile.username) AsyncFunction()
@@ -139,7 +139,7 @@ function ComponentNav({router}){
                                 setSaved(true)
                             })
                             .catch(error => {
-                                console.log(error)
+                                console.log((error && error.response)?error.response:error)
                                 toast.error('Could not save Component')
                             })
                         }}>
@@ -154,7 +154,7 @@ function ComponentNav({router}){
                                 setSaved(false)
                             })
                             .catch(error => {
-                                console.log(error)
+                                console.log((error && error.response)?error.response:error)
                                 toast.error('Could not unsave Component')
                             })
                         }}>
@@ -202,7 +202,7 @@ function PageNav({router, profile}){
             try{
                 if(hasRole == null) setHasRole((await axios.get(`${config.HTTP_SERVER_URL}/get/page/${router.query.page}/role`, {withCredentials: true})).data)
             }catch(err){
-                console.log(err)
+                console.log((err && err.response)?err.response:err)
             }
         }
         if(profile.username) AsyncFunction()

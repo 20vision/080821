@@ -96,7 +96,7 @@ export default function Edit(){
                     allowProcess={false}
                     onaddfile={(err, file) => {
                         if(err){
-                            return console.log(error)
+                            return console.log((error && error.response)?error.response:error)
                         }
                         setImageExists(true)
                     }}
@@ -186,7 +186,7 @@ export default function Edit(){
 
                     router.reload(window.location.pathname)
                 }catch(err){
-                    console.log(err)
+                    console.log((err && err.response)?err.response:err)
                     setLoading(false)
                     if(err && err.response && err.response.status && (err.response.status != 500)) return toast.error(err.response.data)
                     toast.error('An error occurred')

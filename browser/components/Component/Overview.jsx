@@ -34,7 +34,7 @@ export default function Overview({comp, subs}){
                 setWasEditing(false)
             })
             .catch(err => {
-                console.log(err)
+                console.log((err && err.response)?err.response:err)
                 toast.error('Could not remove Sub-Components')
                 setWasEditing(false)
             })
@@ -99,7 +99,7 @@ const ContentRow = ({data, subcomponents, pagination, profile, editMode, router,
                 setSaved(response.data==0?false:true)
             })
             .catch(err => {
-                console.log(err)
+                console.log((err && err.response)?err.response:err)
             })
         }
 
@@ -154,7 +154,7 @@ const ContentRow = ({data, subcomponents, pagination, profile, editMode, router,
                                     setSaved(true)
                                 })
                                 .catch(error => {
-                                    console.log(error)
+                                    console.log((error && error.response)?error.response:error)
                                     toast.error('Could not save Component')
                                 })
                             }}>
@@ -168,7 +168,7 @@ const ContentRow = ({data, subcomponents, pagination, profile, editMode, router,
                                     setSaved(false)
                                 })
                                 .catch(error => {
-                                    console.log(error)
+                                    console.log((error && error.response)?error.response:error)
                                     toast.error('Could not unsave Component')
                                 })
                             }}>

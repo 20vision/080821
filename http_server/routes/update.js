@@ -372,14 +372,21 @@ router.post("/:page_name/missions", check.AuthRequired, check.role, check.DevMod
             if(req.body.missions && (req.body.missions.length > 0)){
                 for(var i = 0; i < req.body.missions.length; i++){
                     try{
-                        await checkUniqueMissionTitleFunction({pagename: req.params.page_name, mission_title: req.body.missions[i].title})
+                        if(req.body.missions[i].title != req.body.missions[i].old_title){
+                            await checkUniqueMissionTitleFunction({pagename: req.params.page_name, mission_title: req.body.missions[i].title})
+                        }
                         if((req.body.missions[i].description.length < 1) || (req.body.missions[i].description.length > 280)) {
                             res.status(422).send('Invalid mission description')
                             return pool.releaseConnection(conn);
                         }
+
+                        let input_array = []
+
+                        if(req.body.missions[i].title != req.body.missions[i].old_title) input_array.push(req.body.missions[i].title.replace(/ /g, '_'))
+
                         conn.query(
-                            'UPDATE Mission set title=?, description = ? where title = ? and page_id = ?;',
-                            [req.body.missions[i].title.replace(/ /g, '_'), req.body.missions[i].description, req.body.missions[i].old_title, results[0].child_component_id],
+                            `UPDATE Mission set ${(req.body.missions[i].title != req.body.missions[i].old_title)?'title=?':''} description = ? where title = ? and page_id = ?;`,
+                            [...input_array, ...[req.body.missions[i].description, req.body.missions[i].old_title, req.page_id]],
                             function(err, results) {
                                 if (err) throw err
                             }

@@ -71,7 +71,7 @@ export default function SavedComponents() {
                     setLoading(false)
                     router.reload(window.location.pathname)
                 }catch(err){
-                    console.log(err)
+                    console.log((err && err.response)?err.response:err)
                     setLoading(false)
                     toast.error('Could not add Component')
                 }

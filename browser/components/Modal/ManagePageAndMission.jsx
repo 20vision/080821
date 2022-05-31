@@ -56,18 +56,20 @@ const ManageMissions = () => {
 
     return(
         <div>
-            {newAndOldMissions && newAndOldMissions.map((mission, index) => (<MissionRow newAndOldMissions={newAndOldMissions} setNewAndOldMissions={setNewAndOldMissions} missions={missions} index={index}/>))}
+            <div style={{height: 400, overflowY: 'scroll'}}>
+                {newAndOldMissions && newAndOldMissions.map((mission, index) => (<MissionRow newAndOldMissions={newAndOldMissions} setNewAndOldMissions={setNewAndOldMissions} missions={missions} index={index}/>))}
+            </div>
+            
             <a onClick={e => {
                 axios.post(`${config.HTTP_SERVER_URL}/update/${router.query.page}/missions`, {missions: newMissions}, {withCredentials: true})
                 .then(res => {
-                    toast.success('Mission updated')
-                    setMissions(newAndOldMissions)
+                    router.reload(window.location.pathname)
                 })
                 .catch(err => {
-                    console.log(err)
+                    console.log(err.response)
                     toast.error('Error updating mission')
                 })
-            }} 
+            }}
             className={`${createTopicModalStyle.createPageButton} ${loading || 
                 (newMissions.length == 0)
             ?createTopicModalStyle.invalidButton:null}`}>
@@ -86,10 +88,10 @@ const ManageMissions = () => {
 const MissionRow = ({newAndOldMissions, setNewAndOldMissions, missions, index}) => {
 
     return(
-        <div style={{borderLeft: '2px solid #ced4da', padding: '5px 15px', width: '100%'}}>
+        <div style={{borderLeft: '2px solid #ced4da', padding: '5px 15px'}}>
             <input 
-                value={newAndOldMissions[index].title} 
-                onChange={e => setNewAndOldMissions(newAndOldMissions.slice(0, index).concat([{title: e.target.value, old_title: missions[index].title, description: newAndOldMissions[index].description}]).concat(newAndOldMissions.slice(index+1)))}
+                value={newAndOldMissions[index].title.replace(/_/g, ' ')} 
+                onChange={e => setNewAndOldMissions(newAndOldMissions.slice(0, index).concat([{title: e.target.value.replace(/ /g, '_'), old_title: missions[index].title, description: newAndOldMissions[index].description}]).concat(newAndOldMissions.slice(index+1)))}
                 style={{
                     fontSize: '20px',
                     fontWeight: 'bold',
@@ -98,6 +100,7 @@ const MissionRow = ({newAndOldMissions, setNewAndOldMissions, missions, index}) 
                     lineHeight:'20px',
                     width: '100%',
                 }}
+                max="100"
             />
             <TextareaAutosize
                 style={{width: '100%'}}
@@ -105,6 +108,9 @@ const MissionRow = ({newAndOldMissions, setNewAndOldMissions, missions, index}) 
                 value={newAndOldMissions[index].description}
                 onChange={e => setNewAndOldMissions(newAndOldMissions.slice(0, index).concat([{title: newAndOldMissions[index].title, old_title: missions[index].title , description: e.target.value}]).concat(newAndOldMissions.slice(index+1)))}
             />
+            <div style={{marginTop: 15,textAlign: 'right',color: (newAndOldMissions[index].description.length <= 280)?'var(--black)':'var(--red)'}}>
+                {newAndOldMissions[index].description?280-newAndOldMissions[index].description.length:0}
+            </div>
         </div>
     )
 }

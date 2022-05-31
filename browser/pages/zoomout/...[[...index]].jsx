@@ -181,7 +181,7 @@ const Bubble = ({data, setData}) => {
 // //         setTreeCount(query.tree_count)
 // //         setDataset(query.content)
 // //       }catch(err){
-// //         console.log(err)
+// //         console.log((err && err.response)?err.response:err)
 // //         toast.error('Could not fetch post info')
 // //       }
 // //     }
@@ -228,7 +228,7 @@ const Bubble = ({data, setData}) => {
 // //               break
 // //             }
 // //           }catch(err){
-// //             console.log(err)
+// //             console.log((err && err.response)?err.response:err)
 // //             toast.error('Could not get posts')
 // //           }
 // //         }
@@ -285,7 +285,7 @@ const Bubble = ({data, setData}) => {
 // //       router.push(`/forum/${dataset[0][selectedContent[0]].unique_pagename}/post/${response.data.forumpost_id}`)    
 // //     })
 // //     .catch(error =>{
-// //       console.log(error)
+// //       console.log((error && error.response)?error.response:error)
 // //       if(error.response) toast.error(`${error.response.data?error.response.data:error.response.status+': An error occured'}`)
 // //     })
 // //   }
@@ -522,7 +522,7 @@ const Bubble = ({data, setData}) => {
 // //                           resolve()
 // //                         })
 // //                         .catch(error =>{
-// //                           console.log(error)
+// //                           console.log((error && error.response)?error.response:error)
 // //                           if(error.response) toast.error(`${error.response.status}: An error occured`)
 // //                           reject()
 // //                         })
@@ -573,7 +573,7 @@ const Bubble = ({data, setData}) => {
 // //       }
 // //     }
 // //   }catch(error){
-// //     console.log(error)
+// //     console.log((error && error.response)?error.response:error)
 // //     return {
 // //       notFound: true
 // //     }

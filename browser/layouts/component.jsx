@@ -111,7 +111,7 @@ var Panel = onClickOutside(({children, page, subs, comp}) => {
                                                 const data = (await axios.get(`${config.HTTP_SERVER_URL}/get/component/${router.query.component}/dependents/${dependents?(dependents.length-1):0}`)).data
                                                 setDependents([...dependents,...data])
                                             }catch(err){
-                                                console.log(err)
+                                                console.log((err && err.response)?err.response:err)
                                             }
                                         }
                                     }
