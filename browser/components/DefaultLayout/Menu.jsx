@@ -194,15 +194,13 @@ export function Menu({opened, setMenu, pathname}) {
                 }
             />
 
-            {/* <div className={styles.policy}>
-                <span><a>Privacy</a></span>
+            <div className={styles.policy}>
+                <span><Link href={'/info?ab=privacy'}><a>Privacy Policy</a></Link></span>
                 <span>·</span>
-                <span><a>Terms</a></span>
+                <span><Link href={'/info?ab=terms'}><a>Terms of Service</a></Link></span>
                 <span>·</span>
-                <span><a>Cookies</a></span>
-                <span>·</span>
-                <span><a>About</a></span>
-            </div> */}
+                <span><Link href={'/info?ab=about'}><a>About us</a></Link></span>
+            </div>
         </motion.div>
     )
 }

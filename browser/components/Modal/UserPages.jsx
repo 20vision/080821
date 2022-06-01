@@ -22,7 +22,7 @@ export default function UserPages() {
     const setModal = useModalStore(state => state.setModal)
 
     return (
-        <div>
+        <div style={{width: 350}}>
             <div className={`noselect ${indexStyles.header}`}>
                 <h1 onClick={() => setSelectedRoute(0)} className={selectedRoute == 0?indexStyles.highlight:null}>
                     Create
@@ -30,9 +30,9 @@ export default function UserPages() {
                 <h1 onClick={() => setSelectedRoute(1)} className={selectedRoute == 1?indexStyles.highlight:null}>
                     My Pages
                 </h1>
-                <h1 onClick={() => setSelectedRoute(2)} className={selectedRoute == 2?indexStyles.highlight:null}>
+                {/* <h1 onClick={() => setSelectedRoute(2)} className={selectedRoute == 2?indexStyles.highlight:null}>
                     Invites
-                </h1>
+                </h1> */}
             </div>
             
             <div>
@@ -41,7 +41,7 @@ export default function UserPages() {
                 :selectedRoute == 1?
                     <My_Pages handleSwitchToMy_Pages={() => {setSelectedRoute(0)}}/> 
                 :
-                    <Invites/>
+                    null//<Invites/>
                 }
             </div>
         </div>
