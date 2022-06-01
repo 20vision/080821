@@ -51,10 +51,6 @@ const ManageMissions = () => {
         setNewAndOldMissions(missions)
     }, [])
 
-    useEffect(() => {
-        console.log(newMissions)
-    }, [newMissions])
-
     useEffect(async() => {
         let newMissions = []
         for(let i = 0; i < newAndOldMissions.length; i++){
