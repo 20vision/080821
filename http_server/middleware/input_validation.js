@@ -90,7 +90,7 @@ exports.checkUniqueTopicTitle = function(req, res, next) {
             if(rows[0].uniqueTopic == true){
                 next();
             }else{
-                res.status(422).send("Mission Title already taken")
+                res.status(422).send("Topic Title already taken")
             }
         }catch(err){
             res.status(500).send()
@@ -117,10 +117,11 @@ exports.checkUniqueMissionTitle = async function(req, res, next) {
         next();
     }catch(err){
         res.status(422).send("Mission Title already taken")
+        console.log(err)
     }
 };
 
-const checkUniqueMissionTitleFunction = (data) => new Promise((res, rej) => {
+const checkUniqueMissionTitleFunction = exports.checkUniqueMissionTitleFunction = (data) => new Promise((res, rej) => {
     pool.query("SELECT if(count(m.mission_id)>0,false,true) as uniqueMission from Mission m join Page p on p.page_id = m.page_id where m.title = ? and p.unique_pagename = ?", 
     [data.mission_title, data.pagename], 
     function(err, rows, fields) {
@@ -135,7 +136,6 @@ const checkUniqueMissionTitleFunction = (data) => new Promise((res, rej) => {
             throw err;
         }
     });
-    
 });
 
 exports.missionBody_topicBody_forumPost = function(req, res, next) {

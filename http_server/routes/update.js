@@ -371,28 +371,39 @@ router.post("/:page_name/missions", check.AuthRequired, check.role, check.DevMod
         }else{
             if(req.body.missions && (req.body.missions.length > 0)){
                 for(var i = 0; i < req.body.missions.length; i++){
-                    try{
-                        if(req.body.missions[i].title != req.body.missions[i].old_title){
-                            await checkUniqueMissionTitleFunction({pagename: req.params.page_name, mission_title: req.body.missions[i].title})
-                        }
-                        if((req.body.missions[i].description.length < 1) || (req.body.missions[i].description.length > 280)) {
-                            res.status(422).send('Invalid mission description')
-                            return pool.releaseConnection(conn);
-                        }
-
-                        let input_array = []
-
-                        if(req.body.missions[i].title != req.body.missions[i].old_title) input_array.push(req.body.missions[i].title.replace(/ /g, '_'))
-
+                    if(req.body.missions[i].delete == true){
                         conn.query(
-                            `UPDATE Mission set ${(req.body.missions[i].title != req.body.missions[i].old_title)?'title=?':''} description = ? where title = ? and page_id = ?;`,
-                            [...input_array, ...[req.body.missions[i].description, req.body.missions[i].old_title, req.page_id]],
+                            `DELETE from Mission where title = ? and page_id = ?;`,
+                            [req.body.missions[i].old_title, req.page_id],
                             function(err, results) {
                                 if (err) throw err
                             }
                         );
-                    }catch(err){
-                        res.status(422).send("Mission Title already taken")
+                    }else{
+                        try{
+                            if(req.body.missions[i].title != req.body.missions[i].old_title){
+                                await input_validation.checkUniqueMissionTitleFunction({pagename: req.params.page_name, mission_title: req.body.missions[i].title})
+                            }
+                            if((req.body.missions[i].description.length < 1) || (req.body.missions[i].description.length > 280)) {
+                                res.status(422).send('Invalid mission description')
+                                return pool.releaseConnection(conn);
+                            }
+    
+                            let input_array = []
+    
+                            if(req.body.missions[i].title != req.body.missions[i].old_title) input_array.push(req.body.missions[i].title.replace(/ /g, '_'))
+    
+                            conn.query(
+                                `UPDATE Mission set ${(req.body.missions[i].title != req.body.missions[i].old_title)?'title=?,':''} description = ? where title = ? and page_id = ?;`,
+                                [...input_array, ...[req.body.missions[i].description, req.body.missions[i].old_title, req.page_id]],
+                                function(err, results) {
+                                    if (err) throw err
+                                }
+                            );
+                        }catch(err){
+                            res.status(422).send("Mission Title already taken")
+                            console.log(err)
+                        }
                     }
                 }
                 res.status(200).send()

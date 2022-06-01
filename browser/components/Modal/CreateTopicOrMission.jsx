@@ -72,7 +72,7 @@ export default function CreateMission({type}) {
         withCredentials: true
         }).then(response => {
             //router.push(`/forum/${router.query.page}/mission/${Title.replace(/ /g, '_').toLowerCase()}`)
-            router.reload(window.location.pathname)
+            router.push(`/${router.query.page}/${Title.replace(/ /g, '_').toLowerCase()}`)
             setModal(0)
         })
         .catch(error =>{
