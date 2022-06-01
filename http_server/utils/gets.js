@@ -24,7 +24,7 @@ const getPageByName = (conn, unique_pagename) => new Promise((resolve, reject) =
 
 const getMission_s = (conn, unique_pagename, title) => new Promise((resolve, reject) => {
     conn.query(
-        `SELECT ${title?'m.mission_id,':''} m.title, 'm' as parent_type, m.description, m.created from Mission m join Page p on p.page_id = m.page_id where p.unique_pagename = ? ${title?'and m.title = \''+title+'\'':''};`,
+        `SELECT ${title?'m.mission_id,':''} m.title, 'm' as parent_type, count(c.component_id) as component_count, m.description, m.created from Mission m join Page p on p.page_id = m.page_id left join Component c on c.mission_id=m.mission_id where p.unique_pagename = ? ${title?'and m.title = \''+title+'\'':''}group by m.mission_id order by m.created;`,
         [unique_pagename],
         function(err, mission_s) {
             if (err){

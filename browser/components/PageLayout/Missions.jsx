@@ -33,12 +33,15 @@ export default function Missions({missions}) {
                                     `/${router.query.page}/${mission.title.replace(/ /g, '_').toLowerCase()}`
                                 }
                             >
-                            <div className={(router.query.mission && (mission.title.replace(/ /g, '_').toLowerCase() == router.query.mission.toLowerCase()))?styles.selected:styles.mission}>
+                            <div style={{display: 'flex',flexDirection: 'column'}} className={(router.query.mission && (mission.title.replace(/ /g, '_').toLowerCase() == router.query.mission.toLowerCase()))?styles.selected:styles.mission}>
                                 <h3>
                                     {mission.title.replace(/_/g, ' ')}
                                 </h3>
                                 <div>
                                     {mission.description}
+                                </div>
+                                <div style={{textAlign: 'center', marginTop: 'auto', color: (router.query.mission && (mission.title.replace(/ /g, '_').toLowerCase() == router.query.mission.toLowerCase()))?'var(--white)':'var(--lighter_black)'}}>
+                                    {mission.component_count} Component{mission.component_count>1?'s':''}
                                 </div>
                             </div>
                         </Link></a>
