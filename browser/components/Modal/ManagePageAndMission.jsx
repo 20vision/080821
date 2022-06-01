@@ -101,8 +101,7 @@ const ManageMissions = () => {
                 }else{
                     axios.post(`${config.HTTP_SERVER_URL}/update/${router.query.page}/missions`, {missions: newMissions}, {withCredentials: true})
                     .then(res => {
-                        router.push(`/${router.query.page}/`)
-                        router.reload(window.location.href)
+                        router.push(`/${router.query.page}/`).then(() => router.reload(window.location.href))
                     })
                     .catch(err => {
                         console.log(err.response)
