@@ -199,7 +199,7 @@ export function Menu({opened, setMenu, pathname}) {
                 <span>·</span>
                 <span><Link href={'/info?ab=terms'}><a>Terms of Service</a></Link></span>
                 <span>·</span>
-                <span><Link href={'/info?ab=about'}><a>About us</a></Link></span>
+                <span><Link href={'/info?ab=about'}><a>About</a></Link></span>
             </div>
         </motion.div>
     )

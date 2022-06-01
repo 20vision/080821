@@ -28,7 +28,7 @@ export default function Info() {
                         Terms of Service
                     </h1></a></Link>
                     <Link href='/info?ab=about'><a><h1 className={selection == 2?indexStyles.highlight:null}>
-                        About us
+                        About
                     </h1></a></Link>
                 </div>
             </div>
