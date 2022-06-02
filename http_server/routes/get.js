@@ -243,10 +243,10 @@ router.get("/page/components/:offset", check.AuthOptional, async (req, res) => {
                     count(cc1.component_connection_id) as subcomponents
                     from Component c
                     join Mission m on m.mission_id = c.mission_id join Page p on m.page_id = p.page_id
-                    ${(req.query.filter=='following' && !isNaN(req.user_id))?'join Following f on f.page_id = m.page_id and f.user_id ='+req.user_id:''}
+                    ${(req.query.filter && !isNaN(req.user_id))?`join ${req.query.filter == 'following'?'Following a on a.page_id = m.page_id':'UserComponentSave a on a.component_id = c.component_id'} and a.user_id = ${req.user_id}`:''}
                     left join ComponentConnection cc1 on cc1.component_id = c.component_id
                     group by c.component_id 
-                    order by subcomponents desc, c.created desc
+                    ${req.query.filter == 'saved'?'order by a.created desc':'order by subcomponents desc, c.created desc'}
                     limit ?,3`,
                     [parseInt(req.params.offset)],
                     function(err, components) {

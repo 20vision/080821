@@ -141,14 +141,14 @@ export function Menu({opened, setMenu, pathname}) {
             </div>
 
             <div className={`${styles.selectionContainer}`}>
-                <a onClick={() => {setMenu('/portfolio')}} className={!profile.username? 'no_click': null}>
+                {/* <a onClick={() => {setMenu('/portfolio')}} className={!profile.username? 'no_click': null}>
                     <div className={`${styles.selectionChild} ${(pathname == '/portfolio')?styles.highlight:null}`}>
                         <div className={styles.icon}>
                             <Portfolio color={(pathname == '/portfolio')?"#3a3a3a":"#FAFAFA"}/>
                         </div>
                         <h2>My Portfolio</h2>
                     </div>
-                </a>
+                </a> */}
 
                 <a onClick={() => {setMenu('/')}}>
                     <div className={`${styles.selectionChild} ${(pathname == '/')?styles.highlight:null}`}>

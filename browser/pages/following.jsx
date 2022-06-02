@@ -12,19 +12,10 @@ import { useRouter } from 'next/router'
 export default function Home() {
   const [selectedComponent, setSelectedComponent] = useState()
   const [profile, isLoading, setUser] = useUserProfile()
-  const router = useRouter()
-
-  useEffect(() => {
-    if(isLoading) return
-    if(!profile.username){
-      toast.error("You must be logged in to view this page.")
-      router.push('/')
-    }
-  }, [profile.username])
 
   return (
     <DefaultLayout comp={selectedComponent} subs={selectedComponent?selectedComponent.subs:null}>
-      <PaperPreview setSelectedComponent={setSelectedComponent}/>
+      {profile.username?<PaperPreview setSelectedComponent={setSelectedComponent}/>:<div/>}
     </DefaultLayout>
   )
 }
