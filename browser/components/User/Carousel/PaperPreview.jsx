@@ -58,7 +58,7 @@ export default function PaperPreview({setSelectedComponent}){
   const getComponents = async() => {
       if(!componentsQueryLimitReached){
       try{
-          let components_data = (await axios.get(`${config.HTTP_SERVER_URL}/get/page/${router.query.page?router.query.page+'/':''}components/${components.length}${router.query.mission?'/'+router.query.mission:null}`)).data
+          let components_data = (await axios.get(`${config.HTTP_SERVER_URL}/get/page/${router.query.page?router.query.page+'/':''}components/${components.length}${router.query.mission?'/'+router.query.mission:''} ${router.pathname == '/following'?'?filter=following':''}`, {withCredentials: true})).data
           if(components_data.length != 3) setComponentsQueryLimitReached(true)
           setComponents([...components,...components_data])
       }catch(err){

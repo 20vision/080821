@@ -22,6 +22,49 @@ const getPageByName = (conn, unique_pagename) => new Promise((resolve, reject) =
     );
 })
 
+const getPageId = ({conn, unique_pagename}) => new Promise((resolve, reject) => {
+    conn.query(
+        `SELECT page_id FROM Page where unique_pagename = ?;`,
+        [unique_pagename],
+        function(err, page) {
+            if (err){
+                reject({
+                    status: 500,
+                    message: 'An error occurred'
+                })
+                console.log(err)
+            }else if(page.length != 1){
+                reject({
+                    status: 404,
+                    message: 'Page not found'
+                })
+            }else{
+                resolve(page[0].page_id)
+            }
+        }
+    );
+})
+
+const getFollowing = ({conn, page_id, user_id}) => new Promise((resolve, reject) => {
+    conn.query(
+        `SELECT if(count(f.following_id) > 0, true, false) as following from Following f where f.page_id = ? and f.user_id = ?;`,
+        [page_id, user_id],
+        function(err, page) {
+            if (err){
+                reject({
+                    status: 500,
+                    message: 'An error occurred'
+                })
+                console.log(err)
+            }else if((page.length == 0) || (page.length > 0 && !page[0].following)){
+                resolve(false)
+            }else{
+                resolve(true)
+            }
+        }
+    );
+})
+
 const getMission_s = (conn, unique_pagename, title) => new Promise((resolve, reject) => {
     conn.query(
         `SELECT ${title?'m.mission_id,':''} m.title, 'm' as parent_type, count(c.component_id) as component_count, m.description, m.created from Mission m join Page p on p.page_id = m.page_id left join Component c on c.mission_id=m.mission_id where p.unique_pagename = ? ${title?'and m.title = \''+title+'\'':''}group by m.mission_id order by m.created;`,
@@ -277,7 +320,9 @@ module.exports = {
     getPageByName,
     getMission_s,
     getTopic_s,
-    getComponentIdFromUidUserPostPermission
+    getComponentIdFromUidUserPostPermission,
+    getPageId,
+    getFollowing
     // getForumPostParentInfo,
     // getForumPost
 }

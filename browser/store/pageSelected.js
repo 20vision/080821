@@ -6,6 +6,8 @@ let pageSelectedStore = (set) => ({
     setFetch: (fetch) => set({fetch: fetch}),
     page: null,
     setPageSelection: (page) => set({page: page}),
+    following: null,
+    setFollowing: (following) => set({following: following}),
     missions: null,
     setMissions: (missions) => set({missions: missions})
 })

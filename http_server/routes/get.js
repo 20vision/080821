@@ -47,6 +47,26 @@ router.get("/topic_title_unique/:pagename/:topic_title", input_validation.checkU
     res.status(200).send()
 });
 
+router.get('/following/:page_name', check.AuthRequired, (req, res) => {
+    pool.getConnection(async function(err, conn) {
+        if (err){
+            res.status(500).send('An error occurred')
+            console.log(err)
+        }else{
+            try{
+                let page_id = await gets.getPageId({conn, unique_pagename: req.params.page_name});
+                let following = await gets.getFollowing({conn, user_id: req.user_id, page_id});
+                res.json(following);
+            }catch(err){
+                console.log(err)
+                if(err.status && err.message) return res.status(err.status).send(err.message)
+                res.status(500).send()
+            } 
+        }
+        pool.releaseConnection(conn);
+    })
+})
+
 router.get("/my_pages/:page", check.AuthRequired, check.DevMode, async (req, res) => {
     if(req.user_id){
         pool.query(
@@ -201,6 +221,7 @@ router.get("/page/:unique_pagename/component/count", async (req, res) => {
 })
 
 router.get("/page/components/:offset", check.AuthOptional, async (req, res) => {
+    console.log(req.query.filter, req.user_id)
     pool.getConnection(async function(err, conn) {
         if (err){
             res.status(500).send('An error occurred')
@@ -222,6 +243,7 @@ router.get("/page/components/:offset", check.AuthOptional, async (req, res) => {
                     count(cc1.component_connection_id) as subcomponents
                     from Component c
                     join Mission m on m.mission_id = c.mission_id join Page p on m.page_id = p.page_id
+                    ${(req.query.filter=='following' && !isNaN(req.user_id))?'join Following f on f.page_id = m.page_id and f.user_id ='+req.user_id:''}
                     left join ComponentConnection cc1 on cc1.component_id = c.component_id
                     group by c.component_id 
                     order by subcomponents desc, c.created desc

@@ -140,8 +140,8 @@ export function Menu({opened, setMenu, pathname}) {
                 </h3>
             </div>
 
-            <div className={`${!profile.username? 'no_click': null} ${styles.selectionContainer}`}>
-                <a onClick={() => {setMenu('/portfolio')}}>
+            <div className={`${styles.selectionContainer}`}>
+                <a onClick={() => {setMenu('/portfolio')}} className={!profile.username? 'no_click': null}>
                     <div className={`${styles.selectionChild} ${(pathname == '/portfolio')?styles.highlight:null}`}>
                         <div className={styles.icon}>
                             <Portfolio color={(pathname == '/portfolio')?"#3a3a3a":"#FAFAFA"}/>
@@ -159,7 +159,7 @@ export function Menu({opened, setMenu, pathname}) {
                     </div>
                 </a>
 
-                <a onClick={() => {setMenu('/following')}}>
+                <a onClick={() => {setMenu('/following')}} className={!profile.username? 'no_click': null}>
                     <div className={`${styles.selectionChild} ${(pathname == '/following')?styles.highlight:null}`}>
                         <div className={styles.icon}>
                             <Following color={(pathname == '/following')?"#3a3a3a":"#FAFAFA"}/>
@@ -168,7 +168,7 @@ export function Menu({opened, setMenu, pathname}) {
                     </div>
                 </a>
 
-                <a onClick={() => {setMenu('/saved')}}>
+                <a onClick={() => {setMenu('/saved')}} className={!profile.username? 'no_click': null}>
                     <div className={`${styles.selectionChild} ${(pathname == '/saved')?styles.highlight:null}`}>
                         <div className={styles.icon}>
                             <Saved color={(pathname == '/saved')?"#3a3a3a":"#FAFAFA"}/>

@@ -28,6 +28,8 @@ import SavedToCloud from '../../assets/SavedToCloud'
 import Trash from '../../assets/Trash'
 import Flag from '../../assets/Flag'
 import SolanaLogoMarkWhite from '../../assets/solanaLogoMarkWhite'
+import UserCheck from '../../assets/UserCheck'
+import User from '../../assets/User'
 
 export default function Index() {
     const [profile, isLoading, setUser] = useUserProfile()
@@ -195,6 +197,22 @@ function ComponentNav({router}){
 function PageNav({router, profile}){
     const setModal = useModalStore(state => state.setModal)
     const [hasRole, setHasRole] = useState()
+    const following = usePageSelectedStore(state => state.following)
+    const setFollowing = usePageSelectedStore(state => state.setFollowing)
+    
+    useEffect(() => {
+        setFollowing(null)
+        if(!profile.username) return
+        if(!router.query.page) return
+        async function AsyncFunction(){
+            try{
+                setFollowing((await axios.get(`${config.HTTP_SERVER_URL}/get/following/${router.query.page}`, {withCredentials: true})).data)
+            }catch(err){
+                console.log((err && err.response)?err.response:err)
+            }
+        }
+        if(profile.username) AsyncFunction()
+    }, [profile.username, router.query.page])
 
     useEffect(() => {
         if(!profile.username) return
@@ -220,12 +238,31 @@ function PageNav({router, profile}){
                             <Plus color="#FAFAFA"/>
                             <div>{router.query.mission?'Component':'Mission'}</div>
                         </a>
-                    :
-                        <a>
-                            <UserPlus color="#FAFAFA"/>
-                            <div>Follow</div>
+                    :router.query.page?
+                        <a onClick={() => {
+                            const oldFollowing = following
+                            setFollowing(!following)
+                            axios.post(`${config.HTTP_SERVER_URL}/update/follow/${router.query.page}`, null, {withCredentials: true})
+                            .then((response) => {
+                                // if(response.data == true) toast.success('Followed')
+                                // if(response.data == false) toast.success('Unfollowed')
+                            })
+                            .catch(err => {
+                                toast.error('Follow error. Please try again later')
+                                console.log((err && err.response)?err.response:err)
+                                setFollowing(oldFollowing)
+                            })
+                        }}>
+                            {(following == false)?
+                                <UserPlus color="#FAFAFA"/>
+                            :following == true?
+                                <UserCheck color="#FAFAFA"/>
+                            :
+                                <User color="#FAFAFA"/>
+                            }
+                            <div>{following?'Following':'Follow'}</div>
                         </a> 
-                    }
+                    :null}
                 </>
             :null
             }

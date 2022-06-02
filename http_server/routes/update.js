@@ -1,6 +1,7 @@
 const router = require("express").Router();
 const cloudStorage = require('../middleware/cloudStorage')
 const check = require('../middleware/check')
+let gets = require('../utils/gets');
 const pool = require('../config/db');
 const input_validation = require('../middleware/input_validation');
 const { deleteFile } = require("../config/storage");
@@ -361,6 +362,43 @@ router.post("/component/delete", check.AuthRequired, check.DevMode, async (req, 
     }else{
         res.status(401).send('Not authenticated')
     }
+});
+
+router.post("/follow/:page_name", check.AuthRequired, check.DevMode, (req, res) => {
+    try{
+        pool.getConnection(async function(err, conn) {
+            if (err){
+                res.status(500).send('An error occurred')
+                console.log(err)
+            }else{
+                let page_id = await gets.getPageId({conn, unique_pagename: req.params.page_name});
+                const isFollowing = await gets.getFollowing({conn, user_id: req.user_id, page_id: page_id})
+                if(isFollowing){
+                    conn.query(
+                        `DELETE from Following where page_id = ? and user_id = ?;`,
+                        [page_id, req.user_id],
+                        function(err, results) {
+                            if (err) throw err
+                            res.json(false)
+                        }
+                    );
+                }else{
+                    conn.query(
+                        `INSERT into Following values(?,?,?,now());`,
+                        [null,req.user_id,page_id, null],
+                        function(err, results) {
+                            if (err) throw err
+                            res.json(true)
+                        }
+                    );
+                }
+            }
+            pool.releaseConnection(conn);
+        })
+    }catch(err){
+
+    }
+
 });
 
 router.post("/:page_name/missions", check.AuthRequired, check.role, check.DevMode, async (req, res) => {
