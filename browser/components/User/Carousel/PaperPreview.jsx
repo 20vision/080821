@@ -151,6 +151,12 @@ export default function PaperPreview({setSelectedComponent}){
               :null}
             </div>
           ))}
+          {components.length == 0?
+            <div>
+              <div style={{fontSize: 100, textAlign: 'center'}}>🧐</div>
+              <h1 style={{color: 'var(--white)', textAlign: 'center'}}>No Result Found</h1>
+            </div>
+          :null}
         </div>
       </div>
     </div>

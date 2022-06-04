@@ -6,7 +6,7 @@ const hexRegex = /^([a-fA-F0-9]{6}|[a-fA-F0-9]{3})$/ //Without #
 
 exports.checkUniqueUsername = function(req, res, next) {
     var username = req.body.username
-    if(username.length < 4){
+    if((username.length < 4) || (username == 'zoomout') || (username == 'info') || (username == 'saved') || (username == 'index') || (username == 'following') || (username == 'portfolio')){
         res.status(422).send("Username not available")
     }else{
         pool.query("SELECT if(count(user_id)>0,false,true) as uniqueUsername from User where username = ?", [username], 
@@ -37,7 +37,7 @@ exports.checkRegexUsername = function(req, res, next) {
 
 exports.checkUniquePagename = function(req, res, next) {
     var pagename = req.body.pagename.toLowerCase()
-    if(pagename.length < 4){
+    if((pagename.length < 4) || (pagename == 'zoomout') || (pagename == 'info') || (pagename == 'saved') || (pagename == 'index') || (pagename == 'following') || (pagename == 'portfolio')){
         res.status(422).send("Pagename not available")
     }else{
         pool.query("SELECT if(count(page_id)>0,false,true) as uniquePagename from Page where unique_pagename = ?", [pagename], function(err, rows, fields) {

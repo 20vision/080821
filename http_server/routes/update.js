@@ -6,7 +6,7 @@ const pool = require('../config/db');
 const input_validation = require('../middleware/input_validation');
 const { deleteFile } = require("../config/storage");
 
-router.post("/page_picture/:page_name", check.AuthRequired, check.role, check.DevMode, cloudStorage.profile_picture, async (req, res) => {
+router.post("/page_picture/:page_name", check.AuthRequired, check.role, cloudStorage.profile_picture, async (req, res) => {
     if(!req.user_id){
         res.status(401).send('Not authenticated')
     }else if(!req.imageUrl){
@@ -62,7 +62,7 @@ router.post("/page_picture/:page_name", check.AuthRequired, check.role, check.De
     }
 });
 
-router.post("/profile_picture", check.AuthRequired, check.DevMode, cloudStorage.profile_picture, async (req, res) => {
+router.post("/profile_picture", check.AuthRequired, cloudStorage.profile_picture, async (req, res) => {
     if(!req.user_id){
         res.status(401).send('Not authenticated')
     }else if(!req.imageUrl){
@@ -118,7 +118,7 @@ router.post("/profile_picture", check.AuthRequired, check.DevMode, cloudStorage.
     }
 });
 
-router.post("/username", check.AuthRequired, check.DevMode, input_validation.checkRegexUsername, input_validation.checkUniqueUsername, async (req, res) => {
+router.post("/username", check.AuthRequired, input_validation.checkRegexUsername, input_validation.checkUniqueUsername, async (req, res) => {
     if(req.user_id){
         pool.query(
             'UPDATE User set username = ? where user_id = ?;',
@@ -137,7 +137,7 @@ router.post("/username", check.AuthRequired, check.DevMode, input_validation.che
     }
 })
 
-router.post("/unique_pagename/:page_name", check.AuthRequired, check.role, check.DevMode, input_validation.checkRegexPagename, input_validation.checkUniquePagename, async (req, res) => {
+router.post("/unique_pagename/:page_name", check.AuthRequired, check.role, input_validation.checkRegexPagename, input_validation.checkUniquePagename, async (req, res) => {
     if(req.user_id){
         pool.query(
             'UPDATE Page set unique_pagename = ? where unique_pagename = ?;',
@@ -156,7 +156,7 @@ router.post("/unique_pagename/:page_name", check.AuthRequired, check.role, check
     }
 })
 
-router.post("/pagename/:page_name", check.AuthRequired, check.role, check.DevMode, async (req, res) => {
+router.post("/pagename/:page_name", check.AuthRequired, check.role, async (req, res) => {
     if(!(/^[a-zA-Z0-9 _.]{3,50}$/).test(req.body.pagename)) return res.status(422).send('Invalid Pagename')
     if(req.user_id){
         pool.query(
@@ -175,7 +175,7 @@ router.post("/pagename/:page_name", check.AuthRequired, check.role, check.DevMod
         res.status(401).send('Not Authenticated')
     }
 })
-router.post("/vision/:page_name", check.AuthRequired, check.role, input_validation.vision, check.DevMode, async (req, res) => {
+router.post("/vision/:page_name", check.AuthRequired, check.role, input_validation.vision, async (req, res) => {
     if(req.user_id){
         pool.query(
             'UPDATE Page set vision = ? where unique_pagename = ?;',
@@ -213,13 +213,14 @@ router.post("/sessions", check.AuthRequired, async (req, res) => {
                     }
                 );
             }
+            res.clearCookie("auth_token");
             res.status(200).send()
         }
         pool.releaseConnection(conn);
     })
 })
 
-router.post("/forum/like", check.AuthRequired, check.DevMode, async (req, res) => {
+router.post("/forum/like", check.AuthRequired, async (req, res) => {
     if(!req.body.forumpost_id || !Number.isInteger(req.body.forumpost_id)){
         return res.status(422).send('invalid post id')
     }
@@ -288,7 +289,7 @@ router.post("/forum/like", check.AuthRequired, check.DevMode, async (req, res) =
     })
 })
 
-router.post("/component/save", check.AuthRequired, check.DevMode, async (req, res) => {
+router.post("/component/save", check.AuthRequired, async (req, res) => {
     if(req.user_id){
         pool.getConnection(function(err, conn) {
             if (err){
@@ -324,7 +325,7 @@ router.post("/component/save", check.AuthRequired, check.DevMode, async (req, re
     }
 });
 
-router.post("/component/delete", check.AuthRequired, check.DevMode, async (req, res) => {
+router.post("/component/delete", check.AuthRequired, async (req, res) => {
     if(req.user_id){
         pool.getConnection(function(err, conn) {
             if (err){
@@ -364,7 +365,7 @@ router.post("/component/delete", check.AuthRequired, check.DevMode, async (req, 
     }
 });
 
-router.post("/follow/:page_name", check.AuthRequired, check.DevMode, (req, res) => {
+router.post("/follow/:page_name", check.AuthRequired, (req, res) => {
     try{
         pool.getConnection(async function(err, conn) {
             if (err){
@@ -401,7 +402,7 @@ router.post("/follow/:page_name", check.AuthRequired, check.DevMode, (req, res) 
 
 });
 
-router.post("/:page_name/missions", check.AuthRequired, check.role, check.DevMode, async (req, res) => {
+router.post("/:page_name/missions", check.AuthRequired, check.role, async (req, res) => {
     pool.getConnection(async function(err, conn) {
         if (err){
             res.status(500).send('An error occurred')
@@ -453,7 +454,7 @@ router.post("/:page_name/missions", check.AuthRequired, check.role, check.DevMod
     })
 })
 
-router.post("/component/connection", check.AuthRequired, check.DevMode, async (req, res) => {
+router.post("/component/connection", check.AuthRequired, async (req, res) => {
     if(req.user_id){
         pool.getConnection(function(err, conn) {
             if (err){

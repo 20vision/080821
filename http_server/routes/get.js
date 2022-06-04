@@ -67,7 +67,7 @@ router.get('/following/:page_name', check.AuthRequired, (req, res) => {
     })
 })
 
-router.get("/my_pages/:page", check.AuthRequired, check.DevMode, async (req, res) => {
+router.get("/my_pages/:page", check.AuthRequired, async (req, res) => {
     if(req.user_id){
         pool.query(
             'SELECT p.page_icon, p.pagename, p.unique_pagename, p.vision FROM PageUser pu join Page p on pu.page_id = p.page_id where pu.user_id = ? order by pu.last_selected desc limit ?, 6;',
@@ -750,7 +750,7 @@ router.get("/forum/:target_uid/:offset", () => {
 //     res.status(404).send('not ready yet')
 // })
 
-router.get("/components/:not_within_uid/saved/:offset", check.AuthRequired, check.DevMode, async (req, res) => {
+router.get("/components/:not_within_uid/saved/:offset", check.AuthRequired, async (req, res) => {
     pool.query(
         `SELECT c.uid, c.header, c.body, c.type, m.title as mission_title, c.created, p.unique_pagename, p.page_icon, if(c4.component_id  or a1.child_component_id, true, false) as already_used from Component c
         join UserComponentSave ucs on ucs.component_id = c.component_id and ucs.user_id = ?
@@ -844,7 +844,7 @@ router.get("/component/:uid/subs", async (req, res) => {
     })
 })
 
-router.get("/component/:uid/saved", check.AuthRequired, check.DevMode, async (req, res) => {
+router.get("/component/:uid/saved", check.AuthRequired, async (req, res) => {
     pool.getConnection(async function(err, conn) {
         if (err){
             res.status(500).send('An error occurred')

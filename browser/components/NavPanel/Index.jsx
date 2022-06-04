@@ -30,6 +30,7 @@ import Flag from '../../assets/Flag'
 import SolanaLogoMarkWhite from '../../assets/solanaLogoMarkWhite'
 import UserCheck from '../../assets/UserCheck'
 import User from '../../assets/User'
+import Discover from '../../assets/Discover'
 
 export default function Index({comp}) {
     const [profile, isLoading, setUser] = useUserProfile()
@@ -277,6 +278,11 @@ function PageNav({router, profile, comp}){
                 <Link href={`/${comp.unique_pagename}`}><a>
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FAFAFA" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="feather feather-layout"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
                     <div>Page</div>
+                </a></Link>
+            :profile && profile.username?
+                <Link href={`/`}><a>
+                    <Discover color="var(--white)"/>
+                    <div>Discover</div>
                 </a></Link>
             :null}
 
