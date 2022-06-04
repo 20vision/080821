@@ -59,7 +59,7 @@ export default function PageLayout( {children, comp, subs} ) {
                         </div>
                         <div style={{filter: `
                         drop-shadow( 0px -20px 5px rgb(46, 46, 46, 1))`}}>
-                            <NavPanel/>
+                            <NavPanel comp={comp}/>
                         </div>
                     </div>
                 :null}

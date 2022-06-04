@@ -543,7 +543,7 @@ router.post("/forum/:unique_pagename/post/:parent_forumpost_id", check.AuthRequi
                 const user_token_impact_per_mission = await web3.getTokenAmountAndImpact(conn, forumpost_parent_info.token_mint_address, req.user_id)
                 await updates.updateNestedForumSet(conn, forumpost_parent_info.forumpost_parent_id, forumpost_parent_info.right, forumpost_parent_info.right + 1)
                 const forumpost_id = await inserts.forumpost(conn, forumpost_parent_info.forumpost_parent_id, forumpost_parent_info.right, forumpost_parent_info.right+1, forumpost_parent_info.depth + 1, req.body.forum_post, req.user_id, req.body.hex_color, user_token_impact_per_mission.impact)
-                console.log(forumpost_id)
+                
                 res.json({
                     forumpost_id: forumpost_id
                 })

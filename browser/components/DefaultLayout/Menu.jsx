@@ -76,12 +76,12 @@ function MenuNav() {
     return (
         <div className={styles.navContainer}>
             <a onClick={toggle}><Chevron color="#FAFAFA" direction={(opened == true)?"0":"180"}/></a>
-            <div className={styles.header}>
+            <a onClick={toggle}><div className={styles.header}>
                 
                 {opened == true ? <h1>Menu</h1>:<h1>Discover</h1>}
 
                 <span className={styles.brand}>20Vision</span>
-            </div>
+            </div></a>
         </div>
     )
 }

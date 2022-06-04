@@ -31,31 +31,26 @@ import SolanaLogoMarkWhite from '../../assets/solanaLogoMarkWhite'
 import UserCheck from '../../assets/UserCheck'
 import User from '../../assets/User'
 
-export default function Index() {
+export default function Index({comp}) {
     const [profile, isLoading, setUser] = useUserProfile()
     const router = useRouter()
     const page = usePageSelectedStore(state => state.page)
 
     if(!page && (router.pathname.split('/')[1] == 'forum')) return(<></>)
 
-
-    if(config.HTTP_SERVER_URL != 'http://localhost:8080'){
-        return null
-    }else{
-        return(
-            <div className={styles.container}>
-                <div className={styles.child} style={{color: 'var(--white)'}}>
-                    {router.pathname.split('/')[1] == 'zoomout'?     
-                        <ForumNav router={router}/>
-                    :router.query.component?
-                        <ComponentNav router={router}/>
-                    :
-                        <PageNav router={router} profile={profile}/>
-                    }
-                </div>
+    return(
+        <div className={styles.container}>
+            <div className={styles.child} style={{color: 'var(--white)'}}>
+                {router.pathname.split('/')[1] == 'zoomout'?     
+                    <ForumNav router={router}/>
+                :router.query.component?
+                    <ComponentNav router={router}/>
+                :
+                    <PageNav router={router} profile={profile} comp={comp}/>
+                }
             </div>
-        )
-    }
+        </div>
+    )
 }
 
 // function MissionNavWithRole({router}){
@@ -180,21 +175,27 @@ function ComponentNav({router}){
                     <div>{editMode?'Finish':'Edit'}</div>
                 </a>
             :profile.username?
-                <a onClick={() => setModal(10)}>
-                    <Flag color="var(--white)"/>
-                    <div>Report</div>
-                </a>
+                // <a onClick={() => setModal(10)}>
+                //     <Flag color="var(--white)"/>
+                //     <div>Report</div>
+                // </a>
+                null
             :
                 <a onClick={() => setModal(1)}>
                     <SolanaLogoMarkWhite/>
                     <div>Connect</div>
                 </a>
             }
+
+            {/* {router.pathname == '/'?
+                
+
+            } */}
         </>
     )
 }
 
-function PageNav({router, profile}){
+function PageNav({router, profile, comp}){
     const setModal = useModalStore(state => state.setModal)
     const [hasRole, setHasRole] = useState()
     const following = usePageSelectedStore(state => state.following)
@@ -267,17 +268,24 @@ function PageNav({router, profile}){
             :null
             }
 
-            <a onClick={() => setModal(5)}>
+            {/* <a onClick={() => setModal(5)}>
                 <DollarSign color="#FAFAFA"/>
                 <div>Token</div>
-            </a>
+            </a> */}
 
-            <Link href={`/zoomout?page=${router.query.page}`}>
+            {comp?
+                <Link href={`/${comp.unique_pagename}`}><a>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FAFAFA" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="feather feather-layout"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+                    <div>Page</div>
+                </a></Link>
+            :null}
+
+            {/* <Link href={`/zoomout?page=${router.query.page}`}>
                 <a>
                     <ZoomOut color="#FAFAFA"/>
                     <div>Zoom Out</div>
                 </a>
-            </Link>
+            </Link> */}
 
             {profile && profile.username && hasRole?
                 <a onClick={() => setModal(11)}>
@@ -285,6 +293,11 @@ function PageNav({router, profile}){
                     <div>Manage</div>
                 </a>
             :null}
+
+            {!profile.username?<a onClick={() => setModal(1)}>
+                <SolanaLogoMarkWhite/>
+                <div>Connect</div>
+            </a>:null}
         </>
     )
 }

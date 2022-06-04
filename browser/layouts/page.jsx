@@ -33,7 +33,7 @@ var Panel = onClickOutside(({children, page, missions, comp, subs}) => {
     };
 
     return(
-        <div className={styles.child}  style={{backgroundColor: 'var(--light_black)'}}>
+        <div className={styles.child}  style={{backgroundColor: 'var(--lighter_black)'}}>
 
             <div className={styles.pageInfo} style={{backgroundColor: 'var(--light_black)'}}>
                 <PageInfo page={page}/>
@@ -54,7 +54,7 @@ var Panel = onClickOutside(({children, page, missions, comp, subs}) => {
                         {comp?<Overview subs={subs} comp={comp}/>:null}
                     </div>
                     <div style={{filter: `
-                    drop-shadow( 0px -20px 5px rgb(46, 46, 46, 1))`}}>
+                    drop-shadow( 0px -20px 5px rgb(46, 46, 46, 0.3))`}}>
                         <NavPanel/>
                     </div>
                 </div>

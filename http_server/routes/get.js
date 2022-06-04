@@ -221,7 +221,6 @@ router.get("/page/:unique_pagename/component/count", async (req, res) => {
 })
 
 router.get("/page/components/:offset", check.AuthOptional, async (req, res) => {
-    console.log(req.query.filter, req.user_id)
     pool.getConnection(async function(err, conn) {
         if (err){
             res.status(500).send('An error occurred')
