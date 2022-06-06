@@ -71,11 +71,7 @@ const ClickOutside = onClickOutside(() =>{
             className={styles.modalChild}
             >
                 
-                {config.HTTP_SERVER_URL != 'http://localhost:8080'?
-                    <h1>
-                        Coming soon
-                    </h1>
-                :modal == 1 ?
+                {modal == 1 ?
                     <ConnectWallet/>
                 :modal == 2 ?
                     <User/>

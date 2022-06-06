@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useRef } from 'react';
 import useUserProfile from '../../hooks/User/useUserProfile'
 import UploadCloud from '../../assets/UploadCloud'
-import Cloud from '../../assets/cloud'
+import Cloud from '../../assets/Cloud'
 import SavedToCloud from '../../assets/SavedToCloud'
 import axios from 'axios'
 import { useComponentStore } from '../../store/component'

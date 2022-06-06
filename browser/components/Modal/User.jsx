@@ -336,7 +336,7 @@ function Logout({profile}){
     return(
         <div>
             <div style={{overflowY: 'scroll', maxHeight: 180}}>
-                {sessions && sessions.map((session, index) => <SessionRow session={session} setSessions={arg => setSessions([...sessions.slice(0, index),{...session,selected: arg},...sessions.slice(index+1)])} index={index}/>)}
+                {sessions && sessions.map((session, index) => (<div key={index}><SessionRow session={session} setSessions={arg => setSessions([...sessions.slice(0, index),{...session,selected: arg},...sessions.slice(index+1)])} index={index}/></div>))}
             </div>
             <a
                 onClick={async e => {

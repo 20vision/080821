@@ -83,7 +83,7 @@ const ManageMissions = () => {
     return(
         <div>
             {sureWantToDelete==false?<div style={{height: 400, overflowY: 'scroll'}}>
-                {newAndOldMissions && newAndOldMissions.map((mission, index) => (<MissionRow newAndOldMissions={newAndOldMissions} setNewAndOldMissions={setNewAndOldMissions} missions={missions} index={index}/>))}
+                {newAndOldMissions && newAndOldMissions.map((mission, index) => (<div key={index}><MissionRow newAndOldMissions={newAndOldMissions} setNewAndOldMissions={setNewAndOldMissions} missions={missions} index={index}/></div>))}
             </div>:
             <div>
                 <div className={createTopicModalStyle.header} style={{margin: '0px 10px 50px 10px'}}>

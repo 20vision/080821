@@ -53,7 +53,7 @@ export default function Index() {
                 transition={{ type: "spring", bounce: opened?0.25:0.13, duration: 0.8}}
             >
 
-                <MenuNav/>
+                <MenuNav router={router}/>
 
                 {
                     (opened == true)
@@ -69,7 +69,7 @@ export default function Index() {
 }
 
 
-function MenuNav() {
+function MenuNav({router}) {
     const opened = useMenuStore(state => state.opened)
     const toggle = useMenuStore(state => state.toggle)
     
@@ -78,7 +78,7 @@ function MenuNav() {
             <a onClick={toggle}><Chevron color="#FAFAFA" direction={(opened == true)?"0":"180"}/></a>
             <a onClick={toggle}><div className={styles.header}>
                 
-                {opened == true ? <h1>Menu</h1>:<h1>Discover</h1>}
+                {opened == true ? <h1>Menu</h1>:router.pathname == '/following'?<h1>Following</h1>:router.pathname == '/saved'?<h1>Saved</h1>:<h1>Discover</h1>}
 
                 <span className={styles.brand}>20Vision</span>
             </div></a>

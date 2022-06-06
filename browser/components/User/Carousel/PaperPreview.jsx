@@ -6,12 +6,14 @@ import { useRouter } from 'next/router'
 import { DateTime } from "luxon";
 import config from '../../../public/config.json';
 import { motion, useAnimation } from 'framer-motion';
+import Loading from '../../../assets/Loading/Loading'
 
 export default function PaperPreview({setSelectedComponent}){
   const [components, setComponents] = useState([])
   const [componentsQueryLimitReached, setComponentsQueryLimitReached] = useState(false)
   const [highlightIndex, setHighlightIndex] = useState(0)
   const [isInWheelTransition, setIsInWheelTransition] = useState(false)
+  const [loading, setLoading] = useState(true)
   const router = useRouter()
   const controls = useAnimation()
   const paperPanelControls = useAnimation()
@@ -58,11 +60,14 @@ export default function PaperPreview({setSelectedComponent}){
   const getComponents = async() => {
       if(!componentsQueryLimitReached){
       try{
+          setLoading(true)
           let components_data = (await axios.get(`${config.HTTP_SERVER_URL}/get/page/${router.query.page?router.query.page+'/':''}components/${components.length}${router.query.mission?'/'+router.query.mission:''} ${router.pathname == '/following'?'?filter=following':router.pathname == '/saved'?'?filter=saved':''}`, {withCredentials: true})).data
+          setLoading(false)
           if(components_data.length != 3) setComponentsQueryLimitReached(true)
           setComponents([...components,...components_data])
       }catch(err){
           console.error(err)
+          setLoading(false)
       }
       }
   }
@@ -151,7 +156,11 @@ export default function PaperPreview({setSelectedComponent}){
               :null}
             </div>
           ))}
-          {components.length == 0?
+          {loading?
+            <div style={{display: 'flex', justifyContent: 'center'}}>
+              <Loading/>
+            </div>
+          :components.length == 0?
             <div>
               <div style={{fontSize: 100, textAlign: 'center'}}>🧐</div>
               <h1 style={{color: 'var(--white)', textAlign: 'center'}}>No Result Found</h1>

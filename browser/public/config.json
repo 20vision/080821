@@ -1,4 +1,4 @@
 {
     "FILE_SERVER_URL": "https://storage.googleapis.com/",
-    "HTTP_SERVER_URL": "http://localhost:8080"
+    "HTTP_SERVER_URL": "https://api.20.vision"
 }
