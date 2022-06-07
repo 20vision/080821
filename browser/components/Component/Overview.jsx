@@ -78,7 +78,7 @@ export default function Overview({comp, subs}){
                             </div>
                         }
                         <div className={`${styles.subParent}`} style={{borderBottom: index!=subs.length-1?'1px solid var(--lighter_grey)':null}}>
-                            <ContentRow childUids={childUids} setChildUids={setChildUids} router={router} editMode={editMode} data={sub} pagination={subs.length-index} profile={profile}/>
+                            <ContentRow childUids={childUids} setChildUids={setChildUids} router={router} editMode={editMode} data={sub} pagination={index+1} profile={profile}/>
                         </div>
                     </div>
                 )
@@ -111,7 +111,7 @@ const ContentRow = ({data, subcomponents, pagination, profile, editMode, router,
                 <a style={{flexGrow: 1}}>
                     <div className={pageLayoutStyle.info}>
                         <div className={pageLayoutStyle.header}>
-                            <h3>{pagination?<span style={{opacity: '0.75'}}>-{pagination}|&nbsp;</span>:null}<span>{data.header}</span></h3>
+                            <h3>{pagination?<span style={{opacity: '0.75'}}>{pagination}|&nbsp;</span>:null}<span>{data.header}</span></h3>
                         </div>
                         <div className={pageLayoutStyle.footer}>
                             <span style={{fontSize: 12,fontWeight: 'bold',color: data.type == 'p'?'var(--blue)':data.type == 's'?'var(--yellow)':'var(--green)'}}>{data.type == 'p'?'Product':data.type == 's'?'Service':'Result'}</span>&nbsp;
