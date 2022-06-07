@@ -240,47 +240,47 @@ router.post("/forum/like", check.AuthRequired, async (req, res) => {
                         if(check_owner[0].user_id == req.user_id){
                             pool.releaseConnection(conn);
                             res.status(422).send('User owns post')
-                            return
                         }
-                        
-                        conn.query(
-                            `SELECT forum_post_like_id from ForumPost_Like where forumpost_id = ? and user_id = ?;`,
-                            [req.body.forumpost_id, req.user_id],
-                            function(err, like) {
-                                if (err){
-                                    console.log(err)
-                                    res.status(500).send('An error occurred')
-                                }else{
-                                    if(like.length > 0){
-                                        conn.query(
-                                            `DELETE from ForumPost_Like where forumpost_id = ? and user_id = ?;`,
-                                            [req.body.forumpost_id, req.user_id],
-                                            function(err, like) {
-                                                if (err){
-                                                    console.log(err)
-                                                    res.status(500).send('An error occurred')
-                                                }else{
-                                                    res.status(200).send()
-                                                }
-                                            }
-                                        );
+                        else{
+                            conn.query(
+                                `SELECT forum_post_like_id from ForumPost_Like where forumpost_id = ? and user_id = ?;`,
+                                [req.body.forumpost_id, req.user_id],
+                                function(err, like) {
+                                    if (err){
+                                        console.log(err)
+                                        res.status(500).send('An error occurred')
                                     }else{
-                                        conn.query(
-                                            `INSERT into ForumPost_Like values(?,?,?,now());`,
-                                            [null,req.user_id, req.body.forumpost_id],
-                                            function(err, like) {
-                                                if (err){
-                                                    console.log(err)
-                                                    res.status(500).send('An error occurred')
-                                                }else{
-                                                    res.status(200).send()
+                                        if(like.length > 0){
+                                            conn.query(
+                                                `DELETE from ForumPost_Like where forumpost_id = ? and user_id = ?;`,
+                                                [req.body.forumpost_id, req.user_id],
+                                                function(err, like) {
+                                                    if (err){
+                                                        console.log(err)
+                                                        res.status(500).send('An error occurred')
+                                                    }else{
+                                                        res.status(200).send()
+                                                    }
                                                 }
-                                            }
-                                        );
+                                            );
+                                        }else{
+                                            conn.query(
+                                                `INSERT into ForumPost_Like values(?,?,?,now());`,
+                                                [null,req.user_id, req.body.forumpost_id],
+                                                function(err, like) {
+                                                    if (err){
+                                                        console.log(err)
+                                                        res.status(500).send('An error occurred')
+                                                    }else{
+                                                        res.status(200).send()
+                                                    }
+                                                }
+                                            );
+                                        }
                                     }
                                 }
-                            }
-                        );
+                            );
+                        }
                     }
                 }
             );
@@ -366,12 +366,12 @@ router.post("/component/delete", check.AuthRequired, async (req, res) => {
 });
 
 router.post("/follow/:page_name", check.AuthRequired, (req, res) => {
-    try{
-        pool.getConnection(async function(err, conn) {
-            if (err){
-                res.status(500).send('An error occurred')
-                console.log(err)
-            }else{
+    pool.getConnection(async function(err, conn) {
+        if (err){
+            res.status(500).send('An error occurred')
+            console.log(err)
+        }else{
+            try{
                 let page_id = await gets.getPageId({conn, unique_pagename: req.params.page_name});
                 const isFollowing = await gets.getFollowing({conn, user_id: req.user_id, page_id: page_id})
                 if(isFollowing){
@@ -393,12 +393,13 @@ router.post("/follow/:page_name", check.AuthRequired, (req, res) => {
                         }
                     );
                 }
+            }catch(err){
+                res.status(500).send('An error occurred')
+                throw err
             }
-            pool.releaseConnection(conn);
-        })
-    }catch(err){
-
-    }
+        }
+        pool.releaseConnection(conn);
+    })
 
 });
 
@@ -425,20 +426,21 @@ router.post("/:page_name/missions", check.AuthRequired, check.role, async (req, 
                             }
                             if((req.body.missions[i].description.length < 1) || (req.body.missions[i].description.length > 280)) {
                                 res.status(422).send('Invalid mission description')
-                                return pool.releaseConnection(conn);
+                                pool.releaseConnection(conn);
                             }
+                            else{
+                                let input_array = []
     
-                            let input_array = []
-    
-                            if(req.body.missions[i].title != req.body.missions[i].old_title) input_array.push(req.body.missions[i].title.replace(/ /g, '_'))
-    
-                            conn.query(
-                                `UPDATE Mission set ${(req.body.missions[i].title != req.body.missions[i].old_title)?'title=?,':''} description = ? where title = ? and page_id = ?;`,
-                                [...input_array, ...[req.body.missions[i].description, req.body.missions[i].old_title, req.page_id]],
-                                function(err, results) {
-                                    if (err) throw err
-                                }
-                            );
+                                if(req.body.missions[i].title != req.body.missions[i].old_title) input_array.push(req.body.missions[i].title.replace(/ /g, '_'))
+        
+                                conn.query(
+                                    `UPDATE Mission set ${(req.body.missions[i].title != req.body.missions[i].old_title)?'title=?,':''} description = ? where title = ? and page_id = ?;`,
+                                    [...input_array, ...[req.body.missions[i].description, req.body.missions[i].old_title, req.page_id]],
+                                    function(err, results) {
+                                        if (err) throw err
+                                    }
+                                );
+                            }
                         }catch(err){
                             res.status(422).send("Mission Title already taken")
                             console.log(err)

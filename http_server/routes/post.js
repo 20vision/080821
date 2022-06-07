@@ -137,78 +137,80 @@ router.post("/component", check.AuthRequired, async (req, res) => {
                         pool.releaseConnection(conn);
                         return res.status(400).send('Could not find the mission belonging to your account')
                     }
-                    let ratio = [512]
+                    else{
+                        let ratio = [512]
             
-                    let data = {
-                        bucketname: 'comp_images',
-                        timefolder: (new Date()).getTime().toString(),
-                        randomfolder: await random_string(8)
-                    }
+                        let data = {
+                            bucketname: 'comp_images',
+                            timefolder: (new Date()).getTime().toString(),
+                            randomfolder: await random_string(8)
+                        }
 
-                    for(var i=0; i<ratio.length;i++){
-                        await sharp(Buffer.from(image[1], 'base64'))
-                        .resize({ fit: sharp.fit.contain, width: ratio[i], height: ratio[i] })
-                        .webp({ quality: 80 })
-                        .toBuffer()
-                        .then(async response => {
-                            data.buffer = response,
-                            data.filename = ratio[i].toString()+'x'+ratio[i].toString()+'.webp'
+                        for(var i=0; i<ratio.length;i++){
+                            await sharp(Buffer.from(image[1], 'base64'))
+                            .resize({ fit: sharp.fit.contain, width: ratio[i], height: ratio[i] })
+                            .webp({ quality: 80 })
+                            .toBuffer()
+                            .then(async response => {
+                                data.buffer = response,
+                                data.filename = ratio[i].toString()+'x'+ratio[i].toString()+'.webp'
 
-                            try{
-                                const image_url = await uploadFile(data)
-                                conn.query(
-                                    'INSERT INTO Component values (?,?,?,?,?,?,?,now());',
-                                    [null, data.timefolder+data.randomfolder, req.body.header, req.body.body, mission_id[0].mission_id, req.body.type, 0, null],
-                                    async function(err, compIntert) {
-                                        if (err) throw err
-                                        if(req.body.uid && data.timefolder+data.randomfolder){
-                                            try{
-                                                const component_id = await gets.getComponentIdFromUidUserPostPermission({conn, uid: req.body.uid, user_id: req.user_id})
-                                                const child_component_id = await gets.getComponentIdFromUidUserPostPermission({conn, uid: data.timefolder+data.randomfolder, user_id: req.user_id})
-                                                conn.query(
-                                                    `SELECT count(cc.component_connection_id) as nextIndex from
-                                                    ComponentConnection cc where cc.component_id = ?;`,
-                                                    [component_id],
-                                                    async function(err, results) {
-                                                        if (err){
-                                                            res.status(500).send('An error occurred')
-                                                            console.log(err)
-                                                        }else{
-                                                            await inserts.component_connection({
-                                                                conn,
-                                                                component_id:component_id,
-                                                                child_component_id: child_component_id,
-                                                                child_component_index: results&&(results.length == 1)&&results[0].nextIndex?results[0].nextIndex:0
-                                                            })
-                                                            return res.status(200).send()
+                                try{
+                                    const image_url = await uploadFile(data)
+                                    conn.query(
+                                        'INSERT INTO Component values (?,?,?,?,?,?,?,now());',
+                                        [null, data.timefolder+data.randomfolder, req.body.header, req.body.body, mission_id[0].mission_id, req.body.type, 0, null],
+                                        async function(err, compIntert) {
+                                            if (err) throw err
+                                            if(req.body.uid && data.timefolder+data.randomfolder){
+                                                try{
+                                                    const component_id = await gets.getComponentIdFromUidUserPostPermission({conn, uid: req.body.uid, user_id: req.user_id})
+                                                    const child_component_id = await gets.getComponentIdFromUidUserPostPermission({conn, uid: data.timefolder+data.randomfolder, user_id: req.user_id})
+                                                    conn.query(
+                                                        `SELECT count(cc.component_connection_id) as nextIndex from
+                                                        ComponentConnection cc where cc.component_id = ?;`,
+                                                        [component_id],
+                                                        async function(err, results) {
+                                                            if (err){
+                                                                res.status(500).send('An error occurred')
+                                                                console.log(err)
+                                                            }else{
+                                                                await inserts.component_connection({
+                                                                    conn,
+                                                                    component_id:component_id,
+                                                                    child_component_id: child_component_id,
+                                                                    child_component_index: results&&(results.length == 1)&&results[0].nextIndex?results[0].nextIndex:0
+                                                                })
+                                                                return res.status(200).send()
+                                                            }
                                                         }
-                                                    }
-                                                )
-                                                
-                                            }catch(error){
-                                                console.log(error)
-                                                deletes.ComponentAuthRequired({conn, component_id: compIntert.insertId, timefolder: data.timefolder, randomfolder: data.randomfolder})
-                                                .catch((err) => {
-                                                    console.log(err)
-                                                })
-                                                .then(() => {
-                                                    res.status(500).send('An error occurred while connecting Components')
-                                                })
+                                                    )
+                                                    
+                                                }catch(error){
+                                                    console.log(error)
+                                                    deletes.ComponentAuthRequired({conn, component_id: compIntert.insertId, timefolder: data.timefolder, randomfolder: data.randomfolder})
+                                                    .catch((err) => {
+                                                        console.log(err)
+                                                    })
+                                                    .then(() => {
+                                                        res.status(500).send('An error occurred while connecting Components')
+                                                    })
+                                                }
+                                            }else{
+                                                res.json(data.timefolder+data.randomfolder)
                                             }
-                                        }else{
-                                            res.json(data.timefolder+data.randomfolder)
                                         }
-                                    }
-                                );
-                            }catch(error){
-                                console.log(error)
-                                res.status(500).send('An error occured while uploading file')
-                            }
+                                    );
+                                }catch(error){
+                                    console.log(error)
+                                    res.status(500).send('An error occured while uploading file')
+                                }
 
-                        }).catch(err =>{
-                            console.log("err: ",err);   
-                            res.status(500).send() 
-                        })
+                            }).catch(err =>{
+                                console.log("err: ",err);   
+                                res.status(500).send() 
+                            })
+                        }
                     }
                 }
             );
@@ -355,112 +357,119 @@ router.post("/fundPageToken", check.AuthRequired, check.fundTransaction, async (
     }
 });
 
-router.post("/forum/reply/:fp_uid", check.AuthRequired, input_validation.missionBody_topicBody_forumPost, input_validation.hex_color, async (req, res) => {
-    pool.getConnection(function(err, conn) {
-        if (err){
-            res.status(500).send('An error occurred')
-            console.log(err)
-        }else{
-            conn.query(
-                'SELECT fp.left, fp.right, fp.forumpost_parent_id from ForumPost fp where fp.fp_uid = ?;',
-                [req.params.fp_uid],
-                function(err, results) {
-                    if (err){
-                        res.status(500).send('An error occurred')
-                        console.log(err)
-                    }else{
-                        if(results.length != 1) return
-                    }
-                }
-            );
-        }
-        pool.releaseConnection(conn);
-    })
-});
+// router.post("/forum/reply/:fp_uid", check.AuthRequired, input_validation.missionBody_topicBody_forumPost, input_validation.hex_color, async (req, res) => {
+//     pool.getConnection(function(err, conn) {
+//         if (err){
+//             res.status(500).send('An error occurred')
+//             console.log(err)
+//         }else{
+//             conn.query(
+//                 'SELECT fp.left, fp.right, fp.forumpost_parent_id from ForumPost fp where fp.fp_uid = ?;',
+//                 [req.params.fp_uid],
+//                 function(err, results) {
+//                     if (err){
+//                         res.status(500).send('An error occurred')
+//                         console.log(err)
+//                     }else{
+//                         if(results.length != 1) return
+//                     }
+//                 }
+//             );
+//         }
+//         pool.releaseConnection(conn);
+//     })
+// });
 
 
-router.post("/forum/post/:page/:mission/:component", check.AuthRequired, input_validation.missionBody_topicBody_forumPost, input_validation.hex_color, (req, res) => {
-    if(!req.params.component && !req.params.mission && !req.params.page) return res.status(404).send('Not found')
+// router.post("/forum/post/:page/:mission/:component", check.AuthRequired, input_validation.missionBody_topicBody_forumPost, input_validation.hex_color, (req, res) => {
+//     if(!req.params.component && !req.params.mission && !req.params.page) return res.status(404).send('Not found')
     
-    pool.getConnection(async function(err, conn) {
-        if (err){
-            res.status(500).send('An error occurred')
-            console.log(err)
-        }else{
-            if(req.params.component && req.params.component != '_'){
-                conn.query('SELECT component_id from Component where uid = ?',
-                    [req.params.component],
-                    async function(err, results){
-                        if(results.length != 1) return res.status(404).send('Component not found')
-                        const forumpost_parent_id = await inserts.forumpost_parent(conn, results[0].component_id, 'c')
-                        const forumpost_id = await inserts.forumpost(
-                                {
-                                    conn: conn,
-                                    forumpost_parent_id: forumpost_parent_id, 
-                                    left: 0, 
-                                    right: 1, 
-                                    depth: 0, 
-                                    message: req.body.forum_post, 
-                                    user_id: req.user_id, 
-                                    hex_color: req.body.hex_color
-                                }
-                            )
-                        res.json({
-                            forumpost_id: forumpost_id
-                        })
-                    }
-                )
-            }else if(req.params.mission && req.params.page && req.params.mission != '_' && req.params.page != '_'){
-                conn.query('SELECT m.mission_id from Mission m join Page p on m.page_id = m.page_id where m.title = ? and p.unique_pagename = ?',
-                    [req.params.mission, req.params.page],
-                    async function(err, results){
-                        if(results.length != 1) return res.status(404).send('Mission not found')
-                        const forumpost_parent_id = await inserts.forumpost_parent(conn, results[0].mission_id, 'm')
-                        const forumpost_id = await inserts.forumpost(
-                                {
-                                    conn: conn,
-                                    forumpost_parent_id: forumpost_parent_id, 
-                                    left: 0, 
-                                    right: 1, 
-                                    depth: 0, 
-                                    message: req.body.forum_post, 
-                                    user_id: req.user_id, 
-                                    hex_color: req.body.hex_color
-                                }
-                            )
-                        res.json({
-                            forumpost_id: forumpost_id
-                        })
-                    }
-                )
-            }else if(req.params.page && req.params.page != '_'){
-                conn.query('SELECT p.page_id from Page p where p.unique_pagename = ?',
-                    [req.params.page],
-                    async function(err, results){
-                        if(results.length != 1) return res.status(404).send('Mission not found')
-                        const forumpost_parent_id = await inserts.forumpost_parent(conn, results[0].page_id, 'p')
-                        const forumpost_id = await inserts.forumpost(
-                                {
-                                    conn: conn,
-                                    forumpost_parent_id: forumpost_parent_id, 
-                                    left: 0, 
-                                    right: 1, 
-                                    depth: 0, 
-                                    message: req.body.forum_post, 
-                                    user_id: req.user_id, 
-                                    hex_color: req.body.hex_color
-                                }
-                            )
-                        res.json({
-                            forumpost_id: forumpost_id
-                        })
-                    }
-                )
-            }
-        }
-        pool.releaseConnection(conn);
-    })
-});
+//     pool.getConnection(async function(err, conn) {
+//         if (err){
+//             res.status(500).send('An error occurred')
+//             console.log(err)
+//         }else{
+//             if(req.params.component && req.params.component != '_'){
+//                 conn.query('SELECT component_id from Component where uid = ?',
+//                     [req.params.component],
+//                     async function(err, results){
+//                         if(results.length != 1) res.status(404).send('Component not found')
+//                         else{
+//                             const forumpost_parent_id = await inserts.forumpost_parent(conn, results[0].component_id, 'c')
+//                             const forumpost_id = await inserts.forumpost(
+//                                     {
+//                                         conn: conn,
+//                                         forumpost_parent_id: forumpost_parent_id, 
+//                                         left: 0, 
+//                                         right: 1, 
+//                                         depth: 0, 
+//                                         message: req.body.forum_post, 
+//                                         user_id: req.user_id, 
+//                                         hex_color: req.body.hex_color
+//                                     }
+//                                 )
+//                             res.json({
+//                                 forumpost_id: forumpost_id
+//                             })
+//                         }
+//                     }
+//                 )
+//             }else if(req.params.mission && req.params.page && req.params.mission != '_' && req.params.page != '_'){
+//                 conn.query('SELECT m.mission_id from Mission m join Page p on m.page_id = m.page_id where m.title = ? and p.unique_pagename = ?',
+//                     [req.params.mission, req.params.page],
+//                     async function(err, results){
+//                         if(results.length != 1) res.status(404).send('Mission not found')
+//                         else{
+//                             const forumpost_parent_id = await inserts.forumpost_parent(conn, results[0].mission_id, 'm')
+//                             const forumpost_id = await inserts.forumpost(
+//                                     {
+//                                         conn: conn,
+//                                         forumpost_parent_id: forumpost_parent_id, 
+//                                         left: 0, 
+//                                         right: 1, 
+//                                         depth: 0, 
+//                                         message: req.body.forum_post, 
+//                                         user_id: req.user_id, 
+//                                         hex_color: req.body.hex_color
+//                                     }
+//                                 )
+//                             res.json({
+//                                 forumpost_id: forumpost_id
+//                             })
+//                         }
+//                     }
+//                 )
+//             }else if(req.params.page && req.params.page != '_'){
+//                 conn.query('SELECT p.page_id from Page p where p.unique_pagename = ?',
+//                     [req.params.page],
+//                     async function(err, results){
+//                         if(results.length != 1) res.status(404).send('Mission not found')
+//                         else{
+//                             const forumpost_parent_id = await inserts.forumpost_parent(conn, results[0].page_id, 'p')
+//                             const forumpost_id = await inserts.forumpost(
+//                                     {
+//                                         conn: conn,
+//                                         forumpost_parent_id: forumpost_parent_id, 
+//                                         left: 0, 
+//                                         right: 1, 
+//                                         depth: 0, 
+//                                         message: req.body.forum_post, 
+//                                         user_id: req.user_id, 
+//                                         hex_color: req.body.hex_color
+//                                     }
+//                                 )
+//                             res.json({
+//                                 forumpost_id: forumpost_id
+//                             })
+//                         }
+                        
+//                     }
+//                 )
+//             }
+//         }
+//         pool.releaseConnection(conn);
+//     })
+// });
 
 /*
 router.post("/forum/:unique_pagename/topic/:topic_id", check.AuthRequired, input_validation.missionBody_topicBody_forumPost, input_validation.hex_color, async (req, res) => {

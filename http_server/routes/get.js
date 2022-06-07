@@ -59,8 +59,8 @@ router.get('/following/:page_name', check.AuthRequired, (req, res) => {
                 res.json(following);
             }catch(err){
                 console.log(err)
-                if(err.status && err.message) return res.status(err.status).send(err.message)
-                res.status(500).send()
+                if(err.status && err.message) res.status(err.status).send(err.message)
+                else res.status(500).send()
             } 
         }
         pool.releaseConnection(conn);
@@ -274,12 +274,14 @@ router.get("/page/:page_name", check.AuthOptional, async (req, res) => {
         }else{
             try{
                 const pageByName = await gets.getPageByName(conn, req.params.page_name)
-                if(req.query.missions === 'false') return res.json({page: pageByName})
-                const missions = await gets.getMission_s(conn, req.params.page_name)
-                res.json({
-                    page: pageByName,
-                    missions: missions
-                })
+                if(req.query.missions === 'false') res.json({page: pageByName})
+                else{
+                    const missions = await gets.getMission_s(conn, req.params.page_name)
+                    res.json({
+                        page: pageByName,
+                        missions: missions
+                    })
+                }
             }catch(err){
                 console.log(err)
                 res.status(err.status).send(err.message)
@@ -442,37 +444,39 @@ router.get("/forum/:target_uid/:offset", () => {
                             console.log(err)
                             res.status(400).send('An error occurred')
                         }else{
-                            if(target.length != 1) return res.status(404).send('Target Forum Post not found')
-                            conn.query(
-                                `
-                                SELECT
-                                    fp2.depth
-                                    ,fp2.left
-                                    ,fp2.right
-                                    ,fp2.forumpost_id
-                                    ,fpp.parent_id
-                                    ,fpp.parent_type
-                                    ,fp2.forumpost_parent_id
-                                    ,fp2.hex_color
-                                    ,fp2.message
-                                    ,fp2.created
-                                    ,u.username
-                                    ,u.profilePicture
-                                from ForumPost fp2
-                                join ForumPost_Parent fpp
-                                where fp2.left < ? and fp2.right > ? and fp2.forumpost_parent_id = ?
-                                order by fp2.depth desc
-                                limit ?,3 
-                                `,
-                                [target[0].left,target[0].right,target[0].forumpost_parent_id,req.params.offset?req.params.offset:0], async function(err, verticallyFetched) {
-                                    if (err){
-                                        console.log(err)
-                                        res.status(400).send('An error occurred')
-                                    }else{
-                                        res.json(verticallyFetched)
+                            if(target.length != 1) res.status(404).send('Target Forum Post not found')
+                            else{
+                                conn.query(
+                                    `
+                                    SELECT
+                                        fp2.depth
+                                        ,fp2.left
+                                        ,fp2.right
+                                        ,fp2.forumpost_id
+                                        ,fpp.parent_id
+                                        ,fpp.parent_type
+                                        ,fp2.forumpost_parent_id
+                                        ,fp2.hex_color
+                                        ,fp2.message
+                                        ,fp2.created
+                                        ,u.username
+                                        ,u.profilePicture
+                                    from ForumPost fp2
+                                    join ForumPost_Parent fpp
+                                    where fp2.left < ? and fp2.right > ? and fp2.forumpost_parent_id = ?
+                                    order by fp2.depth desc
+                                    limit ?,3 
+                                    `,
+                                    [target[0].left,target[0].right,target[0].forumpost_parent_id,req.params.offset?req.params.offset:0], async function(err, verticallyFetched) {
+                                        if (err){
+                                            console.log(err)
+                                            res.status(400).send('An error occurred')
+                                        }else{
+                                            res.json(verticallyFetched)
+                                        }
                                     }
-                                }
-                            );
+                                );
+                            }
                         }
                     }
                 );
