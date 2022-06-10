@@ -271,6 +271,7 @@ router.get("/page/:page_name", check.AuthOptional, async (req, res) => {
         if (err){
             res.status(500).send('An error occurred')
             console.log(err)
+            throw err
         }else{
             try{
                 const pageByName = await gets.getPageByName(conn, req.params.page_name)
@@ -845,6 +846,7 @@ router.get("/component/:uid/subs", async (req, res) => {
                 }
             );
         }
+        pool.releaseConnection(conn);
     })
 })
 
@@ -868,6 +870,7 @@ router.get("/component/:uid/saved", check.AuthRequired, async (req, res) => {
                 }
             );
         }
+        pool.releaseConnection(conn);
     })
 })
 

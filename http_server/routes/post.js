@@ -256,6 +256,7 @@ router.post("/component/connection", check.AuthRequired, async (req, res) => {
                 res.status(err.status).send(err.message)
             }
         }
+        pool.releaseConnection(conn);
     })
 })
 
