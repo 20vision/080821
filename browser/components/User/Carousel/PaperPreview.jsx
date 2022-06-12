@@ -14,6 +14,7 @@ export default function PaperPreview({setSelectedComponent}){
   const [highlightIndex, setHighlightIndex] = useState(0)
   const [isInWheelTransition, setIsInWheelTransition] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [lastScrollTimestamp, setLastScrollTimestamp] = useState(null)
   const router = useRouter()
   const controls = useAnimation()
   const paperPanelControls = useAnimation()
@@ -88,8 +89,9 @@ export default function PaperPreview({setSelectedComponent}){
             <div key={index} onWheel={async scrollInfo => {
               try{
                 if(isInWheelTransition) return
-                if((scrollInfo.deltaY < -5) && (0 != highlightIndex)){
+                if((scrollInfo.deltaY < -5) && (0 != highlightIndex) && ((lastScrollTimestamp == null) || (lastScrollTimestamp < scrollInfo.timeStamp-1000))){
                   setIsInWheelTransition(true)
+                  setLastScrollTimestamp(scrollInfo.timeStamp)
                   await controls.start(() => {
                     return({
                         opacity: 0,
@@ -99,8 +101,9 @@ export default function PaperPreview({setSelectedComponent}){
                     })
                   })
                   setHighlightIndex(highlightIndex-1)
-                }else if(((scrollInfo.deltaY > 5)) && (components.length > (highlightIndex+1))){
+                }else if(((scrollInfo.deltaY > 5)) && (components.length > (highlightIndex+1)) && ((lastScrollTimestamp == null) || (lastScrollTimestamp < scrollInfo.timeStamp-1000))){
                   setIsInWheelTransition(true)
+                  setLastScrollTimestamp(scrollInfo.timeStamp)
                   await controls.start(() => {
                     return({
                         opacity: 0,
@@ -113,7 +116,7 @@ export default function PaperPreview({setSelectedComponent}){
                 }else{
                   scrollInfo.preventDefault();
                   scrollInfo.stopPropagation();
-
+                  if((lastScrollTimestamp != null) && (lastScrollTimestamp > scrollInfo.timeStamp+1000)) setLastScrollTimestamp(scrollInfo.timeStamp)
                   return false;
 
                 }
@@ -127,17 +130,24 @@ export default function PaperPreview({setSelectedComponent}){
                     <motion.div 
                     initial={{
                       scale: 1.5,
-                      opacity: 0
+                      opacity: 0,
+                      borderRadius: index==highlightIndex?35:0.8*35,
+                      padding: index==highlightIndex?35:0.8*35,
                     }}
                     animate={{
                       scale: 1,
-                      opacity: 1
+                      opacity: 1,
+                      borderRadius: index==highlightIndex?35:0.8*35,
+                      padding: index==highlightIndex?35:0.8*35,
                     }}
                     exit={{
                       scale: 1.5,
                       opacity: 0
-                    }} animation={paperPanelControls} className={styles.paperPanel}>
-                      <h1>{component.header}</h1>
+                    }} animation={paperPanelControls} className={styles.paperPanel}
+                    >
+                      <motion.h1 
+                      initial={{fontSize: index==highlightIndex?24:0.8*24, lineHeight: index==highlightIndex?1:0.8}}
+                      animate={{fontSize: index==highlightIndex?24:0.8*24, lineHeight: index==highlightIndex?1:0.8}}>{component.header}</motion.h1>
                       <div style={{marginTop: 15, flexGrow: 1}}>
                         {(index == highlightIndex)?component.body:''}
                       </div>
