@@ -766,7 +766,7 @@ router.get("/components/:not_within_uid/saved/:offset", check.AuthRequired, asyn
             join Component c2 on c2.component_id = cc.component_id and c2.uid = ?
         ) as a1 on a1.child_component_id = c.component_id
         group by ucs.usercomponentsave_id
-        order by ucs.added desc
+        order by ucs.created desc
         limit ?,5`,
         [req.user_id, req.params.not_within_uid, req.params.not_within_uid, req.params.offset?parseInt(req.params.offset):0],
         function(err, saved_components) {
