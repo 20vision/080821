@@ -46,6 +46,16 @@ var Panel = onClickOutside(({children, page, missions, comp, subs}) => {
                         {children}
                     </main>
                 </div>
+                {((size !== 'undefined') && (size.width >= 1501))?
+                    null
+                :
+                    <div className={styles.overviewParent} style={{top: 'auto', zIndex: 2}}>
+                        <div style={{filter: `
+                        drop-shadow( 0px -20px 5px rgb(46, 46, 46, 0.05))`}}>
+                            <NavPanel/>
+                        </div>
+                    </div>
+                }
             </div>
 
             {((size !== 'undefined') && (size.width >= 1501))?

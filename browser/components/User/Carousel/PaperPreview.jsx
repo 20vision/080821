@@ -89,9 +89,9 @@ export default function PaperPreview({setSelectedComponent}){
             <div key={index} onWheel={async scrollInfo => {
               try{
                 if(isInWheelTransition) return
-                if((scrollInfo.deltaY < -5) && (0 != highlightIndex) && ((lastScrollTimestamp == null) || (lastScrollTimestamp < scrollInfo.timeStamp-1000))){
-                  setIsInWheelTransition(true)
+                if((scrollInfo.deltaY < -5) && (0 != highlightIndex) && ((lastScrollTimestamp == null) || (lastScrollTimestamp < scrollInfo.timeStamp-1200))){
                   setLastScrollTimestamp(scrollInfo.timeStamp)
+                  setIsInWheelTransition(true)
                   await controls.start(() => {
                     return({
                         opacity: 0,
@@ -101,9 +101,9 @@ export default function PaperPreview({setSelectedComponent}){
                     })
                   })
                   setHighlightIndex(highlightIndex-1)
-                }else if(((scrollInfo.deltaY > 5)) && (components.length > (highlightIndex+1)) && ((lastScrollTimestamp == null) || (lastScrollTimestamp < scrollInfo.timeStamp-1000))){
-                  setIsInWheelTransition(true)
+                }else if(((scrollInfo.deltaY > 5)) && (components.length > (highlightIndex+1)) && ((lastScrollTimestamp == null) || (lastScrollTimestamp < scrollInfo.timeStamp-1200))){
                   setLastScrollTimestamp(scrollInfo.timeStamp)
+                  setIsInWheelTransition(true)
                   await controls.start(() => {
                     return({
                         opacity: 0,
@@ -116,7 +116,7 @@ export default function PaperPreview({setSelectedComponent}){
                 }else{
                   scrollInfo.preventDefault();
                   scrollInfo.stopPropagation();
-                  if((lastScrollTimestamp != null) && (lastScrollTimestamp > scrollInfo.timeStamp+1000)) setLastScrollTimestamp(scrollInfo.timeStamp)
+                  if((lastScrollTimestamp != null) && (lastScrollTimestamp > scrollInfo.timeStamp+1200)) setLastScrollTimestamp(scrollInfo.timeStamp)
                   return false;
 
                 }

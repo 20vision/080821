@@ -75,7 +75,7 @@ function MenuNav({router}) {
     
     return (
         <div className={styles.navContainer}>
-            <a onClick={toggle}><Chevron color="#FAFAFA" direction={(opened == true)?"0":"180"}/></a>
+            <a onClick={toggle}><Chevron color="var(--red)" direction={(opened == true)?"0":"180"}/></a>
             <a onClick={toggle}><div className={styles.header}>
                 
                 {opened == true ? <h1>Menu</h1>:router.pathname == '/following'?<h1>Following</h1>:router.pathname == '/saved'?<h1>Saved</h1>:<h1>Discover</h1>}
