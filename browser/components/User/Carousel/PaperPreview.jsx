@@ -28,6 +28,10 @@ export default function PaperPreview({setSelectedComponent}){
   }, [highlightIndex])
 
   useEffect(() => {
+    getComponents(true)
+  }, [router.query.mission])
+
+  useEffect(() => {
     if(components && components[highlightIndex]){
       setSelectedComponent(components[highlightIndex])
     }
@@ -58,11 +62,12 @@ export default function PaperPreview({setSelectedComponent}){
       setIsInWheelTransition(false)
   }, [highlightIndex, components])
 
-  const getComponents = async() => {
-      if(!componentsQueryLimitReached){
+  const getComponents = async(refresh) => {
+    const queryString = `${config.HTTP_SERVER_URL}/get/page/${router.query.page?router.query.page+'/':''}components/${refresh?0:components.length}${router.query.mission?'/'+router.query.mission:''} ${router.pathname == '/following'?'?filter=following':router.pathname == '/saved'?'?filter=saved':''}`
+    if(!componentsQueryLimitReached && !refresh){
       try{
           setLoading(true)
-          let components_data = (await axios.get(`${config.HTTP_SERVER_URL}/get/page/${router.query.page?router.query.page+'/':''}components/${components.length}${router.query.mission?'/'+router.query.mission:''} ${router.pathname == '/following'?'?filter=following':router.pathname == '/saved'?'?filter=saved':''}`, {withCredentials: true})).data
+          let components_data = (await axios.get(queryString, {withCredentials: true})).data
           setLoading(false)
           if(components_data.length != 3) setComponentsQueryLimitReached(true)
           setComponents([...components,...components_data])
@@ -70,6 +75,16 @@ export default function PaperPreview({setSelectedComponent}){
           console.error(err)
           setLoading(false)
       }
+      }else if(refresh){
+        setLoading(true)
+        axios.get(queryString, {withCredentials: true})
+        .then(response => {
+            if(response.data.length != 3) setComponentsQueryLimitReached(true)
+            console.log(response)
+            setComponents(response.data)
+        })
+        .catch(err => console.error(err))
+        .then(() => setLoading(false))
       }
   }
 
