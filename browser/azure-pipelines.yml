@@ -1,0 +1,36 @@
+resources:
+- repo: self
+  fetchDepth: 1
+queue:
+  name: Hosted Ubuntu 1604
+trigger:
+- master
+variables:
+  TargetFramework: 'netcoreapp3.1'
+  BuildConfiguration: 'Release'
+  DockerImageName: 'vision-346519/frontend'
+steps:
+- task: DotNetCoreCLI@2
+  displayName: Publish
+  inputs:
+    projects: 'applications/clouddemo/netcore/CloudDemo.MvcCore.sln'
+    publishWebProjects: false
+    command: publish
+    arguments: '--configuration $(BuildConfiguration) --framework=$(TargetFramework)'
+    zipAfterPublish: false
+    modifyOutputPath: false
+- task: PublishBuildArtifacts@1
+  displayName: 'Publish Artifact'
+  inputs:
+    PathtoPublish: '$(build.artifactstagingdirectory)'
+- task: Docker@2
+  displayName: 'Login to Container Registry'
+  inputs:
+    command: login
+    containerRegistry: 'gcr-tutorial'
+- task: Docker@2
+  displayName: 'Build and push image'
+  inputs:
+    Dockerfile: 'applications/clouddemo/netcore/Dockerfile'
+    command: buildAndPush
+    repository: '$(DockerImageName)'
