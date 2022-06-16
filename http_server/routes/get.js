@@ -221,13 +221,14 @@ router.get("/page/:unique_pagename/component/count", async (req, res) => {
 })
 
 router.get("/page/components/:offset", check.AuthOptional, async (req, res) => {
+
     pool.getConnection(async function(err, conn) {
         if (err){
             res.status(500).send('An error occurred')
             console.log(err)
         }else{
             try{
-                conn.query(
+                if(!req.lastDelivered) conn.query(
                     `SELECT
                     c.uid,
                     c.header,
@@ -244,19 +245,84 @@ router.get("/page/components/:offset", check.AuthOptional, async (req, res) => {
                     join Mission m on m.mission_id = c.mission_id join Page p on m.page_id = p.page_id
                     ${(req.query.filter && !isNaN(req.user_id))?`join ${req.query.filter == 'following'?'Following a on a.page_id = m.page_id':'UserComponentSave a on a.component_id = c.component_id'} and a.user_id = ${req.user_id}`:''}
                     left join ComponentConnection cc1 on cc1.component_id = c.component_id
+                    where c.component_id = 38
                     group by c.component_id 
                     ${req.query.filter == 'saved'?'order by a.created desc':'order by subcomponents desc, c.created desc'}
                     limit ?,3`,
                     [parseInt(req.params.offset)],
-                    function(err, components) {
+                    function(err, tutorial) {
                         if (err){
                             res.status(500).send('An error occurred')
                             console.log(err)
                         }else{
-                            res.json(components)
+                            conn.query(
+                                `SELECT
+                                c.uid,
+                                c.header,
+                                c.body,
+                                c.type,
+                                m.title as mission_title,
+                                p.unique_pagename,
+                                p.pagename,
+                                p.vision,
+                                p.page_icon,
+                                c.created,
+                                count(cc1.component_connection_id) as subcomponents
+                                from Component c
+                                join Mission m on m.mission_id = c.mission_id join Page p on m.page_id = p.page_id
+                                ${(req.query.filter && !isNaN(req.user_id))?`join ${req.query.filter == 'following'?'Following a on a.page_id = m.page_id':'UserComponentSave a on a.component_id = c.component_id'} and a.user_id = ${req.user_id}`:''}
+                                left join ComponentConnection cc1 on cc1.component_id = c.component_id
+                                where c.mission_id != 33
+                                group by c.component_id 
+                                ${req.query.filter == 'saved'?'order by a.created desc':'order by subcomponents desc, c.created desc'}
+                                limit ?,3`,
+                                [parseInt(req.params.offset)],
+                                function(err, components) {
+                                    if (err){
+                                        res.status(500).send('An error occurred')
+                                        console.log(err)
+                                    }else{
+                                        res.json([...tutorial,...components])
+                                    }
+                                }
+                            );
                         }
                     }
                 );
+                else{
+                    conn.query(
+                        `SELECT
+                        c.uid,
+                        c.header,
+                        c.body,
+                        c.type,
+                        m.title as mission_title,
+                        p.unique_pagename,
+                        p.pagename,
+                        p.vision,
+                        p.page_icon,
+                        c.created,
+                        count(cc1.component_connection_id) as subcomponents
+                        from Component c
+                        join Mission m on m.mission_id = c.mission_id join Page p on m.page_id = p.page_id
+                        ${(req.query.filter && !isNaN(req.user_id))?`join ${req.query.filter == 'following'?'Following a on a.page_id = m.page_id':'UserComponentSave a on a.component_id = c.component_id'} and a.user_id = ${req.user_id}`:''}
+                        left join ComponentConnection cc1 on cc1.component_id = c.component_id
+                        where c.mission_id != 33
+                        group by c.component_id 
+                        ${req.query.filter == 'saved'?'order by a.created desc':'order by subcomponents desc, c.created desc'}
+                        limit ?,3`,
+                        [parseInt(req.params.offset)],
+                        function(err, components) {
+                            if (err){
+                                res.status(500).send('An error occurred')
+                                console.log(err)
+                            }else{
+                                res.json(components)
+                            }
+                        }
+                    );
+                }
+                
             }catch(err){
                 console.log(err)
                 res.status(err.status).send(err.message)

@@ -43,6 +43,12 @@ exports.DevMode = function(req, res, next){
     next()
 }
 
+exports.LastDelivered = function(req, res, next) {
+    if(req.cookies['delivered']) req.lastDelivered = req.cookies['delivered']
+    res.cookie('delivered', Date.now(), {httpOnly: true, sameSite:"none", secure: true})
+    next()
+}
+
 exports.AuthRequired = function(req, res, next) {
     if(req.cookies['auth_token']){
         jwt.verify(req.cookies['auth_token'], keys.JWT_SECRET, function(err, decoded) {

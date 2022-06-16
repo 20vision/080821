@@ -653,6 +653,31 @@ const PrivacyPolicy = () => {
             </p>
           </li>
         </ul>
+        <br/>
+        <p dir="ltr">
+          Name of the cookie: “delivered”
+        </p>
+        <ul>
+          <li dir="ltr">
+            <p dir="ltr">
+              Purpose of the cookie and functionality: This cookie is used to check 
+              whether the user has visited the page already. If so, the tutorial on
+              the discover page for example will not be shown again. It saves the date
+              the website has been visited the last time. This will ensure that
+              updates will be shown to those that didn't see them yet.
+            </p>
+          </li>
+          <li dir="ltr">
+            <p dir="ltr">
+              Storage period: Session
+            </p>
+          </li>
+          <li dir="ltr">
+            <p dir="ltr">
+              Location of storage: USA
+            </p>
+          </li>
+        </ul>
         <h2 dir="ltr">
           II.2. Overview of the "advertising cookies" used
         </h2>
