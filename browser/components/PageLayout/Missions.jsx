@@ -32,6 +32,8 @@ export default function Missions({missions}) {
                                     :
                                     `/${router.query.page}/${mission.title.replace(/ /g, '_').toLowerCase()}`
                                 }
+
+                                getServerSideProps={async(context) => ()}
                             >
                             <div style={{display: 'flex',flexDirection: 'column'}} className={(router.query.mission && (mission.title.replace(/ /g, '_').toLowerCase() == router.query.mission.toLowerCase()))?styles.selected:styles.mission}>
                                 <h3>
