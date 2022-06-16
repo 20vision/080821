@@ -9,3 +9,5 @@ docker build -t gcr.io/vision-346519/frontend:v5 .
 docker push gcr.io/vision-346519/frontend:v5
 
 -||- gcr.io/vision-346519/http_server:v5
+
+hello world
