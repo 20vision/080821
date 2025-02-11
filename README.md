@@ -7,7 +7,6 @@ role:
 
 ## Blockchain
 DEVNET Contract: 969cdvMTsXAs2QfCFvGb2TmaR9gbFvMjRfG8u5v1if3d
-Test Wallet private key: CMgGx8WdMqLmGwvZHZboWaF6zeknrEtituyNziwg5hgqCEwvrL7zQNuZg6bAic8Bv6TsGL21BhStiwXC653NSvf
 Test Page Mint Key: CtENBNHd5fz2u1TERoZZQ9wqoydxsXTbph5xTyy8LUva
 
 ## Forum
