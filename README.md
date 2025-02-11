@@ -1,3 +1,5 @@
+This was a fun project - Twitter combined with blockchain. Each page could have its own token and its associated automated market maker to create "stocks" - not just for large companies, but for any organization. Updates would appear right away on the same platform. 20Vision stands for 20/20 vision - having full sight of one's vision. There is a completely new version of this code - the new smart contract is on: https://github.com/20vision/solana-program
+
 ## Page
 role:
   - null -> guest
